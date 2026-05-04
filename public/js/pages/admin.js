@@ -81,7 +81,7 @@ async function renderAdmAccounts() {
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
                   <div style="font-size:12px;color:var(--o600);font-weight:500">승인 시 설정</div>
                   <button class="btn btn-ghost btn-sm" id="setup-btn-${u.id}" style="font-size:11px"
-                    onclick="enableApproveForm('${u.id}')">⚙ 조직 설정 활성화</button>
+                    onclick="enableApproveForm('${u.id}')">⚙ 조직 설정 (선택사항)</button>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;opacity:.5" id="ap-form-${u.id}">
                   <div style="flex:1;min-width:90px">
@@ -110,7 +110,7 @@ async function renderAdmAccounts() {
                 </div>
                 <div style="display:flex;gap:8px;justify-content:flex-end">
                   <button class="btn btn-danger btn-sm" onclick="rejectAccount(${u.id})">거절</button>
-                  <button class="btn btn-success btn-sm" id="approve-btn-${u.id}" disabled style="opacity:.5"
+                  <button class="btn btn-success btn-sm" id="approve-btn-${u.id}"
                     onclick="approveAccount(${u.id})">✓ 승인</button>
                 </div>
               </div>

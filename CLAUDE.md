@@ -367,6 +367,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-04 | 가입승인 버튼 초기 활성화 (조직설정 없이도 바로 승인 가능) | Claude Code |
 | 2026-05-04 | 최종평가 등급선택 UI: select드롭다운→카드테이블 방식으로 변경 (순위/코드/명칭/설명/비고 표시) | Claude Code |
 | 2026-05-04 | 평가등급 설명란 input→textarea 변경 (다중행 입력 지원) | Claude Code |
 | 2026-05-04 | 2차최종평가 순서제어 완성: goalsSection/별점 2차숨김, submitFinalMgr is_second:true, my-mgr-pending final_done제거 | Claude Code |
