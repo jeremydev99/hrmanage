@@ -379,6 +379,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-04 | 2차최종평가 순서제어 완성 (1차완료→2차활성화, phase전환, 잠금처리) | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 '최종평가 대기'로 통일 | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 오류 수정, mgr_done 완료 후 잠금 표시, 재제출 방지, final_done 목록 제거 | Claude Code |
 | 2026-05-04 | 상사최종평가 등급선택 드롭다운 추가, selected_grade DB저장, 완료화면 등급표시 수정 | Claude Code |

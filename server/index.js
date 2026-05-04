@@ -1089,7 +1089,7 @@ app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
          FROM eval_cycles e
          JOIN users u ON e.user_id=u.id
          JOIN final_evaluations fe ON fe.eval_id=e.id
-         WHERE e.phase IN ('final_mgr2_pending','final_done')
+         WHERE e.phase IN ('final_mgr2_pending')
          AND fe.mgr_done=1
          AND u.manager_id IN (SELECT id FROM users WHERE manager_id=?)
          ORDER BY e.created_at DESC`

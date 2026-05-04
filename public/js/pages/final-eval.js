@@ -410,17 +410,19 @@ async function renderFinalMgr(mgrPending) {
       body.appendChild(selfNote);
     }
 
-    // ── 목표별 평가 입력 ──────────────────────────────────
-    const goalsSection = document.createElement('div');
-    goalsSection.innerHTML = App.categories.map(cat => {
-      const cg = goals.filter(g => String(g.category_id) === String(cat.id));
-      if (!cg.length) return '';
-      return `<div style="margin-bottom:12px">
-        <div class="cat-title" style="background:${cat.color};color:${cat.text_color};display:inline-block;margin-bottom:8px">${cat.name}</div>
-        <div id="fin-mgr-cat-${ev.id}-${cat.id}"></div>
-      </div>`;
-    }).join('');
-    body.appendChild(goalsSection);
+    // ── 목표별 평가 입력 (1차 평가자만) ─────────────────────
+    if (!ev.is_second) {
+      const goalsSection = document.createElement('div');
+      goalsSection.innerHTML = App.categories.map(cat => {
+        const cg = goals.filter(g => String(g.category_id) === String(cat.id));
+        if (!cg.length) return '';
+        return `<div style="margin-bottom:12px">
+          <div class="cat-title" style="background:${cat.color};color:${cat.text_color};display:inline-block;margin-bottom:8px">${cat.name}</div>
+          <div id="fin-mgr-cat-${ev.id}-${cat.id}"></div>
+        </div>`;
+      }).join('');
+      body.appendChild(goalsSection);
+    }
 
     // 종합 의견 + 제출
     const bottomSection = document.createElement('div');
@@ -469,23 +471,25 @@ async function renderFinalMgr(mgrPending) {
     card.appendChild(body);
     el.appendChild(card);
 
-    // 별점 렌더 (body가 숨겨져 있어도 Stars 컴포넌트 생성만 해둠)
-    App.categories.forEach(cat => {
-      const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
-      goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap;gap:6px';
-        const selfLbl = selfScores[g.id]
-          ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
-          : '';
-        row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}</span>`;
-        const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
-        starWrap.dataset.goalId2 = g.id;
-        starWrap.dataset.evalId  = ev.id;
-        row.appendChild(starWrap);
-        wrap.appendChild(row);
+    // 별점 렌더 — 1차 평가자만 (2차는 별점 입력 없음)
+    if (!ev.is_second) {
+      App.categories.forEach(cat => {
+        const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
+        goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
+          const row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap;gap:6px';
+          const selfLbl = selfScores[g.id]
+            ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
+            : '';
+          row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}</span>`;
+          const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
+          starWrap.dataset.goalId2 = g.id;
+          starWrap.dataset.evalId  = ev.id;
+          row.appendChild(starWrap);
+          wrap.appendChild(row);
+        });
       });
-    });
+    }
   }
 }
 
@@ -520,7 +524,7 @@ async function submitFinalMgr(evalId, isSecond) {
   // 2차 평가자는 별점 입력 없이 의견만
   if (isSecond) {
     try {
-      await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores: [] });
+      await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores: [], is_second: true });
       showAlert('2차 최종평가가 제출되었습니다.', 'green');
       setTimeout(() => Pages.finalEval(), 1000);
     } catch(e) { showAlert(e.message, 'red'); }
