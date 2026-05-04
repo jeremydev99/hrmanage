@@ -652,10 +652,16 @@ app.post('/api/final/:evalId/self', auth, (req, res) => {
   const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
   if (!ev || String(ev.user_id) !== String(req.user.sub)) return res.status(403).json({ error: '권한 없음' });
   if (!['approved','final_self'].includes(ev.phase)) return res.status(400).json({ error: '자기평가 불가 상태' });
+
+  // 이미 제출 완료된 경우 재제출 차단
+  const existFe = db.prepare('SELECT self_done FROM final_evaluations WHERE eval_id=?').get(ev.id);
+  if (existFe?.self_done === 1) return res.status(400).json({ error: '이미 제출된 자기평가는 수정할 수 없습니다.' });
+
   const { self_note, scores } = req.body;
   let fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(ev.id);
   if (!fe) {
-    const r = db.prepare('INSERT INTO final_evaluations(eval_id,self_note) VALUES(?,?)').run(ev.id, encrypt(self_note||''));
+    // INSERT 시 self_done=1 함께 저장
+    const r = db.prepare("INSERT INTO final_evaluations(eval_id,self_note,self_done,self_done_at) VALUES(?,?,1,datetime('now'))").run(ev.id, encrypt(self_note||''));
     fe = { id: r.lastInsertRowid };
   } else {
     db.prepare("UPDATE final_evaluations SET self_note=?,self_done=1,self_done_at=datetime('now') WHERE id=?").run(encrypt(self_note||''), fe.id);
