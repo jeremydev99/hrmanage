@@ -89,6 +89,22 @@ async function renderAdmAccounts() {
                     <input id="ap-dept-${u.id}" value="${u.dept||''}" style="height:32px;font-size:12px" disabled>
                   </div>
                   <div style="flex:1;min-width:90px">
+                    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">직급</label>
+                    <select id="ap-grade-${u.id}" style="height:32px;font-size:12px;width:100%" disabled>
+                      <option value="">선택</option>
+                      <option value="사원">사원</option>
+                      <option value="대리">대리</option>
+                      <option value="과장">과장</option>
+                      <option value="차장">차장</option>
+                      <option value="부장">부장</option>
+                      <option value="이사">이사</option>
+                      <option value="상무">상무</option>
+                      <option value="전무">전무</option>
+                      <option value="부사장">부사장</option>
+                      <option value="사장">사장</option>
+                    </select>
+                  </div>
+                  <div style="flex:1;min-width:90px">
                     <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">직책</label>
                     <input id="ap-title-${u.id}" value="${u.title||''}" style="height:32px;font-size:12px" disabled>
                   </div>
@@ -162,7 +178,7 @@ async function renderAdmAccounts() {
 function enableApproveForm(uid) {
   const form = document.getElementById('ap-form-' + uid);
   if (form) form.style.opacity = '1';
-  ['ap-dept-','ap-title-','ap-mgr-','ap-role-'].forEach(prefix => {
+  ['ap-dept-','ap-grade-','ap-title-','ap-mgr-','ap-role-'].forEach(prefix => {
     const el = document.getElementById(prefix + uid);
     if (el) el.disabled = false;
   });
@@ -174,11 +190,12 @@ function enableApproveForm(uid) {
 
 async function approveAccount(uid) {
   const dept  = document.getElementById('ap-dept-'+uid)?.value  || '';
+  const grade = document.getElementById('ap-grade-'+uid)?.value || '';
   const title = document.getElementById('ap-title-'+uid)?.value || '';
   const mgr   = document.getElementById('ap-mgr-'+uid)?.value   || null;
   const role  = document.getElementById('ap-role-'+uid)?.value  || 'user';
   try {
-    await API.post('/users/'+uid+'/approve', { role, dept, title, manager_id: mgr });
+    await API.post('/users/'+uid+'/approve', { role, dept, grade, title, manager_id: mgr });
     showAlert('계정이 승인되었습니다.', 'green');
     renderAdmAccounts();
   } catch(e) { showAlert(e.message, 'red'); }
