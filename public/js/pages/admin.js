@@ -939,7 +939,7 @@ async function renderAdmGrades() {
             </td>
             <td><input id="gc-code-${g.id}" value="${g.grade_code||''}" style="width:100%;font-size:12px;height:28px"></td>
             <td><input id="gc-name-${g.id}" value="${g.grade_name||''}" style="width:100%;font-size:12px;height:28px"></td>
-            <td><input id="gc-desc-${g.id}" value="${(g.description||'').replace(/"/g,'&quot;')}" style="width:100%;font-size:12px;height:28px" placeholder="등급 설명"></td>
+            <td><textarea id="gc-desc-${g.id}" style="width:100%;font-size:12px;min-height:60px;resize:vertical;padding:4px 6px" placeholder="등급 설명">${g.description||''}</textarea></td>
             <td><input id="gc-note-${g.id}" value="${(g.note||'').replace(/"/g,'&quot;')}" style="width:100%;font-size:12px;height:28px" placeholder="비고"></td>
             <td>
               <div style="display:flex;gap:4px">
@@ -969,7 +969,7 @@ async function renderAdmGrades() {
           </div>
           <div style="flex:2;min-width:160px">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">설명</label>
-            <input id="new-gc-desc" placeholder="등급 설명" style="width:100%;height:34px;font-size:13px">
+            <textarea id="new-gc-desc" placeholder="등급 설명" style="width:100%;height:60px;resize:vertical;font-size:13px;padding:4px 6px"></textarea>
           </div>
           <div style="flex:1;min-width:75px">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">비고</label>
