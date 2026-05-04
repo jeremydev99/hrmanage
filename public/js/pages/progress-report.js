@@ -79,10 +79,7 @@ async function renderMyReports(evList) {
   el.innerHTML = '';
 
   for (const ev of evList) {
-    const [reports, goals] = await Promise.all([
-      API.get('/reports/' + ev.id).catch(() => []),
-      API.get('/evals/' + ev.id + '/goals').catch(() => []),
-    ]);
+    const reports = await API.get('/reports/' + ev.id).catch(() => []);
     const card = document.createElement('div');
     card.className = 'card';
     card.style.marginBottom = '12px';
@@ -124,40 +121,46 @@ async function renderMyReports(evList) {
 
     // 새 보고 작성 폼
     const formDiv = document.createElement('div');
-    formDiv.style.cssText = 'border-top:1px solid var(--o100);padding-top:14px;margin-top:4px';
-    const titleDiv = document.createElement('div');
-    titleDiv.style.cssText = 'font-size:13px;font-weight:500;color:var(--o800);margin-bottom:10px';
-    titleDiv.textContent = reports.length ? '추가 중간 보고 작성' : '중간 보고 작성';
-    formDiv.appendChild(titleDiv);
+    formDiv.style.cssText = 'border-top:1px solid var(--o100);padding-top:14px';
 
-    // 목표별 입력란
-    if (goals && goals.length) {
-      const goalsDiv = document.createElement('div');
-      goalsDiv.style.marginBottom = '12px';
-      goalsDiv.innerHTML = `<div style="font-size:12px;font-weight:500;color:var(--o600);margin-bottom:8px">목표별 진행 현황</div>`;
+    const formTitle = document.createElement('div');
+    formTitle.style.cssText = 'font-size:13px;font-weight:500;color:var(--o800);margin-bottom:10px';
+    formTitle.textContent = reports.length ? '추가 보고 작성' : '중간 보고 작성';
+    formDiv.appendChild(formTitle);
+
+    // 목표별 진행 현황 입력란
+    if (goals.length) {
+      const goalsLabel = document.createElement('div');
+      goalsLabel.style.cssText = 'font-size:12px;font-weight:500;color:var(--o600);margin-bottom:8px';
+      goalsLabel.textContent = '목표별 진행 현황';
+      formDiv.appendChild(goalsLabel);
+
       goals.forEach(g => {
         const row = document.createElement('div');
-        row.style.marginBottom = '8px';
+        row.style.marginBottom = '10px';
         row.innerHTML = `
           <label style="font-size:12px;font-weight:500;color:var(--o800);display:block;margin-bottom:3px">
-            ${g.name} <span style="font-size:11px;color:var(--muted)">(${g.weight}%)</span>
+            ${g.name}
+            <span style="font-size:11px;color:var(--muted);font-weight:400"> (${g.weight}%)</span>
           </label>
           <textarea id="rpt-goal-${ev.id}-${g.id}"
-            placeholder="${g.name}에 대한 진행 상황을 작성하세요..."
+            placeholder="${g.name}의 현재 진행 상황을 작성하세요..."
             style="width:100%;min-height:60px;resize:vertical"></textarea>`;
-        goalsDiv.appendChild(row);
+        formDiv.appendChild(row);
       });
-      formDiv.appendChild(goalsDiv);
     }
 
-    // 종합 의견
-    const overallDiv = document.createElement('div');
-    overallDiv.innerHTML = `
-      <label style="font-size:12px;font-weight:500;color:var(--o600);display:block;margin-bottom:3px">중간보고 종합의견</label>
-      <textarea id="rpt-content-${ev.id}"
-        placeholder="전체적인 진행 상황, 이슈, 지원 요청 사항 등을 자유롭게 작성하세요..."
-        style="width:100%;min-height:100px;resize:vertical"></textarea>`;
-    formDiv.appendChild(overallDiv);
+    // 종합의견 입력란
+    const overallLabel = document.createElement('div');
+    overallLabel.style.cssText = 'font-size:12px;font-weight:500;color:var(--o600);margin-bottom:4px;margin-top:4px';
+    overallLabel.textContent = '중간보고 종합의견';
+    formDiv.appendChild(overallLabel);
+
+    const textarea = document.createElement('textarea');
+    textarea.id = 'rpt-content-' + ev.id;
+    textarea.placeholder = '전체적인 진행 상황, 이슈, 지원 요청 사항 등을 자유롭게 작성하세요...';
+    textarea.style.cssText = 'width:100%;min-height:100px;resize:vertical';
+    formDiv.appendChild(textarea);
 
     // 파일 첨부 위젯
     const fileWrap = document.createElement('div');
@@ -226,14 +229,14 @@ async function submitReport(evalId, goals) {
   const overall = document.getElementById('rpt-content-' + evalId)?.value?.trim() || '';
 
   // 목표별 내용 수집
-  const goalContents = (goals||[]).map(g => {
+  const goalParts = (goals||[]).map(g => {
     const val = document.getElementById(`rpt-goal-${evalId}-${g.id}`)?.value?.trim() || '';
     return val ? `[${g.name}]\n${val}` : '';
   }).filter(Boolean);
 
   // 전체 content 구성
   const parts = [];
-  if (goalContents.length) parts.push(goalContents.join('\n\n'));
+  if (goalParts.length) parts.push(goalParts.join('\n\n'));
   if (overall) parts.push(`[종합의견]\n${overall}`);
   const content = parts.join('\n\n');
 
