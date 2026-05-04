@@ -54,12 +54,13 @@ async function renderFinalSelf(ev) {
     const totalW = goals.reduce((a,g)=>a+g.weight,0)||1;
     const sc = goals.reduce((a,g)=>a+((scores[g.id]?.mgr_score||0)/5*100)*(g.weight/totalW),0);
     const finalScore = Math.round(sc*10)/10;
-    const grade = finalScore>=90?'S':finalScore>=80?'A':finalScore>=70?'B':finalScore>=60?'C':'D';
+    const autoGrade = finalScore>=90?'S':finalScore>=80?'A':finalScore>=70?'B':finalScore>=60?'C':'D';
+    const displayGrade = fe?.selected_grade || fe?.final_grade || autoGrade;
     el.innerHTML = `<div class="card">
-      <div class="card-header"><div><div class="card-header-t">최종 평가 완료</div><div class="card-header-s">${ev.period_label}</div></div>${gradeEl(grade)}</div>
+      <div class="card-header"><div><div class="card-header-t">최종 평가 완료</div><div class="card-header-s">${ev.period_label}</div></div>${gradeEl(displayGrade)}</div>
       <div style="text-align:center;margin:16px 0">
         <div style="font-size:36px;font-weight:700;color:var(--o500)">${finalScore}점</div>
-        <div style="font-size:14px;color:var(--muted);margin-top:4px">최종 등급: ${gradeEl(grade)}</div>
+        <div style="font-size:14px;color:var(--muted);margin-top:4px">최종 등급: ${gradeEl(displayGrade)}</div>
       </div>
       <div class="alert" style="background:#F1EFE8;color:#2C2C2A;border-color:#B4B2A9;font-size:12px;margin-bottom:14px">최종 평가는 잠금 처리되어 인사팀만 수정 가능합니다.</div>
       ${goals.map(g=>{
@@ -194,10 +195,11 @@ async function renderFinalMgr(mgrPending) {
   }
 
   for (const ev of mgrPending) {
-    const [goals, fe, fbs] = await Promise.all([
+    const [goals, fe, fbs, grades] = await Promise.all([
       API.get(`/evals/${ev.id}/goals`),
       API.get(`/final/${ev.id}`),
       API.get(`/feedback/${ev.id}`),
+      API.get('/grade-criteria').catch(() => []),
     ]);
     const selfScores = {};
     (fe?.scores||[]).forEach(s => selfScores[s.goal_id] = s.self_score);
@@ -225,9 +227,7 @@ async function renderFinalMgr(mgrPending) {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="bd ${ev.phase==='final_mgr2_pending'?'bd-purple':'bd-final'}" style="font-size:11px">
-          ${ev.phase==='final_mgr2_pending'?'2차평가 대기':'최종평가 대기'}
-        </span>
+        ${(()=>{ const badge=(ev.is_second&&ev.phase==='final_mgr2_pending')?{cls:'bd-purple',text:'2차 최종평가 대기'}:{cls:'bd-final',text:'최종평가 대기'}; return `<span class="bd ${badge.cls}" style="font-size:11px">${badge.text}</span>`; })()}
         <button class="btn btn-ghost btn-sm" id="fin-mgr-toggle-btn-${ev.id}"
           onclick="toggleFinMgrCard(${ev.id}, event)">펼치기 ▼</button>
       </div>`;
@@ -351,6 +351,56 @@ async function renderFinalMgr(mgrPending) {
       body.appendChild(fbSummary);
     }
 
+    // ── 1차 평가 이미 완료된 경우 — 잠금 상태 표시 ──────────
+    if (fe?.mgr_done && !ev.is_second) {
+      const doneDiv = document.createElement('div');
+      doneDiv.style.cssText = 'margin-top:14px;border-top:1px solid var(--o100);padding-top:14px';
+      doneDiv.innerHTML = `
+        <div class="alert" style="background:#F1EFE8;color:#2C2C2A;border-color:#B4B2A9;font-size:13px;margin-bottom:12px">
+          🔒 최종평가가 완료되었습니다.
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          ${fe.final_score != null
+            ? `<span style="font-size:24px;font-weight:700;color:var(--o500)">${fe.final_score}점</span>
+               <span class="bd bd-locked" style="font-size:14px">${fe.selected_grade||fe.final_grade||''}</span>`
+            : ''}
+        </div>
+        ${goals.map(g => {
+          const sc = (fe.scores||[]).find(s => String(s.goal_id) === String(g.id));
+          const ms = sc?.mgr_score || 0;
+          const ss = sc?.self_score || 0;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px;flex-wrap:wrap">
+            <span style="flex:1;font-weight:500">${g.name}</span>
+            ${ss ? `<span style="color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)}</span>` : ''}
+            ${ms ? `<span style="color:var(--o500)">상사 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>` : ''}
+          </div>`;
+        }).join('')}
+        ${fe.mgr_note
+          ? `<div style="margin-top:10px;padding:10px;background:var(--o50);border-radius:8px;font-size:13px;line-height:1.7">${fe.mgr_note}</div>`
+          : ''}`;
+      body.appendChild(doneDiv);
+      card.appendChild(body);
+      el.appendChild(card);
+      continue;
+    }
+
+    // ── 2차 평가 이미 완료된 경우 ─────────────────────────
+    if (fe?.second_mgr_done && ev.is_second) {
+      const doneDiv2 = document.createElement('div');
+      doneDiv2.style.cssText = 'margin-top:14px;border-top:1px solid var(--o100);padding-top:14px';
+      doneDiv2.innerHTML = `
+        <div class="alert alert-teal" style="font-size:13px">
+          ✅ 2차 최종평가가 완료되었습니다.
+        </div>
+        ${fe.second_mgr_note
+          ? `<div style="margin-top:8px;padding:10px;background:var(--o50);border-radius:8px;font-size:13px">${fe.second_mgr_note}</div>`
+          : ''}`;
+      body.appendChild(doneDiv2);
+      card.appendChild(body);
+      el.appendChild(card);
+      continue;
+    }
+
     // ── 직원 자기 의견 ────────────────────────────────────
     if (fe?.self_note) {
       const selfNote = document.createElement('div');
@@ -375,6 +425,21 @@ async function renderFinalMgr(mgrPending) {
     // 종합 의견 + 제출
     const bottomSection = document.createElement('div');
     bottomSection.innerHTML = `
+      ${!ev.is_second && grades.length ? `
+      <div style="margin-top:12px">
+        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
+          최종 등급 선택 <span style="color:var(--red)">*</span>
+        </label>
+        <select id="fin-grade-sel-${ev.id}" style="width:100%;height:38px;font-size:13px;margin-bottom:6px">
+          <option value="">— 등급을 선택하세요 —</option>
+          ${grades.map(g =>
+            `<option value="${g.grade_code}">${g.grade_name}${g.note ? ' (' + g.note + ')' : ''}</option>`
+          ).join('')}
+        </select>
+        <div id="fin-grade-desc-${ev.id}"
+          style="font-size:12px;color:var(--muted);padding:6px 10px;background:var(--o50);border-radius:6px;display:none;margin-bottom:10px">
+        </div>
+      </div>` : ''}
       <div style="margin-top:12px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">상사 종합 의견</label>
         <textarea id="fin-mgr-note-${ev.id}" placeholder="성과 총평 및 향후 육성 방향을 작성하세요..."
@@ -384,6 +449,23 @@ async function renderFinalMgr(mgrPending) {
         <button class="btn btn-purple" onclick="submitFinalMgr(${ev.id},${ev.is_second||0})">${ev.is_second?'2차 최종평가 제출':'최종 평가 확정 — 잠금 처리됩니다'}</button>
       </div>`;
     body.appendChild(bottomSection);
+
+    // 등급 선택 시 설명 표시
+    setTimeout(() => {
+      const sel    = document.getElementById('fin-grade-sel-' + ev.id);
+      const descEl = document.getElementById('fin-grade-desc-' + ev.id);
+      if (sel && descEl) {
+        sel.addEventListener('change', () => {
+          const selected = grades.find(g => g.grade_code === sel.value);
+          if (selected?.description) {
+            descEl.textContent = selected.description;
+            descEl.style.display = 'block';
+          } else {
+            descEl.style.display = 'none';
+          }
+        });
+      }
+    }, 100);
     card.appendChild(body);
     el.appendChild(card);
 
@@ -445,7 +527,14 @@ async function submitFinalMgr(evalId, isSecond) {
     return;
   }
 
-  // 1차 평가자 — 별점 필수
+  // 1차 평가자 — 등급 선택 + 별점 필수
+  const selectedGrade = document.getElementById(`fin-grade-sel-${evalId}`)?.value || '';
+  const gradeSelEl = document.getElementById(`fin-grade-sel-${evalId}`);
+  if (gradeSelEl && !selectedGrade) {
+    showAlert('최종 등급을 선택해주세요.', 'orange');
+    return;
+  }
+
   const goals = await API.get(`/evals/${evalId}/goals`);
   const scores = []; let allScored = true;
   goals.forEach(g => {
@@ -456,7 +545,7 @@ async function submitFinalMgr(evalId, isSecond) {
   });
   if (!allScored) { showAlert('모든 목표에 점수를 입력해주세요.', 'orange'); return; }
   try {
-    const res = await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores });
+    const res = await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores, selected_grade: selectedGrade });
     showAlert(`최종 평가 확정! 점수: ${res.final_score}점 / 등급: ${res.grade}`, 'green');
     setTimeout(() => Pages.finalEval(), 1000);
   } catch(e){showAlert(e.message,'red');}

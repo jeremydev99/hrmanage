@@ -13,7 +13,10 @@
       "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\public\\\\js\\\\pages\\\\my-eval.js 2>&1)",
       "PowerShell(if \\($?\\) { \"? server OK\" })",
       "PowerShell(if \\($?\\) { \"? login OK\" })",
-      "PowerShell(if \\($?\\) { \"? my-eval OK\" })"
+      "PowerShell(if \\($?\\) { \"? my-eval OK\" })",
+      "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\public\\\\js\\\\pages\\\\final-eval.js 2>&1)",
+      "PowerShell(if \\($LASTEXITCODE -eq 0\\) {\"? final-eval.js OK\"})",
+      "PowerShell(if \\($LASTEXITCODE -eq 0\\) {\"? server OK\"})"
     ]
   }
 }

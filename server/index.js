@@ -708,7 +708,7 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       fe = { id: r.lastInsertRowid };
     }
 
-    const { mgr_note, scores } = req.body;
+    const { mgr_note, scores, selected_grade } = req.body;
 
     if (isSecond) {
       // ── 2차 평가자 제출 ──────────────────────────────────
@@ -739,8 +739,9 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       const finalScore = Math.round(score * 10) / 10;
       const grade      = finalScore >= 90 ? 'S' : finalScore >= 80 ? 'A' : finalScore >= 70 ? 'B' : finalScore >= 60 ? 'C' : 'D';
 
-      db.prepare("UPDATE final_evaluations SET mgr_note=?,mgr_done=1,mgr_done_at=datetime('now'),mgr_approver_id=?,final_score=?,final_grade=? WHERE id=?")
-        .run(encrypt(mgr_note||''), req.user.sub, finalScore, grade, fe.id);
+      const finalGradeCode = selected_grade || grade;
+      db.prepare("UPDATE final_evaluations SET mgr_note=?,mgr_done=1,mgr_done_at=datetime('now'),mgr_approver_id=?,final_score=?,final_grade=?,selected_grade=? WHERE id=?")
+        .run(encrypt(mgr_note||''), req.user.sub, finalScore, finalGradeCode, selected_grade||grade, fe.id);
 
       // 2차 평가 설정 여부에 따라 phase 결정
       if (secondEnabled) {
@@ -1073,7 +1074,7 @@ app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
       `SELECT e.*,u.name as user_name,u.dept,u.grade,u.title,0 as is_second
        FROM eval_cycles e
        JOIN users u ON e.user_id=u.id
-       WHERE e.phase IN ('final_mgr_pending','final_mgr2_pending','final_done')
+       WHERE e.phase IN ('final_mgr_pending','final_mgr2_pending')
        AND u.manager_id=?
        ORDER BY e.created_at DESC`
     ).all(req.user.sub);
