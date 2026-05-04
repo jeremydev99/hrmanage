@@ -227,7 +227,7 @@ async function renderFinalMgr(mgrPending) {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        ${(()=>{ const badge=(ev.is_second&&ev.phase==='final_mgr2_pending')?{cls:'bd-purple',text:'2차 최종평가 대기'}:{cls:'bd-final',text:'최종평가 대기'}; return `<span class="bd ${badge.cls}" style="font-size:11px">${badge.text}</span>`; })()}
+        <span class="bd bd-final" style="font-size:11px">최종평가 대기</span>
         <button class="btn btn-ghost btn-sm" id="fin-mgr-toggle-btn-${ev.id}"
           onclick="toggleFinMgrCard(${ev.id}, event)">펼치기 ▼</button>
       </div>`;
