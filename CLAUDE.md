@@ -232,7 +232,7 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
 12. **자기평가 재제출 불가**: self_done=1이면 서버에서 차단, 화면은 잠금 상태 표시
 13. **미승인 계정**: 조직 지정 비활성화 (⚙ 조직 설정 활성화 버튼 클릭 후 활성화)
 14. **중간 보고**: 목표별 작성란 + 종합의견란 구성, 제출 시 [목표명]\n내용 형식으로 저장
-15. **최종평가 등급**: 상사가 grade_criteria에서 선택, selected_grade로 저장 (점수 기반 자동 등급과 별도)
+15. **최종평가 등급**: 카드 테이블 방식 (라디오 클릭) — 각 카드에 순위/등급코드/등급명칭/설명/비고 표시, 선택 시 오렌지 테두리 하이라이트, hidden input(fin-grade-sel-${evalId})으로 값 보관, selected_grade로 DB 저장
 16. **2차 최종평가 순서**:
     - 1차(직속상사) 완료 + 2차설정 켜짐 + 2차평가자 존재 → phase: final_mgr2_pending
     - isSecond 판단: 피평가자 직속상사의 상사가 요청자인지 확인
@@ -367,6 +367,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-04 | 최종평가 등급선택 UI: select드롭다운→카드테이블 방식으로 변경 (순위/코드/명칭/설명/비고 표시) | Claude Code |
 | 2026-05-04 | 평가등급 설명란 input→textarea 변경 (다중행 입력 지원) | Claude Code |
 | 2026-05-04 | 2차최종평가 순서제어 완성: goalsSection/별점 2차숨김, submitFinalMgr is_second:true, my-mgr-pending final_done제거 | Claude Code |
 | 2026-05-04 | 최종평가 등급선택 복구(1차/2차 모두), second_selected_grade 저장, submitFinalMgr 통합 | Claude Code |

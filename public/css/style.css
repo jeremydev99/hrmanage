@@ -173,6 +173,12 @@ textarea:focus{outline:none;border-color:var(--o400)}
 
 /* ── Feedback entry ── */
 .fb-entry{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:8px}
+
+/* 등급 선택 카드 호버 */
+.fin-grade-card:hover {
+  border-color: var(--o300) !important;
+  background: var(--o50) !important;
+}
 .fb-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted)}
 
 /* ── Subtabs ── */

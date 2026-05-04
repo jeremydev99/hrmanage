@@ -429,18 +429,50 @@ async function renderFinalMgr(mgrPending) {
     bottomSection.innerHTML = `
       ${grades.length ? `
       <div style="margin-top:12px">
-        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
+        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:8px">
           최종 등급 선택 <span style="color:var(--red)">*</span>
         </label>
-        <select id="fin-grade-sel-${ev.id}" style="width:100%;height:38px;font-size:13px;margin-bottom:6px">
-          <option value="">— 등급을 선택하세요 —</option>
-          ${grades.map(g =>
-            `<option value="${g.grade_code}">${g.grade_name}${g.note ? ' (' + g.note + ')' : ''}</option>`
-          ).join('')}
-        </select>
-        <div id="fin-grade-desc-${ev.id}"
-          style="font-size:12px;color:var(--muted);padding:6px 10px;background:var(--o50);border-radius:6px;display:none;margin-bottom:10px">
+        <div id="fin-grade-list-${ev.id}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+          ${grades.map((g, idx) => `
+          <div class="fin-grade-card" id="fin-grade-card-${ev.id}-${g.grade_code}"
+            data-eval="${ev.id}" data-code="${g.grade_code}"
+            onclick="selectGradeCard('${ev.id}','${g.grade_code}')"
+            style="border:2px solid var(--border);border-radius:8px;padding:10px 12px;
+                   cursor:pointer;transition:all .15s;background:var(--white)">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <tr>
+                <td style="width:50px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
+                           white-space:nowrap;vertical-align:top">순위</td>
+                <td style="color:var(--o800);font-weight:600;padding:2px 16px 2px 0;
+                           white-space:nowrap;vertical-align:top">${g.sort_order || idx+1}</td>
+                <td style="width:60px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
+                           white-space:nowrap;vertical-align:top">등급 코드</td>
+                <td style="color:var(--o800);font-weight:700;padding:2px 16px 2px 0;
+                           white-space:nowrap;vertical-align:top">${g.grade_code}</td>
+                <td style="width:60px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
+                           white-space:nowrap;vertical-align:top">등급 명칭</td>
+                <td style="color:var(--o800);font-weight:500;padding:2px 0;
+                           vertical-align:top">${g.grade_name}</td>
+              </tr>
+              ${g.description ? `
+              <tr>
+                <td style="color:var(--muted);font-size:11px;padding:4px 8px 2px 0;
+                           white-space:nowrap;vertical-align:top">설명</td>
+                <td colspan="5" style="color:var(--o700);font-size:12px;padding:4px 0 2px 0;
+                           line-height:1.6;white-space:pre-wrap;vertical-align:top">${g.description}</td>
+              </tr>` : ''}
+              ${g.note ? `
+              <tr>
+                <td style="color:var(--muted);font-size:11px;padding:4px 8px 2px 0;
+                           white-space:nowrap;vertical-align:top">비고</td>
+                <td colspan="5" style="color:var(--muted);font-size:12px;padding:4px 0 2px 0;
+                           line-height:1.6;white-space:pre-wrap;vertical-align:top">${g.note}</td>
+              </tr>` : ''}
+            </table>
+          </div>`).join('')}
         </div>
+        <!-- 선택된 등급 코드를 hidden input으로 보관 -->
+        <input type="hidden" id="fin-grade-sel-${ev.id}" value="">
       </div>` : ''}
       <div style="margin-top:4px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
@@ -456,23 +488,6 @@ async function renderFinalMgr(mgrPending) {
         </button>
       </div>`;
     body.appendChild(bottomSection);
-
-    // 등급 선택 시 설명 표시
-    setTimeout(() => {
-      const sel    = document.getElementById('fin-grade-sel-' + ev.id);
-      const descEl = document.getElementById('fin-grade-desc-' + ev.id);
-      if (sel && descEl) {
-        sel.addEventListener('change', () => {
-          const selected = grades.find(g => g.grade_code === sel.value);
-          if (selected?.description) {
-            descEl.textContent = selected.description;
-            descEl.style.display = 'block';
-          } else {
-            descEl.style.display = 'none';
-          }
-        });
-      }
-    }, 100);
     card.appendChild(body);
     el.appendChild(card);
 
@@ -568,4 +583,23 @@ async function submitFinalMgr(evalId, isSecond) {
     showAlert(`최종 평가 확정! 점수: ${res.final_score}점 / 등급: ${res.grade}`, 'green');
     setTimeout(() => Pages.finalEval(), 1000);
   } catch(e) { showAlert(e.message, 'red'); }
+}
+
+function selectGradeCard(evalId, gradeCode) {
+  // 같은 eval의 모든 카드 초기화
+  document.querySelectorAll(`[data-eval="${evalId}"].fin-grade-card`).forEach(card => {
+    card.style.borderColor = 'var(--border)';
+    card.style.background  = 'var(--white)';
+    card.style.boxShadow   = 'none';
+  });
+  // 선택된 카드 하이라이트
+  const selected = document.getElementById(`fin-grade-card-${evalId}-${gradeCode}`);
+  if (selected) {
+    selected.style.borderColor = 'var(--o500)';
+    selected.style.background  = 'var(--o50)';
+    selected.style.boxShadow   = '0 0 0 3px rgba(240,120,32,.15)';
+  }
+  // hidden input에 값 저장
+  const hiddenInput = document.getElementById('fin-grade-sel-' + evalId);
+  if (hiddenInput) hiddenInput.value = gradeCode;
 }
