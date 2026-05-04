@@ -234,10 +234,13 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
 14. **중간 보고**: 목표별 작성란 + 종합의견란 구성, 제출 시 [목표명]\n내용 형식으로 저장
 15. **최종평가 등급**: 상사가 grade_criteria에서 선택, selected_grade로 저장 (점수 기반 자동 등급과 별도)
 16. **2차 최종평가 순서**:
-    - 1차(직속상사) 완료 → phase: final_mgr2_pending → 2차 평가자에게만 표시
-    - 2차 완료 → phase: final_done, locked=1
-    - 2차 설정 꺼짐 시: 1차 완료 즉시 final_done
-    - 2차 평가자 UI: 종합의견만 작성 (별점/등급 입력 없음)
+    - 1차(직속상사) 완료 + 2차설정 켜짐 + 2차평가자 존재 → phase: final_mgr2_pending
+    - isSecond 판단: 피평가자 직속상사의 상사가 요청자인지 확인
+    - 2차 완료 → second_mgr_done=1, phase: final_done, locked=1
+    - 2차 설정 꺼짐 또는 2차평가자 없음 → 1차 완료 즉시 final_done
+    - 2차 평가자 UI: goalsSection + 별점 렌더 숨김, 종합의견만 작성
+    - submitFinalMgr 2차 호출 시 is_second:true 포함
+    - my-mgr-pending 2차 쿼리: final_mgr2_pending만 표시 (final_done 제외)
 17. **최종평가 뱃지**: is_second 여부 관계없이 모두 '최종평가 대기'로 표시
 18. **상사 최종평가 완료(mgr_done=1)**: 버튼 사라지고 완료 상태(점수+등급+별점+의견) 표시
 19. **보안 강화**: 개발 완료 후 반드시 진행 (현재 키 하드코딩 상태)
@@ -364,6 +367,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-04 | 2차최종평가 순서제어 완성: goalsSection/별점 2차숨김, submitFinalMgr is_second:true, my-mgr-pending final_done제거 | Claude Code |
 | 2026-05-04 | 2차최종평가 순서제어 완성 (1차완료→2차활성화, phase전환, 잠금처리) | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 '최종평가 대기'로 통일 | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 오류 수정, mgr_done 완료 후 잠금 표시, 재제출 방지 | Claude Code |
