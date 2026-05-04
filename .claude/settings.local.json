@@ -16,7 +16,8 @@
       "PowerShell(if \\($?\\) { \"? my-eval OK\" })",
       "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\public\\\\js\\\\pages\\\\final-eval.js 2>&1)",
       "PowerShell(if \\($LASTEXITCODE -eq 0\\) {\"? final-eval.js OK\"})",
-      "PowerShell(if \\($LASTEXITCODE -eq 0\\) {\"? server OK\"})"
+      "PowerShell(if \\($LASTEXITCODE -eq 0\\) {\"? server OK\"})",
+      "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\server\\\\index.js 2>&1; if \\($LASTEXITCODE -eq 0\\) {\"✅ server OK\"})"
     ]
   }
 }

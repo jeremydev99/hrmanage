@@ -368,6 +368,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
 | 2026-05-04 | 2차최종평가 순서제어 완성: goalsSection/별점 2차숨김, submitFinalMgr is_second:true, my-mgr-pending final_done제거 | Claude Code |
+| 2026-05-04 | 최종평가 등급선택 복구(1차/2차 모두), second_selected_grade 저장, submitFinalMgr 통합 | Claude Code |
+| 2026-05-04 | /api/evals/my-history API 누락 추가 (과거 목표승인 이력 버그 수정) | Claude Code |
 | 2026-05-04 | 2차최종평가 순서제어 완성 (1차완료→2차활성화, phase전환, 잠금처리) | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 '최종평가 대기'로 통일 | Claude Code |
 | 2026-05-04 | 최종평가 뱃지 오류 수정, mgr_done 완료 후 잠금 표시, 재제출 방지 | Claude Code |

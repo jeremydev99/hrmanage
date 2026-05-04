@@ -427,7 +427,7 @@ async function renderFinalMgr(mgrPending) {
     // 종합 의견 + 제출
     const bottomSection = document.createElement('div');
     bottomSection.innerHTML = `
-      ${!ev.is_second && grades.length ? `
+      ${grades.length ? `
       <div style="margin-top:12px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
           최종 등급 선택 <span style="color:var(--red)">*</span>
@@ -442,13 +442,18 @@ async function renderFinalMgr(mgrPending) {
           style="font-size:12px;color:var(--muted);padding:6px 10px;background:var(--o50);border-radius:6px;display:none;margin-bottom:10px">
         </div>
       </div>` : ''}
-      <div style="margin-top:12px">
-        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">상사 종합 의견</label>
-        <textarea id="fin-mgr-note-${ev.id}" placeholder="성과 총평 및 향후 육성 방향을 작성하세요..."
+      <div style="margin-top:4px">
+        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
+          ${ev.is_second ? '2차 평가자 종합의견' : '상사 종합 의견'}
+        </label>
+        <textarea id="fin-mgr-note-${ev.id}"
+          placeholder="${ev.is_second ? '2차 평가자 의견을 작성하세요...' : '성과 총평 및 향후 육성 방향을 작성하세요...'}"
           style="width:100%;min-height:80px;resize:vertical"></textarea>
       </div>
       <div class="abar">
-        <button class="btn btn-purple" onclick="submitFinalMgr(${ev.id},${ev.is_second||0})">${ev.is_second?'2차 최종평가 제출':'최종 평가 확정 — 잠금 처리됩니다'}</button>
+        <button class="btn btn-purple" onclick="submitFinalMgr(${ev.id},${ev.is_second||0})">
+          ${ev.is_second ? '2차 최종평가 제출' : '최종 평가 확정 — 잠금 처리됩니다'}
+        </button>
       </div>`;
     body.appendChild(bottomSection);
 
@@ -519,26 +524,31 @@ async function submitFinalMgr(evalId, isSecond) {
     : '최종 평가를 확정하면 잠금 처리되어 인사팀 외에는 수정할 수 없습니다. 계속하시겠습니까?';
   if (!confirm(confirmMsg)) return;
 
-  const note = document.getElementById(`fin-mgr-note-${evalId}`)?.value || '';
+  const note          = document.getElementById(`fin-mgr-note-${evalId}`)?.value || '';
+  const selectedGrade = document.getElementById(`fin-grade-sel-${evalId}`)?.value || '';
 
-  // 2차 평가자는 별점 입력 없이 의견만
+  // 등급 선택 필수 검증 (1차/2차 모두)
+  if (!selectedGrade) {
+    showAlert('최종 등급을 선택해주세요.', 'orange');
+    return;
+  }
+
+  // 2차 평가자: 별점 없이 등급 + 의견만 제출
   if (isSecond) {
     try {
-      await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores: [], is_second: true });
+      await API.post(`/final/${evalId}/mgr`, {
+        mgr_note: note,
+        scores: [],
+        selected_grade: selectedGrade,
+        is_second: true,
+      });
       showAlert('2차 최종평가가 제출되었습니다.', 'green');
       setTimeout(() => Pages.finalEval(), 1000);
     } catch(e) { showAlert(e.message, 'red'); }
     return;
   }
 
-  // 1차 평가자 — 등급 선택 + 별점 필수
-  const selectedGrade = document.getElementById(`fin-grade-sel-${evalId}`)?.value || '';
-  const gradeSelEl = document.getElementById(`fin-grade-sel-${evalId}`);
-  if (gradeSelEl && !selectedGrade) {
-    showAlert('최종 등급을 선택해주세요.', 'orange');
-    return;
-  }
-
+  // 1차 평가자: 별점 필수
   const goals = await API.get(`/evals/${evalId}/goals`);
   const scores = []; let allScored = true;
   goals.forEach(g => {
@@ -548,9 +558,14 @@ async function submitFinalMgr(evalId, isSecond) {
     scores.push({ goal_id: g.id, score: v });
   });
   if (!allScored) { showAlert('모든 목표에 점수를 입력해주세요.', 'orange'); return; }
+
   try {
-    const res = await API.post(`/final/${evalId}/mgr`, { mgr_note: note, scores, selected_grade: selectedGrade });
+    const res = await API.post(`/final/${evalId}/mgr`, {
+      mgr_note: note,
+      scores,
+      selected_grade: selectedGrade,
+    });
     showAlert(`최종 평가 확정! 점수: ${res.final_score}점 / 등급: ${res.grade}`, 'green');
     setTimeout(() => Pages.finalEval(), 1000);
-  } catch(e){showAlert(e.message,'red');}
+  } catch(e) { showAlert(e.message, 'red'); }
 }

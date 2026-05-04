@@ -367,6 +367,48 @@ app.post('/api/evals/:id/submit', auth, (req, res) => {
 
 // ════════════════════════════════════════════════════════════
 //  APPROVALS (목표 승인)
+// 내 목표 승인 이력 전체 (반려 포함)
+app.get('/api/evals/my-history', auth, (req, res) => {
+  try {
+    const evs = db.prepare(
+      "SELECT * FROM eval_cycles WHERE user_id=? ORDER BY created_at DESC"
+    ).all(req.user.sub);
+
+    const result = evs.map(ev => {
+      const goals = db.prepare(
+        `SELECT g.*, c.name as cat_name FROM goals g
+         JOIN goal_categories c ON g.category_id=c.id
+         WHERE g.eval_id=? ORDER BY c.sort_order, g.sort_order`
+      ).all(ev.id).map(g => ({
+        ...g,
+        name: g.name ? decrypt(g.name) : '',
+        kpi:  g.kpi  ? decrypt(g.kpi)  : '',
+      }));
+
+      const approvals = db.prepare(
+        `SELECT a.*, u.name as approver_name, u.title as approver_title
+         FROM goal_approvals a JOIN users u ON a.approver_id=u.id
+         WHERE a.eval_id=? ORDER BY a.created_at DESC`
+      ).all(ev.id).map(a => ({
+        ...a,
+        note: a.note ? decrypt(a.note) : '',
+      }));
+
+      return {
+        ...ev,
+        self_reason:   ev.self_reason   ? decrypt(ev.self_reason)   : '',
+        reject_reason: ev.reject_reason ? decrypt(ev.reject_reason) : '',
+        goals,
+        approvals,
+      };
+    });
+    res.json(result);
+  } catch(err) {
+    console.error('[evals/my-history]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ════════════════════════════════════════════════════════════
 // 내가 승인한 이력 목록 (기간 필터 지원)
 app.get('/api/approvals/my-history', auth, (req, res) => {
@@ -715,8 +757,8 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       // 1차가 완료됐는지 확인
       if (!fe.mgr_done) return res.status(400).json({ error: '1차 평가자가 먼저 평가를 완료해야 합니다.' });
 
-      db.prepare("UPDATE final_evaluations SET second_mgr_note=?,second_mgr_done=1,second_mgr_done_at=datetime('now'),second_mgr_id=? WHERE id=?")
-        .run(encrypt(mgr_note||''), req.user.sub, fe.id);
+      db.prepare("UPDATE final_evaluations SET second_mgr_note=?,second_mgr_done=1,second_mgr_done_at=datetime('now'),second_mgr_id=?,second_selected_grade=? WHERE id=?")
+        .run(encrypt(mgr_note||''), req.user.sub, selected_grade||'', fe.id);
       db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
 
       const t2 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
@@ -1329,6 +1371,7 @@ function initDB() {
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_note TEXT",
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_id INTEGER",
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_done_at TEXT",
+    "ALTER TABLE final_evaluations ADD COLUMN second_selected_grade TEXT",
     "ALTER TABLE eval_cycles ADD COLUMN phase2 TEXT",
     `CREATE TABLE IF NOT EXISTS eval_periods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
