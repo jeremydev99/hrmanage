@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(winget install *)",
+      "PowerShell(ngrok version *)",
+      "PowerShell(ngrok config *)",
+      "PowerShell(Stop-Process *)",
+      "PowerShell(ngrok http *)",
+      "PowerShell(ngrok update *)",
+      "PowerShell(Start-Sleep -Seconds 2; \\(Invoke-RestMethod -Uri 'http://localhost:4040/api/tunnels' -ErrorAction SilentlyContinue\\).tunnels | Select-Object -ExpandProperty public_url)",
+      "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\server\\\\index.js 2>&1)",
+      "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\public\\\\js\\\\pages\\\\login.js 2>&1)",
+      "PowerShell(node --check C:\\\\claudeprojects\\\\hrmanage\\\\public\\\\js\\\\pages\\\\my-eval.js 2>&1)",
+      "PowerShell(if \\($?\\) { \"? server OK\" })",
+      "PowerShell(if \\($?\\) { \"? login OK\" })",
+      "PowerShell(if \\($?\\) { \"? my-eval OK\" })"
+    ]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "synap-hr",
+  "version": "1.0.0",
+  "description": "㈜사이냅소프트 인사평가 시스템 - 로컬 테스트 버전",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "install-deps": "npm install"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "better-sqlite3": "^11.1.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
