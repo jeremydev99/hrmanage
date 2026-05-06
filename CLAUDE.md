@@ -245,6 +245,7 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
 18. **상사 최종평가 완료(mgr_done=1)**: 버튼 사라지고 완료 상태(점수+등급+별점+의견) 표시
 19. **보안 강화**: 개발 완료 후 반드시 진행 (현재 키 하드코딩 상태)
 20. **본인인증**: 운영 전환 시 추가 예정 (이메일/SMS/SSO 방식 미결정)
+21. **관리자 평가단계 강제변경**: 전직원 현황 탭 각 행의 '단계 변경' 버튼 → `showForcePhaseModal` → `forcePhaseChange` → `POST /api/admin/eval/:id/force-phase`
 
 ---
 
@@ -367,6 +368,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-06 | 승인이력 자기/1차/2차 평가결과 표시, 관리자 평가단계 강제변경 버튼 추가 | Claude Code |
 | 2026-05-06 | 최종평가 완료 후 뱃지 '1차/2차 평가 완료'로 표시 수정 | Claude Code |
 | 2026-05-06 | 과거이력 final_mgr2_pending 라벨 누락 수정 | Claude Code |
 | 2026-05-06 | 중간보고 goals is not defined 버그 수정 | Claude Code |

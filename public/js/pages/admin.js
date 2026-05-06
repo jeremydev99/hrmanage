@@ -652,6 +652,58 @@ function _orgFullscreen() {
   }
 }
 
+/* ── 평가 단계 강제 변경 모달 ── */
+function showForcePhaseModal(evalId, userName, currentPhase) {
+  document.getElementById('force-phase-modal')?.remove();
+  const phases = [
+    { value: 'draft',               label: '목표 작성중' },
+    { value: 'pending',             label: '승인 대기' },
+    { value: 'approved',            label: '목표 확정' },
+    { value: 'rejected',            label: '반려됨' },
+    { value: 'final_self',          label: '자기평가 중' },
+    { value: 'final_mgr_pending',   label: '1차 상사평가 대기' },
+    { value: 'final_mgr2_pending',  label: '2차 상사평가 대기' },
+    { value: 'final_done',          label: '평가 완료 (잠금)' },
+  ];
+  const overlay = document.createElement('div');
+  overlay.id = 'force-phase-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--white);border-radius:12px;padding:24px;width:100%;max-width:400px;margin:20px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">평가 단계 강제 변경</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">${userName}</div>
+      <div class="alert alert-red" style="font-size:12px;margin-bottom:14px">
+        ⚠ 관리자 전용 기능입니다. 신중하게 사용하세요.
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">변경할 단계 선택</label>
+        <select id="force-phase-select" style="width:100%;height:38px;font-size:13px">
+          ${phases.map(p =>
+            `<option value="${p.value}" ${p.value===currentPhase?'selected':''}>${p.label}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('force-phase-modal').remove()">취소</button>
+        <button class="btn btn-primary" onclick="forcePhaseChange(${evalId})">변경</button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+async function forcePhaseChange(evalId) {
+  const phase = document.getElementById('force-phase-select')?.value;
+  if (!phase) return;
+  if (!confirm(`정말로 평가 단계를 "${phase}"로 변경하시겠습니까?`)) return;
+  try {
+    await API.post('/admin/eval/' + evalId + '/force-phase', { phase });
+    showAlert('평가 단계가 변경되었습니다.', 'green');
+    document.getElementById('force-phase-modal')?.remove();
+    renderAdmStatus();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
 async function changeManager(userId, managerId) {
   try {
     await API.patch(`/users/${userId}`, { manager_id: managerId || null });
@@ -805,14 +857,15 @@ async function renderAdmStatus() {
     if (!Array.isArray(data)) throw new Error('데이터 형식 오류');
 
     const phaseLabel = {
-      none:              { text:'미시작',       cls:'bd-draft'    },
-      draft:             { text:'작성중',        cls:'bd-draft'    },
-      pending:           { text:'승인 대기',     cls:'bd-pending'  },
-      approved:          { text:'목표 확정',     cls:'bd-approved' },
-      rejected:          { text:'반려됨',        cls:'bd-rejected' },
-      final_self:        { text:'자기평가 중',   cls:'bd-fb'       },
-      final_mgr_pending: { text:'상사평가 대기', cls:'bd-final'    },
-      final_done:        { text:'평가 완료',     cls:'bd-locked'   },
+      none:               { text:'미시작',        cls:'bd-draft'    },
+      draft:              { text:'작성중',         cls:'bd-draft'    },
+      pending:            { text:'승인 대기',      cls:'bd-pending'  },
+      approved:           { text:'목표 확정',      cls:'bd-approved' },
+      rejected:           { text:'반려됨',         cls:'bd-rejected' },
+      final_self:         { text:'자기평가 중',    cls:'bd-fb'       },
+      final_mgr_pending:  { text:'1차평가 대기',   cls:'bd-final'    },
+      final_mgr2_pending: { text:'2차평가 대기',   cls:'bd-purple'   },
+      final_done:         { text:'평가 완료',      cls:'bd-locked'   },
     };
 
     const total    = data.length;
@@ -871,7 +924,7 @@ async function renderAdmStatus() {
 
       const tbl = document.createElement('table');
       tbl.className = 'tbl';
-      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th></tr></thead><tbody></tbody>';
+      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th><th></th></tr></thead><tbody></tbody>';
       const tbody = tbl.querySelector('tbody');
 
       members.forEach(function(u) {
@@ -893,13 +946,21 @@ async function renderAdmStatus() {
           + '<td style="text-align:center;font-size:13px">' + (u.goal_count||'-') + '</td>'
           + '<td style="text-align:center;font-size:13px">' + (u.feedback_count||'-') + '</td>'
           + '<td style="text-align:center">' + scoreHtml + '</td>'
-          + '<td><button class="btn btn-ghost btn-sm" style="font-size:11px">상세</button></td>';
+          + '<td><button class="btn btn-ghost btn-sm" style="font-size:11px">상세</button></td>'
+          + (u.eval_id ? '<td><button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--o600)">단계 변경</button></td>' : '<td></td>');
 
-        // 상세 버튼 이벤트 (따옴표 문제 없이 DOM으로 처리)
-        tr.querySelector('button').onclick = function(e) {
+        // 상세 버튼 이벤트
+        tr.querySelectorAll('button')[0].onclick = function(e) {
           e.stopPropagation();
           renderEvalDetail(u.id, u.name);
         };
+        // 단계 변경 버튼 이벤트
+        if (u.eval_id) {
+          tr.querySelectorAll('button')[1].onclick = function(e) {
+            e.stopPropagation();
+            showForcePhaseModal(u.eval_id, u.name, u.phase || 'none');
+          };
+        }
         tbody.appendChild(tr);
       });
 

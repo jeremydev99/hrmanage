@@ -447,12 +447,23 @@ app.get('/api/approvals/my-history', auth, (req, res) => {
       let finalData = null;
       if (fe) {
         const scores = db.prepare('SELECT * FROM final_eval_scores WHERE final_id=?').all(fe.id);
+        const secondMgrUser = fe.second_mgr_id
+          ? db.prepare('SELECT name, title FROM users WHERE id=?').get(fe.second_mgr_id)
+          : null;
+        const mgrUser = fe.mgr_approver_id
+          ? db.prepare('SELECT name, title FROM users WHERE id=?').get(fe.mgr_approver_id)
+          : null;
         finalData = {
-          self_done:   fe.self_done,
-          mgr_done:    fe.mgr_done,
-          final_score: fe.final_score,
-          final_grade: fe.final_grade,
-          mgr_note:    fe.mgr_note && fe.mgr_done ? decrypt(fe.mgr_note) : null,
+          self_done:         fe.self_done,
+          mgr_done:          fe.mgr_done,
+          mgr_approver_name: mgrUser?.name || '',
+          second_mgr_done:   fe.second_mgr_done,
+          second_mgr_name:   secondMgrUser?.name || '',
+          second_mgr_note:   fe.second_mgr_note && fe.second_mgr_done ? decrypt(fe.second_mgr_note) : null,
+          final_score:       fe.final_score,
+          final_grade:       fe.final_grade,
+          selected_grade:    fe.selected_grade,
+          mgr_note:          fe.mgr_note && fe.mgr_done ? decrypt(fe.mgr_note) : null,
           scores,
         };
       }
@@ -960,6 +971,37 @@ app.get('/api/files/:fileId', auth, (req, res) => {
     const f = db.prepare('SELECT * FROM report_files WHERE id=?').get(req.params.fileId);
     if (!f) return res.status(404).json({ error: '파일 없음' });
     res.json({ file_name: f.file_name, file_data: f.file_data, file_type: f.file_type });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 평가 단계 강제 변경 (admin+)
+app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
+  try {
+    const { phase } = req.body;
+    const validPhases = ['draft','pending','approved','rejected',
+                         'final_self','final_mgr_pending','final_mgr2_pending','final_done'];
+    if (!validPhases.includes(phase))
+      return res.status(400).json({ error: '유효하지 않은 phase입니다.' });
+
+    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    if (!ev) return res.status(404).json({ error: '평가를 찾을 수 없습니다.' });
+
+    const locked = phase === 'final_done' ? 1 : 0;
+    db.prepare("UPDATE eval_cycles SET phase=?, locked=?, updated_at=datetime('now') WHERE id=?")
+      .run(phase, locked, req.params.evalId);
+
+    if (phase === 'final_done') {
+      db.prepare("UPDATE final_evaluations SET locked=1, locked_at=datetime('now') WHERE eval_id=?")
+        .run(req.params.evalId);
+    }
+
+    const target = db.prepare('SELECT u.name FROM eval_cycles e JOIN users u ON e.user_id=u.id WHERE e.id=?').get(req.params.evalId);
+    auditLog(req.user.sub, 'FORCE_PHASE_CHANGE', req.params.evalId, target?.name,
+      `평가 단계 강제 변경: ${ev.phase} → ${phase}`, req.ip);
+
+    res.json({ success: true });
   } catch(err) {
     res.status(500).json({ error: err.message });
   }

@@ -179,36 +179,56 @@ async function renderMyApprovalHistory() {
         </div>` : ''}
         ${h.final_eval ? `
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--o100)">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">최종평가 현황</div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">최종평가 결과</div>
+
+          <!-- 상태 뱃지 -->
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
             <span class="bd ${h.final_eval.self_done?'bd-approved':'bd-draft'}" style="font-size:11px">
               자기평가 ${h.final_eval.self_done?'완료':'미완료'}
             </span>
             <span class="bd ${h.final_eval.mgr_done?'bd-locked':'bd-pending'}" style="font-size:11px">
-              상사평가 ${h.final_eval.mgr_done?'완료':'대기'}
+              1차(${h.final_eval.mgr_approver_name||'상사'}) ${h.final_eval.mgr_done?'완료':'대기'}
             </span>
-            ${h.final_eval.final_score!=null
-              ? `<span style="font-size:16px;font-weight:700;color:var(--o500)">${h.final_eval.final_score}점</span>
-                 <span class="bd bd-locked">${h.final_eval.final_grade||''}</span>`
+            ${h.final_eval.second_mgr_done ? `
+            <span class="bd bd-locked" style="font-size:11px">
+              2차(${h.final_eval.second_mgr_name||''}) 완료
+            </span>` : ''}
+            ${h.final_eval.final_score != null
+              ? `<span style="font-size:18px;font-weight:700;color:var(--o500)">${h.final_eval.final_score}점</span>
+                 <span class="bd bd-locked" style="font-size:13px">${h.final_eval.selected_grade||h.final_eval.final_grade||''}</span>`
               : ''}
           </div>
+
+          <!-- 목표별 자기/상사 별점 -->
           ${(h.goals||[]).length && (h.final_eval.scores||[]).length ? `
-          <div style="font-size:12px;margin-bottom:8px">
+          <div style="margin-bottom:10px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:5px">목표별 평가</div>
             ${(h.goals||[]).map(g => {
               const sc = (h.final_eval.scores||[]).find(s=>String(s.goal_id)===String(g.id));
-              const ms = sc?.mgr_score||0;
-              const ss = sc?.self_score||0;
-              if (!ms && !ss) return '';
-              return `<div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap">
-                <span style="flex:1;font-weight:500;font-size:12px">${g.name||''}</span>
-                ${ss?`<span style="color:var(--muted);font-size:12px">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)} ${ss}점</span>`:''}
-                ${ms?`<span style="color:var(--o500);font-size:12px">상사 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>`:''}
+              const ss = sc?.self_score || 0;
+              const ms = sc?.mgr_score  || 0;
+              if (!ss && !ms) return '';
+              return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap">
+                <span style="flex:1;font-size:12px;font-weight:500">${g.name||''}</span>
+                ${ss ? `<span style="font-size:12px;color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)} ${ss}점</span>` : ''}
+                ${ms ? `<span style="font-size:12px;color:var(--o500)">1차 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>` : ''}
               </div>`;
             }).join('')}
           </div>` : ''}
-          ${h.final_eval.mgr_note
-            ? `<div style="font-size:12px;padding:8px;background:var(--o50);border-radius:6px;color:var(--o800);line-height:1.6">${h.final_eval.mgr_note}</div>`
-            : ''}
+
+          <!-- 1차 평가자 종합의견 -->
+          ${h.final_eval.mgr_note ? `
+          <div style="margin-bottom:8px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">1차(${h.final_eval.mgr_approver_name||'상사'}) 종합의견</div>
+            <div style="font-size:12px;padding:8px;background:var(--o50);border-radius:6px;line-height:1.6">${h.final_eval.mgr_note}</div>
+          </div>` : ''}
+
+          <!-- 2차 평가자 종합의견 -->
+          ${h.final_eval.second_mgr_note ? `
+          <div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">2차(${h.final_eval.second_mgr_name||''}) 종합의견</div>
+            <div style="font-size:12px;padding:8px;background:var(--o50);border-radius:6px;line-height:1.6">${h.final_eval.second_mgr_note}</div>
+          </div>` : ''}
         </div>` : ''}`;
       el.appendChild(card);
     });
