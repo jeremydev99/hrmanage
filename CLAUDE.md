@@ -192,7 +192,7 @@ final_evaluations  id, eval_id, self_note(암호화), self_done, self_done_at,
                    second_mgr_done, second_mgr_note(암호화),
                    second_mgr_id, second_mgr_done_at,
                    locked, locked_at
-final_eval_scores  id, final_id, goal_id, self_score, mgr_score
+final_eval_scores  id, final_id, goal_id, self_score, mgr_score, second_mgr_score (추가)
 progress_reports   id, eval_id, author_id, content(암호화), created_at
 report_files       id, report_id, feedback_id, final_eval_id,
                    file_name, file_data, file_type, file_size
@@ -238,7 +238,9 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
     - isSecond 판단: 피평가자 직속상사의 상사가 요청자인지 확인
     - 2차 완료 → second_mgr_done=1, phase: final_done, locked=1
     - 2차 설정 꺼짐 또는 2차평가자 없음 → 1차 완료 즉시 final_done
-    - 2차 평가자 UI: goalsSection + 별점 렌더 숨김, 종합의견만 작성
+    - 2차 평가자 UI: 별점 입력 + 종합의견 작성 (등급 선택 카드만 숨김)
+    - 1차: 별점 + 등급 선택 + 종합의견 / 2차: 별점 + 종합의견
+    - 표시: 자기★ / 1차★ / 2차★ 모두 표시 (승인이력, 완료화면)
     - submitFinalMgr 2차 호출 시 is_second:true 포함
     - my-mgr-pending 2차 쿼리: final_mgr2_pending만 표시 (final_done 제외)
 17. **최종평가 뱃지**: is_second 여부 관계없이 모두 '최종평가 대기'로 표시
@@ -368,6 +370,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-06 | 2차 평가자 별점 입력 추가, 승인이력/완료화면에 자기/1차/2차 별점 모두 표시 | Claude Code |
 | 2026-05-06 | 승인이력 자기/1차/2차 평가결과 표시, 관리자 평가단계 강제변경 버튼 추가 | Claude Code |
 | 2026-05-06 | 최종평가 완료 후 뱃지 '1차/2차 평가 완료'로 표시 수정 | Claude Code |
 | 2026-05-06 | 과거이력 final_mgr2_pending 라벨 누락 수정 | Claude Code |

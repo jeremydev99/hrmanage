@@ -768,9 +768,24 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       // 1차가 완료됐는지 확인
       if (!fe.mgr_done) return res.status(400).json({ error: '1차 평가자가 먼저 평가를 완료해야 합니다.' });
 
-      db.prepare("UPDATE final_evaluations SET second_mgr_note=?,second_mgr_done=1,second_mgr_done_at=datetime('now'),second_mgr_id=?,second_selected_grade=? WHERE id=?")
-        .run(encrypt(mgr_note||''), req.user.sub, selected_grade||'', fe.id);
+      // 2차 별점 저장
+      (scores||[]).forEach(s => {
+        const ex = db.prepare('SELECT id FROM final_eval_scores WHERE final_id=? AND goal_id=?').get(fe.id, s.goal_id);
+        if (ex) {
+          db.prepare('UPDATE final_eval_scores SET second_mgr_score=? WHERE id=?').run(s.score, ex.id);
+        } else {
+          db.prepare('INSERT INTO final_eval_scores(final_id,goal_id,second_mgr_score) VALUES(?,?,?)').run(fe.id, s.goal_id, s.score);
+        }
+      });
+
+      db.prepare(`UPDATE final_evaluations
+        SET second_mgr_note=?, second_mgr_done=1,
+            second_mgr_done_at=datetime('now'), second_mgr_id=?,
+            selected_grade=COALESCE(?,selected_grade), second_selected_grade=?
+        WHERE id=?`)
+        .run(encrypt(mgr_note||''), req.user.sub, selected_grade||null, selected_grade||'', fe.id);
       db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
+      db.prepare("UPDATE final_evaluations SET locked=1, locked_at=datetime('now') WHERE id=?").run(fe.id);
 
       const t2 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
       auditLog(req.user.sub, 'FINAL_EVAL_2ND', ev.user_id, t2?.name,
@@ -1414,6 +1429,7 @@ function initDB() {
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_id INTEGER",
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_done_at TEXT",
     "ALTER TABLE final_evaluations ADD COLUMN second_selected_grade TEXT",
+    "ALTER TABLE final_eval_scores ADD COLUMN second_mgr_score INTEGER",
     "ALTER TABLE eval_cycles ADD COLUMN phase2 TEXT",
     `CREATE TABLE IF NOT EXISTS eval_periods (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

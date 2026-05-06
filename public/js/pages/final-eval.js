@@ -371,13 +371,15 @@ async function renderFinalMgr(mgrPending) {
             : ''}
         </div>
         ${goals.map(g => {
-          const sc = (fe.scores||[]).find(s => String(s.goal_id) === String(g.id));
-          const ms = sc?.mgr_score || 0;
-          const ss = sc?.self_score || 0;
+          const sc  = (fe.scores||[]).find(s => String(s.goal_id) === String(g.id));
+          const ms  = sc?.mgr_score        || 0;
+          const ss  = sc?.self_score       || 0;
+          const ms2 = sc?.second_mgr_score || 0;
           return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px;flex-wrap:wrap">
             <span style="flex:1;font-weight:500">${g.name}</span>
-            ${ss ? `<span style="color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)}</span>` : ''}
-            ${ms ? `<span style="color:var(--o500)">상사 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>` : ''}
+            ${ss  ? `<span style="color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)}</span>`   : ''}
+            ${ms  ? `<span style="color:var(--o500)">1차 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>`   : ''}
+            ${ms2 ? `<span style="color:var(--o700)">2차 ${'★'.repeat(ms2)}${'☆'.repeat(5-ms2)} ${ms2}점</span>` : ''}
           </div>`;
         }).join('')}
         ${fe.mgr_note
@@ -415,24 +417,22 @@ async function renderFinalMgr(mgrPending) {
       body.appendChild(selfNote);
     }
 
-    // ── 목표별 평가 입력 (1차 평가자만) ─────────────────────
-    if (!ev.is_second) {
-      const goalsSection = document.createElement('div');
-      goalsSection.innerHTML = App.categories.map(cat => {
-        const cg = goals.filter(g => String(g.category_id) === String(cat.id));
-        if (!cg.length) return '';
-        return `<div style="margin-bottom:12px">
-          <div class="cat-title" style="background:${cat.color};color:${cat.text_color};display:inline-block;margin-bottom:8px">${cat.name}</div>
-          <div id="fin-mgr-cat-${ev.id}-${cat.id}"></div>
-        </div>`;
-      }).join('');
-      body.appendChild(goalsSection);
-    }
+    // ── 목표별 평가 입력 (1차/2차 모두 표시) ─────────────────
+    const goalsSection = document.createElement('div');
+    goalsSection.innerHTML = App.categories.map(cat => {
+      const cg = goals.filter(g => String(g.category_id) === String(cat.id));
+      if (!cg.length) return '';
+      return `<div style="margin-bottom:12px">
+        <div class="cat-title" style="background:${cat.color};color:${cat.text_color};display:inline-block;margin-bottom:8px">${cat.name}</div>
+        <div id="fin-mgr-cat-${ev.id}-${cat.id}"></div>
+      </div>`;
+    }).join('');
+    body.appendChild(goalsSection);
 
     // 종합 의견 + 제출
     const bottomSection = document.createElement('div');
     bottomSection.innerHTML = `
-      ${grades.length ? `
+      ${!ev.is_second && grades.length ? `
       <div style="margin-top:12px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:8px">
           최종 등급 선택 <span style="color:var(--red)">*</span>
@@ -496,25 +496,23 @@ async function renderFinalMgr(mgrPending) {
     card.appendChild(body);
     el.appendChild(card);
 
-    // 별점 렌더 — 1차 평가자만 (2차는 별점 입력 없음)
-    if (!ev.is_second) {
-      App.categories.forEach(cat => {
-        const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
-        goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
-          const row = document.createElement('div');
-          row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap;gap:6px';
-          const selfLbl = selfScores[g.id]
-            ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
-            : '';
-          row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}</span>`;
-          const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
-          starWrap.dataset.goalId2 = g.id;
-          starWrap.dataset.evalId  = ev.id;
-          row.appendChild(starWrap);
-          wrap.appendChild(row);
-        });
+    // 별점 렌더 — 1차/2차 평가자 모두
+    App.categories.forEach(cat => {
+      const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
+      goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap;gap:6px';
+        const selfLbl = selfScores[g.id]
+          ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
+          : '';
+        row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}</span>`;
+        const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
+        starWrap.dataset.goalId2 = g.id;
+        starWrap.dataset.evalId  = ev.id;
+        row.appendChild(starWrap);
+        wrap.appendChild(row);
       });
-    }
+    });
   }
 }
 
@@ -553,13 +551,22 @@ async function submitFinalMgr(evalId, isSecond) {
     return;
   }
 
-  // 2차 평가자: 별점 없이 등급 + 의견만 제출
+  // 2차 평가자: 별점 + 의견 제출
   if (isSecond) {
+    const goals2 = await API.get(`/evals/${evalId}/goals`);
+    const scores2 = []; let allScored2 = true;
+    goals2.forEach(g => {
+      const starEl = document.querySelector(`[data-goal-id="fin-mgr-${evalId}-${g.id}"]`);
+      const v = parseInt(starEl?.dataset.value || 0);
+      if (!v) allScored2 = false;
+      scores2.push({ goal_id: g.id, score: v });
+    });
+    if (!allScored2) { showAlert('모든 목표에 점수를 입력해주세요.', 'orange'); return; }
     try {
       await API.post(`/final/${evalId}/mgr`, {
         mgr_note: note,
-        scores: [],
-        selected_grade: selectedGrade,
+        scores: scores2,
+        selected_grade: selectedGrade || '',
         is_second: true,
       });
       showAlert('2차 최종평가가 제출되었습니다.', 'green');
