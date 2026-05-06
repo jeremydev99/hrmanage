@@ -227,7 +227,12 @@ async function renderFinalMgr(mgrPending) {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="bd bd-final" style="font-size:11px">최종평가 대기</span>
+        ${fe?.mgr_done === 1 && !ev.is_second
+          ? '<span class="bd bd-approved" style="font-size:11px">✅ 1차 평가 완료</span>'
+          : fe?.second_mgr_done === 1 && ev.is_second
+            ? '<span class="bd bd-approved" style="font-size:11px">✅ 2차 평가 완료</span>'
+            : '<span class="bd bd-final" style="font-size:11px">최종평가 대기</span>'
+        }
         <button class="btn btn-ghost btn-sm" id="fin-mgr-toggle-btn-${ev.id}"
           onclick="toggleFinMgrCard(${ev.id}, event)">펼치기 ▼</button>
       </div>`;

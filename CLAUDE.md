@@ -367,6 +367,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-06 | 최종평가 완료 후 뱃지 '1차/2차 평가 완료'로 표시 수정 | Claude Code |
 | 2026-05-06 | 과거이력 final_mgr2_pending 라벨 누락 수정 | Claude Code |
 | 2026-05-06 | 중간보고 goals is not defined 버그 수정 | Claude Code |
 | 2026-05-06 | 조직도 차트 연결선 및 자동배치 수정 | Claude Code |
