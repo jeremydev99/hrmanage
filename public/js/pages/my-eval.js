@@ -65,12 +65,16 @@ Pages.myEval = async function() {
         const phaseLabels = {
           draft:'목표 작성중', pending:'승인 대기', approved:'목표 확정',
           rejected:'반려됨', final_self:'자기평가 중',
-          final_mgr_pending:'상사평가 대기', final_done:'평가 완료'
+          final_mgr_pending:'상사평가 대기',
+          final_mgr2_pending:'2차평가 대기',
+          final_done:'평가 완료'
         };
         const phaseCls = {
           draft:'bd-draft', pending:'bd-pending', approved:'bd-approved',
           rejected:'bd-rejected', final_self:'bd-fb',
-          final_mgr_pending:'bd-final', final_done:'bd-locked'
+          final_mgr_pending:'bd-final',
+          final_mgr2_pending:'bd-purple',
+          final_done:'bd-locked'
         };
 
         // 헤더
@@ -112,7 +116,7 @@ Pages.myEval = async function() {
             <button class="btn btn-primary" onclick="reopenEval(${ev.id},'${ev.period_type}','${ev.period_label}','${ev.eval_year}')">수정 후 재요청 →</button>`;
         } else if (phase === 'pending') {
           abar.innerHTML = `<span style="font-size:13px;color:var(--muted)">승인자 검토 중...</span>`;
-        } else if (['approved','final_self','final_mgr_pending'].includes(phase)) {
+        } else if (['approved','final_self','final_mgr_pending','final_mgr2_pending'].includes(phase)) {
           abar.innerHTML = `
             <button class="btn btn-ghost" onclick="App.navigate('progress')">중간 보고 →</button>
             <button class="btn btn-teal" onclick="App.navigate('feedback')">중간 피드백 →</button>
