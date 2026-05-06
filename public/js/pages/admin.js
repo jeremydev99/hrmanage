@@ -312,11 +312,33 @@ async function saveCats() {
 }
 
 /* ── 조직도 관리 ── */
-async function renderAdmOrg() {
-  const el = document.getElementById('adm-org'); if(!el)return;
-  const users = await API.get('/users');
-  const roots = users.filter(u=>!u.manager_id);
+let _orgViewMode = localStorage.getItem('orgViewMode') || 'list';
+let _orgChartCtrl = null; // AbortController for chart event listeners
 
+async function renderAdmOrg() {
+  const el = document.getElementById('adm-org'); if(!el) return;
+  if (_orgChartCtrl) { _orgChartCtrl.abort(); _orgChartCtrl = null; }
+  const users = await API.get('/users');
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-sm ${_orgViewMode==='list'?'btn-purple':'btn-ghost'}" onclick="_setOrgView('list')">📋 목록 방식</button>
+      <button class="btn btn-sm ${_orgViewMode==='chart'?'btn-purple':'btn-ghost'}" onclick="_setOrgView('chart')">🏢 차트 방식</button>
+    </div>
+    <div id="org-view-area"></div>`;
+  const area = document.getElementById('org-view-area');
+  if (_orgViewMode === 'chart') _renderOrgChart(users, area);
+  else _renderOrgList(users, area);
+}
+
+function _setOrgView(mode) {
+  _orgViewMode = mode;
+  localStorage.setItem('orgViewMode', mode);
+  renderAdmOrg();
+}
+
+/* ── 목록 방식 ── */
+function _renderOrgList(users, el) {
+  const roots = users.filter(u=>!u.manager_id);
   function nodeHtml(u, depth) {
     const children = users.filter(x=>String(x.manager_id)===String(u.id));
     const approvers = [];
@@ -340,13 +362,269 @@ async function renderAdmOrg() {
       ${children.length?`<div class="org-children">${children.map(c=>nodeHtml(c,depth+1)).join('')}</div>`:''}
     </div>`;
   }
-
   el.innerHTML = `<div class="card">
     <div class="card-header"><div><div class="card-header-t">조직도 관리</div>
     <div class="card-header-s">상위 관리자 변경 시 승인 체계가 자동으로 반영됩니다</div></div></div>
     <div class="alert alert-orange" style="font-size:12px">상위 관리자를 변경하면 해당 직원의 승인 단계가 자동으로 갱신됩니다.</div>
     ${roots.map(u=>nodeHtml(u,0)).join('')}
   </div>`;
+}
+
+/* ── 차트 방식 ── */
+function _renderOrgChart(users, el) {
+  const NODE_W = 164;
+  let positions = JSON.parse(localStorage.getItem('orgChartLayout')||'{}');
+  // 저장된 위치가 없는 사용자가 있으면 자동 레이아웃 실행
+  if (users.some(u => !positions[String(u.id)])) positions = _orgAutoLayout(users);
+
+  el.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-ghost btn-sm" onclick="_orgAutoArrange()">⚡ 자동 정렬</button>
+      <button class="btn btn-ghost btn-sm" onclick="_orgSaveLayout()">💾 배치 저장</button>
+      <button class="btn btn-ghost btn-sm" onclick="_orgFullscreen()">⛶ 전체화면</button>
+      <span style="font-size:11px;color:var(--muted);margin-left:4px">
+        노드 드래그=이동 · 하단 점 드래그=상위 연결 · 연결선 클릭=해제
+      </span>
+    </div>`;
+
+  const wrap = document.createElement('div');
+  wrap.id = 'org-chart-wrap';
+  wrap.style.cssText = 'position:relative;width:100%;height:620px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
+
+  // 연결선 SVG — pointer-events:none은 SVG 전체가 아닌 가시선에만 적용
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.id = 'org-chart-svg';
+  svg.style.cssText = 'position:absolute;top:0;left:0;width:3000px;height:3000px;overflow:visible;z-index:5';
+  wrap.appendChild(svg);
+
+  // 드래그 미리보기 SVG
+  const svgDrag = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svgDrag.id = 'org-chart-svg-drag';
+  svgDrag.style.cssText = 'position:absolute;top:0;left:0;width:3000px;height:3000px;overflow:visible;pointer-events:none;z-index:9';
+  wrap.appendChild(svgDrag);
+
+  // 노드 생성 (비활성 사용자 포함 전체 표시)
+  users.forEach(u => {
+    const pos = positions[String(u.id)] || { x: 50, y: 50 };
+    const node = document.createElement('div');
+    node.id = `org-node-${u.id}`;
+    node.dataset.userId = String(u.id);
+    // 높이를 명시(72px)해서 연결선 좌표 계산이 일관되도록
+    node.style.cssText = `position:absolute;left:${pos.x}px;top:${pos.y}px;width:${NODE_W}px;height:72px;
+      background:${u.is_active===0?'#f9f9f9':'white'};
+      border:2px solid ${u.is_active===0?'var(--border)':'var(--o200)'};
+      border-radius:8px;padding:8px 10px;
+      cursor:move;z-index:10;box-shadow:0 2px 6px rgba(0,0,0,.1);
+      user-select:none;box-sizing:border-box;overflow:hidden`;
+    node.innerHTML = `
+      <div style="display:flex;align-items:center;gap:6px;height:100%">
+        <div class="avatar" style="width:26px;height:26px;min-width:26px;font-size:10px;
+          background:var(--o100);color:var(--o800);flex-shrink:0">${(u.name||'?').slice(0,2)}</div>
+        <div style="min-width:0;flex:1">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${u.name||''}${u.is_active===0?' <span style="font-size:9px;color:var(--muted)">(비활성)</span>':''}
+          </div>
+          <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            ${[u.dept,u.grade,u.title].filter(Boolean).join(' · ')||'—'}
+          </div>
+        </div>
+      </div>
+      <div class="org-dot" data-from="${u.id}"
+        style="position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);
+               width:13px;height:13px;border-radius:50%;background:var(--o400);
+               border:2px solid white;cursor:crosshair;z-index:20;
+               box-shadow:0 1px 4px rgba(0,0,0,.2)"></div>`;
+    wrap.appendChild(node);
+  });
+
+  el.appendChild(wrap);
+  // DOM 렌더링 후 연결선 그리기 (offsetHeight 사용을 위해 약간 대기)
+  setTimeout(() => { _drawOrgLines(users); _setupOrgChartEvents(users, positions); }, 80);
+}
+
+function _drawOrgLines(users) {
+  const svg  = document.getElementById('org-chart-svg');
+  const wrap = document.getElementById('org-chart-wrap');
+  if (!svg || !wrap) return;
+  svg.innerHTML = '';
+
+  users.filter(u => u.manager_id).forEach(u => {
+    const mNode = document.getElementById(`org-node-${u.manager_id}`);
+    const uNode = document.getElementById(`org-node-${u.id}`);
+    if (!mNode || !uNode) return; // manager_id가 없거나 유효하지 않은 경우 스킵
+
+    // offsetLeft/offsetTop/offsetWidth/offsetHeight로 실제 렌더링 좌표 사용
+    const fx = mNode.offsetLeft + mNode.offsetWidth  / 2;
+    const fy = mNode.offsetTop  + mNode.offsetHeight;
+    const tx = uNode.offsetLeft + uNode.offsetWidth  / 2;
+    const ty = uNode.offsetTop;
+    const cy = Math.max(40, Math.abs(ty - fy) * 0.5);
+    const d  = `M ${fx} ${fy} C ${fx} ${fy+cy} ${tx} ${ty-cy} ${tx} ${ty}`;
+
+    // 가시선 (pointer-events:none으로 클릭 차단)
+    const line = document.createElementNS('http://www.w3.org/2000/svg','path');
+    line.setAttribute('d', d);
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', 'var(--o300)');
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('pointer-events', 'none');
+    svg.appendChild(line);
+
+    // 클릭 영역 — stroke만 감지, fill=none
+    const mgrName = users.find(x => String(x.id) === String(u.manager_id))?.name || '';
+    const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
+    hit.setAttribute('d', d);
+    hit.setAttribute('fill', 'none');
+    hit.setAttribute('stroke', 'rgba(0,0,0,0)');
+    hit.setAttribute('stroke-width', '14');
+    hit.setAttribute('pointer-events', 'stroke');
+    hit.style.cursor = 'pointer';
+    hit.title = `${mgrName} → ${u.name}  (클릭: 연결 해제)`;
+    hit.addEventListener('click', async () => {
+      if (!confirm(`[${u.name}]의 상위 관리자(${mgrName}) 연결을 해제할까요?`)) return;
+      try {
+        await API.patch(`/users/${u.id}`, { manager_id: null });
+        showAlert('연결이 해제되었습니다.', 'green');
+        renderAdmOrg();
+      } catch(e2) { showAlert(e2.message, 'red'); }
+    });
+    svg.appendChild(hit);
+  });
+}
+
+function _setupOrgChartEvents(users, positions) {
+  if (_orgChartCtrl) _orgChartCtrl.abort();
+  _orgChartCtrl = new AbortController();
+  const sig  = _orgChartCtrl.signal;
+  const wrap = document.getElementById('org-chart-wrap');
+  if (!wrap) return;
+
+  let dragNode = null; // { id, ox, oy }
+  let dragDot  = null; // { fromId }
+
+  wrap.addEventListener('mousedown', e => {
+    const dot = e.target.closest('.org-dot');
+    if (dot) { e.preventDefault(); e.stopPropagation(); dragDot = { fromId: dot.dataset.from }; return; }
+    const node = e.target.closest('[id^="org-node-"]');
+    if (node && e.target.tagName !== 'SELECT' && e.target.tagName !== 'BUTTON') {
+      e.preventDefault();
+      const nr = node.getBoundingClientRect();
+      dragNode = { id: node.dataset.userId, ox: e.clientX - nr.left, oy: e.clientY - nr.top };
+    }
+  }, { signal: sig });
+
+  document.addEventListener('mousemove', e => {
+    if (dragNode) {
+      const w = document.getElementById('org-chart-wrap');
+      const n = document.getElementById(`org-node-${dragNode.id}`);
+      if (!w || !n) return;
+      const wr = w.getBoundingClientRect();
+      const x  = Math.max(0, e.clientX - wr.left - dragNode.ox + w.scrollLeft);
+      const y  = Math.max(0, e.clientY - wr.top  - dragNode.oy + w.scrollTop);
+      n.style.left = x + 'px';
+      n.style.top  = y + 'px';
+      positions[String(dragNode.id)] = { x, y };
+      _drawOrgLines(users);
+    }
+    if (dragDot) {
+      const w   = document.getElementById('org-chart-wrap');
+      const sdg = document.getElementById('org-chart-svg-drag');
+      const fn  = document.getElementById(`org-node-${dragDot.fromId}`);
+      if (!w || !sdg || !fn) return;
+      const wr = w.getBoundingClientRect();
+      const fx = parseInt(fn.style.left) + 80;
+      const fy = parseInt(fn.style.top)  + 72;
+      const tx = e.clientX - wr.left + w.scrollLeft;
+      const ty = e.clientY - wr.top  + w.scrollTop;
+      sdg.innerHTML = `<path d="M ${fx} ${fy} C ${fx} ${fy+50} ${tx} ${ty-50} ${tx} ${ty}"
+        fill="none" stroke="var(--o500)" stroke-width="2" stroke-dasharray="6,3"/>`;
+    }
+  }, { signal: sig });
+
+  document.addEventListener('mouseup', async e => {
+    if (dragDot) {
+      const sdg = document.getElementById('org-chart-svg-drag');
+      if (sdg) sdg.innerHTML = '';
+      const tgt  = document.elementFromPoint(e.clientX, e.clientY);
+      const tNode = tgt?.closest('[id^="org-node-"]');
+      if (tNode && tNode.dataset.userId !== dragDot.fromId) {
+        const fu = users.find(u=>String(u.id)===String(dragDot.fromId));
+        const tu = users.find(u=>String(u.id)===String(tNode.dataset.userId));
+        if (confirm(`[${fu?.name}]의 상위 관리자를 [${tu?.name}]으로 설정할까요?`)) {
+          try { await API.patch(`/users/${dragDot.fromId}`,{manager_id:tNode.dataset.userId}); showAlert('조직도 업데이트','green'); renderAdmOrg(); }
+          catch(e2) { showAlert(e2.message,'red'); }
+        }
+      }
+      dragDot = null;
+    }
+    if (dragNode) dragNode = null;
+  }, { signal: sig });
+}
+
+/* ── 차트 헬퍼 함수 ── */
+function _orgAutoLayout(users) {
+  const W=164, H=72, GX=32, GY=110;
+  const idSet = new Set(users.map(u=>String(u.id)));
+  const ch = {};
+  users.forEach(u => {
+    ch[String(u.id)] = users
+      .filter(x => String(x.manager_id) === String(u.id))
+      .map(x => String(x.id));
+  });
+
+  function sw(id) {
+    const kids = ch[id] || [];
+    if (!kids.length) return W;
+    return Math.max(W, kids.reduce((a,c) => a + sw(c) + GX, -GX));
+  }
+
+  const pos = {};
+  function place(id, x, y) {
+    pos[id] = { x, y };
+    const kids = ch[id] || [];
+    if (!kids.length) return;
+    const tot = kids.reduce((a,c) => a + sw(c) + GX, -GX);
+    let cx = x + sw(id)/2 - tot/2;
+    kids.forEach(kid => { place(kid, cx, y + H + GY); cx += sw(kid) + GX; });
+  }
+
+  // 루트: manager_id가 없거나 users 목록에 없는 유효하지 않은 manager를 가진 사용자
+  const roots = users.filter(u => !u.manager_id || !idSet.has(String(u.manager_id)));
+  let sx = 30;
+  roots.forEach(r => { place(String(r.id), sx, 40); sx += sw(String(r.id)) + GX; });
+
+  // 레이아웃 후에도 누락된 사용자는 오른쪽 끝에 추가
+  users.forEach(u => {
+    if (!pos[String(u.id)]) { pos[String(u.id)] = { x: sx, y: 40 }; sx += W + GX; }
+  });
+
+  return pos;
+}
+
+function _orgAutoArrange() {
+  localStorage.removeItem('orgChartLayout');
+  renderAdmOrg();
+}
+
+function _orgSaveLayout() {
+  const wrap = document.getElementById('org-chart-wrap');
+  if (!wrap) return;
+  const layout = {};
+  wrap.querySelectorAll('[id^="org-node-"]').forEach(n => {
+    layout[n.dataset.userId] = { x: n.offsetLeft, y: n.offsetTop };
+  });
+  localStorage.setItem('orgChartLayout', JSON.stringify(layout));
+  showAlert('배치가 저장되었습니다.','green');
+}
+
+function _orgFullscreen() {
+  const wrap = document.getElementById('org-chart-wrap');
+  if (!wrap) return;
+  if (!document.fullscreenElement) {
+    wrap.requestFullscreen().then(()=>{ wrap.style.height='100vh'; wrap.style.borderRadius='0'; }).catch(()=>{});
+  } else {
+    document.exitFullscreen().then(()=>{ wrap.style.height='620px'; wrap.style.borderRadius='8px'; }).catch(()=>{});
+  }
 }
 
 async function changeManager(userId, managerId) {
