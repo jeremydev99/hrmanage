@@ -367,6 +367,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-06 | 중간보고 goals is not defined 버그 수정 | Claude Code |
 | 2026-05-06 | 조직도 차트 연결선 및 자동배치 수정 | Claude Code |
 | 2026-05-06 | 조직도 차트 데이터 연결 수정 (전체 조직원 표시 및 연결선 복구) | Claude Code |
 | 2026-05-06 | 조직도 차트방식 복구 (outputs 파일 덮어쓰기로 인한 손실) | Claude Code |

@@ -80,6 +80,7 @@ async function renderMyReports(evList) {
 
   for (const ev of evList) {
     const reports = await API.get('/reports/' + ev.id).catch(() => []);
+    const goals   = await API.get('/evals/' + ev.id + '/goals').catch(() => []);
     const card = document.createElement('div');
     card.className = 'card';
     card.style.marginBottom = '12px';
