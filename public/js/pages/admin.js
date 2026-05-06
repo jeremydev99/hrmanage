@@ -461,23 +461,24 @@ function _drawOrgLines(users) {
     const cy = Math.max(40, Math.abs(ty - fy) * 0.5);
     const d  = `M ${fx} ${fy} C ${fx} ${fy+cy} ${tx} ${ty-cy} ${tx} ${ty}`;
 
-    // 가시선 (pointer-events:none으로 클릭 차단)
+    // 가시선: stroke는 style로 설정 (CSS 변수가 attribute에서 미지원될 수 있음)
     const line = document.createElementNS('http://www.w3.org/2000/svg','path');
     line.setAttribute('d', d);
     line.setAttribute('fill', 'none');
-    line.setAttribute('stroke', 'var(--o300)');
     line.setAttribute('stroke-width', '2');
     line.setAttribute('pointer-events', 'none');
+    line.style.stroke = '#F07820';          // var(--o400) 고정값 — SVG 속성에서 CSS 변수 불가
+    line.style.strokeWidth = '2px';
     svg.appendChild(line);
 
-    // 클릭 영역 — stroke만 감지, fill=none
+    // 클릭 영역 — 넓은 투명 stroke로 클릭 감지
     const mgrName = users.find(x => String(x.id) === String(u.manager_id))?.name || '';
     const hit = document.createElementNS('http://www.w3.org/2000/svg','path');
     hit.setAttribute('d', d);
     hit.setAttribute('fill', 'none');
-    hit.setAttribute('stroke', 'rgba(0,0,0,0)');
     hit.setAttribute('stroke-width', '14');
     hit.setAttribute('pointer-events', 'stroke');
+    hit.style.stroke = 'transparent';      // style로 설정해야 pointer-events:stroke와 함께 작동
     hit.style.cursor = 'pointer';
     hit.title = `${mgrName} → ${u.name}  (클릭: 연결 해제)`;
     hit.addEventListener('click', async () => {
@@ -537,7 +538,7 @@ function _setupOrgChartEvents(users, positions) {
       const tx = e.clientX - wr.left + w.scrollLeft;
       const ty = e.clientY - wr.top  + w.scrollTop;
       sdg.innerHTML = `<path d="M ${fx} ${fy} C ${fx} ${fy+50} ${tx} ${ty-50} ${tx} ${ty}"
-        fill="none" stroke="var(--o500)" stroke-width="2" stroke-dasharray="6,3"/>`;
+        fill="none" stroke="#B84D08" stroke-width="2" stroke-dasharray="6,3"/>`;
     }
   }, { signal: sig });
 
@@ -562,41 +563,65 @@ function _setupOrgChartEvents(users, positions) {
 }
 
 /* ── 차트 헬퍼 함수 ── */
+// BFS 레벨 기반 자동 레이아웃
+// CEO(level 0) → 직속하위(level 1) → 그 하위(level 2) ...
 function _orgAutoLayout(users) {
-  const W=164, H=72, GX=32, GY=110;
-  const idSet = new Set(users.map(u=>String(u.id)));
-  const ch = {};
+  const W = 164, H = 72, GX = 40, GY = 130;
+  const idSet = new Set(users.map(u => String(u.id)));
+
+  // ── 1단계: BFS로 레벨 계산 ────────────────────────────────
+  const levelOf = {};   // userId(string) → level(number)
+  const queue   = [];
+
+  // 루트: manager_id 없거나 유효하지 않은 사용자
   users.forEach(u => {
-    ch[String(u.id)] = users
-      .filter(x => String(x.manager_id) === String(u.id))
-      .map(x => String(x.id));
+    if (!u.manager_id || !idSet.has(String(u.manager_id))) {
+      levelOf[String(u.id)] = 0;
+      queue.push(u);
+    }
   });
 
-  function sw(id) {
-    const kids = ch[id] || [];
-    if (!kids.length) return W;
-    return Math.max(W, kids.reduce((a,c) => a + sw(c) + GX, -GX));
+  let qi = 0;
+  while (qi < queue.length) {
+    const cur = queue[qi++];
+    const curLv = levelOf[String(cur.id)];
+    users
+      .filter(x => String(x.manager_id) === String(cur.id))
+      .forEach(child => {
+        if (levelOf[String(child.id)] === undefined) {
+          levelOf[String(child.id)] = curLv + 1;
+          queue.push(child);
+        }
+      });
   }
 
-  const pos = {};
-  function place(id, x, y) {
-    pos[id] = { x, y };
-    const kids = ch[id] || [];
-    if (!kids.length) return;
-    const tot = kids.reduce((a,c) => a + sw(c) + GX, -GX);
-    let cx = x + sw(id)/2 - tot/2;
-    kids.forEach(kid => { place(kid, cx, y + H + GY); cx += sw(kid) + GX; });
-  }
-
-  // 루트: manager_id가 없거나 users 목록에 없는 유효하지 않은 manager를 가진 사용자
-  const roots = users.filter(u => !u.manager_id || !idSet.has(String(u.manager_id)));
-  let sx = 30;
-  roots.forEach(r => { place(String(r.id), sx, 40); sx += sw(String(r.id)) + GX; });
-
-  // 레이아웃 후에도 누락된 사용자는 오른쪽 끝에 추가
+  // 순환 참조 등으로 미배정된 사용자는 마지막 레벨+1에 배치
+  const maxAssigned = Object.values(levelOf).length ? Math.max(...Object.values(levelOf)) : 0;
   users.forEach(u => {
-    if (!pos[String(u.id)]) { pos[String(u.id)] = { x: sx, y: 40 }; sx += W + GX; }
+    if (levelOf[String(u.id)] === undefined) levelOf[String(u.id)] = maxAssigned + 1;
   });
+
+  // ── 2단계: 레벨별 사용자 그룹 ────────────────────────────
+  const maxLevel = Math.max(...Object.values(levelOf));
+  const byLevel  = {};
+  for (let l = 0; l <= maxLevel; l++) byLevel[l] = [];
+  users.forEach(u => byLevel[levelOf[String(u.id)]].push(u));
+
+  // ── 3단계: 레벨별 중앙 정렬 배치 ────────────────────────
+  // 가장 넓은 레벨 기준으로 전체 캔버스 폭 계산
+  const maxCount   = Math.max(...Object.values(byLevel).map(a => a.length));
+  const canvasW    = Math.max(800, maxCount * W + (maxCount - 1) * GX + 60);
+  const pos        = {};
+
+  for (let l = 0; l <= maxLevel; l++) {
+    const levelUsers = byLevel[l];
+    const rowW = levelUsers.length * W + (levelUsers.length - 1) * GX;
+    let x = Math.max(30, (canvasW - rowW) / 2);
+    levelUsers.forEach(u => {
+      pos[String(u.id)] = { x, y: 40 + l * (H + GY) };
+      x += W + GX;
+    });
+  }
 
   return pos;
 }
