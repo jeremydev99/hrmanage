@@ -652,6 +652,16 @@ function _orgFullscreen() {
   }
 }
 
+/* ── 최종평가 잠금 해제 (master 전용) ── */
+async function unlockFinalEval(finalId, userName) {
+  if (!confirm(`${userName}의 최종평가 잠금을 해제하시겠습니까?\n자기평가와 상사평가가 모두 초기화됩니다.`)) return;
+  try {
+    await API.post('/admin/final/' + finalId + '/unlock', {});
+    showAlert(`${userName}의 최종평가가 초기화되었습니다.`, 'green');
+    renderAdmStatus();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
 /* ── 평가 단계 강제 변경 모달 ── */
 function showForcePhaseModal(evalId, userName, currentPhase) {
   document.getElementById('force-phase-modal')?.remove();
@@ -924,7 +934,7 @@ async function renderAdmStatus() {
 
       const tbl = document.createElement('table');
       tbl.className = 'tbl';
-      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th><th></th></tr></thead><tbody></tbody>';
+      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th><th></th><th></th></tr></thead><tbody></tbody>';
       const tbody = tbl.querySelector('tbody');
 
       members.forEach(function(u) {
@@ -947,7 +957,10 @@ async function renderAdmStatus() {
           + '<td style="text-align:center;font-size:13px">' + (u.feedback_count||'-') + '</td>'
           + '<td style="text-align:center">' + scoreHtml + '</td>'
           + '<td><button class="btn btn-ghost btn-sm" style="font-size:11px">상세</button></td>'
-          + (u.eval_id ? '<td><button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--o600)">단계 변경</button></td>' : '<td></td>');
+          + (u.eval_id ? '<td><button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--o600)">단계 변경</button></td>' : '<td></td>')
+          + (u.phase === 'final_done' && u.final_eval_id && App.isMaster()
+              ? '<td><button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;font-size:11px;padding:4px 8px">🔓 잠금 해제</button></td>'
+              : '<td></td>');
 
         // 상세 버튼 이벤트
         tr.querySelectorAll('button')[0].onclick = function(e) {
@@ -959,6 +972,14 @@ async function renderAdmStatus() {
           tr.querySelectorAll('button')[1].onclick = function(e) {
             e.stopPropagation();
             showForcePhaseModal(u.eval_id, u.name, u.phase || 'none');
+          };
+        }
+        // 잠금 해제 버튼 이벤트
+        if (u.phase === 'final_done' && u.final_eval_id && App.isMaster()) {
+          const btns = tr.querySelectorAll('button');
+          btns[btns.length - 1].onclick = function(e) {
+            e.stopPropagation();
+            unlockFinalEval(u.final_eval_id, u.name);
           };
         }
         tbody.appendChild(tr);

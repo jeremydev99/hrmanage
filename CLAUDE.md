@@ -248,6 +248,10 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
 19. **보안 강화**: 개발 완료 후 반드시 진행 (현재 키 하드코딩 상태)
 20. **본인인증**: 운영 전환 시 추가 예정 (이메일/SMS/SSO 방식 미결정)
 21. **관리자 평가단계 강제변경**: 전직원 현황 탭 각 행의 '단계 변경' 버튼 → `showForcePhaseModal` → `forcePhaseChange` → `POST /api/admin/eval/:id/force-phase`
+22. **최종평가 잠금 해제 (master 전용)**: 전직원 현황 `final_done` 행의 '🔓 잠금 해제' 버튼 → `unlockFinalEval` → `POST /api/admin/final/:id/unlock`
+    - self_done=0, mgr_done=0, second_mgr_done=0, locked=0
+    - final_score/final_grade/selected_grade=null, 별점(mgr_score, second_mgr_score) null
+    - phase='final_self'로 복구 → 자기평가부터 다시 작성 가능
 
 ---
 
@@ -370,6 +374,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-07 | 최종평가 잠금해제 시 self_done/mgr_done/별점 완전 초기화, phase=final_self로 복구 | Claude Code |
 | 2026-05-06 | 2차 평가자 별점 입력 추가, 승인이력/완료화면에 자기/1차/2차 별점 모두 표시 | Claude Code |
 | 2026-05-06 | 승인이력 자기/1차/2차 평가결과 표시, 관리자 평가단계 강제변경 버튼 추가 | Claude Code |
 | 2026-05-06 | 최종평가 완료 후 뱃지 '1차/2차 평가 완료'로 표시 수정 | Claude Code |

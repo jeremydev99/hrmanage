@@ -1034,13 +1034,14 @@ app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
         'SELECT * FROM eval_cycles WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
       ).get(u.id);
 
-      let goalCount = 0, feedbackCount = 0, finalScore = null, finalGrade = null;
+      let goalCount = 0, feedbackCount = 0, finalScore = null, finalGrade = null, finalEvalId = null;
       if (ev) {
         goalCount     = (db.prepare('SELECT COUNT(*) as c FROM goals WHERE eval_id=?').get(ev.id) || {}).c || 0;
         feedbackCount = (db.prepare('SELECT COUNT(*) as c FROM feedbacks WHERE eval_id=?').get(ev.id) || {}).c || 0;
-        const fe      = db.prepare('SELECT final_score, final_grade FROM final_evaluations WHERE eval_id=?').get(ev.id);
+        const fe      = db.prepare('SELECT id, final_score, final_grade FROM final_evaluations WHERE eval_id=?').get(ev.id);
         finalScore    = fe ? fe.final_score : null;
         finalGrade    = fe ? fe.final_grade : null;
+        finalEvalId   = fe ? fe.id         : null;
       }
 
       return {
@@ -1051,6 +1052,7 @@ app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
         phase:          ev ? ev.phase        : 'none',
         period_label:   ev ? ev.period_label : '-',
         eval_id:        ev ? ev.id           : null,
+        final_eval_id:  finalEvalId,
         goal_count:     goalCount,
         feedback_count: feedbackCount,
         final_score:    finalScore,
@@ -1295,11 +1297,42 @@ app.get('/api/admin/audit', auth, adminOnly, (req, res) => {
   }
 });
 
-app.post('/api/admin/final/:evalId/unlock', auth, masterOnly, (req, res) => {
-  db.prepare("UPDATE eval_cycles SET locked=0 WHERE id=?").run(req.params.evalId);
-  db.prepare("UPDATE final_evaluations SET locked=0 WHERE eval_id=?").run(req.params.evalId);
-  db.prepare("INSERT INTO audit_logs(user_id,action,ip) VALUES(?,?,?)").run(req.user.sub,'FINAL_UNLOCK',req.ip);
-  res.json({ success: true });
+app.post('/api/admin/final/:id/unlock', auth, masterOnly, (req, res) => {
+  try {
+    const fe = db.prepare('SELECT * FROM final_evaluations WHERE id=?').get(req.params.id);
+    if (!fe) return res.status(404).json({ error: '최종평가를 찾을 수 없습니다.' });
+
+    // final_evaluations 완전 초기화
+    db.prepare(`UPDATE final_evaluations
+      SET locked=0, locked_at=NULL,
+          self_done=0, self_done_at=NULL,
+          mgr_done=0, mgr_done_at=NULL,
+          mgr_approver_id=NULL,
+          second_mgr_done=0, second_mgr_done_at=NULL,
+          second_mgr_id=NULL,
+          final_score=NULL, final_grade=NULL, selected_grade=NULL
+      WHERE id=?`).run(req.params.id);
+
+    // eval_cycles → final_self, 잠금 해제
+    db.prepare(`UPDATE eval_cycles
+      SET phase='final_self', locked=0, updated_at=datetime('now')
+      WHERE id=?`).run(fe.eval_id);
+
+    // 별점 초기화
+    db.prepare(`UPDATE final_eval_scores
+      SET mgr_score=NULL, second_mgr_score=NULL
+      WHERE final_id=?`).run(req.params.id);
+
+    const ev = db.prepare('SELECT user_id, period_label FROM eval_cycles WHERE id=?').get(fe.eval_id);
+    const target = ev ? db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id) : null;
+    auditLog(req.user.sub, 'FINAL_EVAL_UNLOCKED', fe.eval_id, target?.name,
+      `최종평가 잠금 해제 및 초기화 (${ev?.period_label||''})`, req.ip);
+
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[unlock]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── SPA fallback ──────────────────────────────────────────
