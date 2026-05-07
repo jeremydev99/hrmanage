@@ -374,6 +374,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-07 | my-eval phaseLabels에 final_mgr2_pending 추가 (이미 적용됨 확인) | Claude Code |
 | 2026-05-07 | 최종평가 잠금해제 시 self_done/mgr_done/별점 완전 초기화, phase=final_self로 복구 | Claude Code |
 | 2026-05-06 | 2차 평가자 별점 입력 추가, 승인이력/완료화면에 자기/1차/2차 별점 모두 표시 | Claude Code |
 | 2026-05-06 | 승인이력 자기/1차/2차 평가결과 표시, 관리자 평가단계 강제변경 버튼 추가 | Claude Code |
