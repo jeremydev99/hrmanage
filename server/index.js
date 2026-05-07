@@ -739,21 +739,25 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
     const isAdmin    = ['master','admin'].includes(req.user.role);
     const isDirect   = String(targetUser?.manager_id) === String(req.user.sub);
 
-    // 2차 평가 여부 판단
+    // 2차 평가 여부 판단 — 조직도 기반 (isAdmin 여부와 무관하게 먼저 확인)
     const secondEnabled = getSetting('second_final', '0') === '1';
     let isSecond = false;
-    if (!isDirect && !isAdmin) {
-      if (secondEnabled) {
-        // 직속 상사의 상사인지 확인
-        const directMgr = targetUser?.manager_id
-          ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUser.manager_id))
-          : null;
-        isSecond = String(directMgr?.manager_id) === String(req.user.sub);
-        if (!isSecond) return res.status(403).json({ error: '평가 권한 없음' });
-      } else {
-        return res.status(403).json({ error: '직속 상사만 최종 평가 가능' });
-      }
+    if (secondEnabled) {
+      const directMgr = targetUser?.manager_id
+        ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUser.manager_id))
+        : null;
+      isSecond = String(directMgr?.manager_id) === String(req.user.sub);
     }
+
+    // 권한 체크: 직속 상사도, 2차 평가자도, 관리자도 아니면 403
+    if (!isDirect && !isSecond && !isAdmin) {
+      return res.status(403).json({ error: '평가 권한 없음' });
+    }
+
+    console.log('[최종평가제출]', {
+      evalId: req.params.evalId, userId: req.user.sub,
+      isDirect, isSecond, isAdmin, phase: ev.phase
+    });
 
     let fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(ev.id);
     if (!fe) {
