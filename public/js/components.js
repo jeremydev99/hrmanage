@@ -86,29 +86,39 @@ function Stars(goalId, ctx, initial=0, onChange=null) {
 }
 
 function flowBar(phase) {
-  const steps = [
-    {l:'목표\n작성', states:['pending','approved','final_self','final_mgr_pending','final_done']},
-    {l:'목표\n승인', states:['approved','final_self','final_mgr_pending','final_done']},
-    {l:'중간\n피드백', states:['final_self','final_mgr_pending','final_done'], mid:['approved']},
-    {l:'최종\n평가', states:['final_done'], fin:['final_self','final_mgr_pending']},
-    {l:'완료', states:['final_done']},
-  ];
+  // phase별 완료된 단계 수
+  const doneCount = {
+    draft:               1,
+    pending:             1,
+    approved:            2,
+    rejected:            2,
+    final_self:          3,
+    final_mgr_pending:   3,
+    final_mgr2_pending:  3,
+    final_done:          5,
+  }[phase] || 0;
+
+  const labels = ['목표\n작성', '목표\n승인', '중간\n피드백', '최종\n평가', '완료'];
   const wrap = document.createElement('div');
   wrap.className = 'flow';
-  steps.forEach((st, i) => {
-    const done  = st.states.includes(phase);
-    const isMid = st.mid?.includes(phase);
-    const isFin = st.fin?.includes(phase);
-    const isCur = !done && (
-      (i===0 && ['draft','pending'].includes(phase)) ||
-      (i===2 && isMid) || (i===3 && isFin)
-    );
-    let cls = done?'done':isMid?'mid':isFin?'fin':isCur?'cur':'';
+
+  labels.forEach((label, i) => {
+    const stepNum = i + 1;
+    const done = stepNum <= doneCount;
     const step = document.createElement('div');
     step.className = 'fstep';
-    step.innerHTML = `<div class="fcirc ${cls}">${done?'✓':(i+1)}</div><div class="flabel">${st.l}</div>`;
+    step.innerHTML = `
+      <div style="
+        width:28px;height:28px;border-radius:50%;
+        display:flex;align-items:center;justify-content:center;
+        font-size:12px;font-weight:600;
+        ${done
+          ? 'background:var(--o500);color:#fff;border:2px solid var(--o500)'
+          : 'background:#fff;color:#aaa;border:2px solid #ddd'}
+      ">${done ? '✓' : stepNum}</div>
+      <div class="flabel">${label}</div>`;
     wrap.appendChild(step);
-    if (i < steps.length-1) {
+    if (i < labels.length - 1) {
       const arr = document.createElement('div');
       arr.className = 'farrow';
       wrap.appendChild(arr);
