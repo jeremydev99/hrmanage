@@ -9,7 +9,7 @@ Pages.finalEval = async function() {
 
   area.innerHTML = '';
   const tabs = [];
-  if (myEv && ['approved','final_self','final_mgr_pending','final_done'].includes(myEv.phase))
+  if (myEv && ['approved','final_self','final_mgr_pending','final_mgr2_pending','final_done'].includes(myEv.phase))
     tabs.push({ id:'fin-self', label:'자기 최종평가' });
   if (mgrPending.length)
     tabs.push({ id:'fin-mgr', label:`상사 최종평가 (${mgrPending.length}건)` });
@@ -545,8 +545,8 @@ async function submitFinalMgr(evalId, isSecond) {
   const note          = document.getElementById(`fin-mgr-note-${evalId}`)?.value || '';
   const selectedGrade = document.getElementById(`fin-grade-sel-${evalId}`)?.value || '';
 
-  // 등급 선택 필수 검증 (1차/2차 모두)
-  if (!selectedGrade) {
+  // 등급 선택 필수 검증 (1차 평가자만)
+  if (!isSecond && !selectedGrade) {
     showAlert('최종 등급을 선택해주세요.', 'orange');
     return;
   }
