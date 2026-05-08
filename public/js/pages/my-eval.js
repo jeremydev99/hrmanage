@@ -8,7 +8,11 @@ Pages.myEval = async function() {
       API.get(`/users/${App.user.id}/approvers`).catch(() => []),
     ]);
 
-    // 방어 코드: 배열이 아니면 빈 배열로
+    // 방어 코드: 배열이 아니면 오류 처리
+    if (!Array.isArray(evs)) {
+      area.innerHTML = '<div class="alert alert-red">평가 데이터를 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.</div>';
+      return;
+    }
     const safeActivePeriods = Array.isArray(activePeriods) ? activePeriods : [];
     const approvers = Array.isArray(approverRes)
       ? approverRes

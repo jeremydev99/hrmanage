@@ -374,6 +374,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-08 | my-eval evs.filter 방어코드 추가 | Claude Code |
 | 2026-05-07 | 2차 최종평가 DB 저장 버그 수정 | Claude Code |
 | 2026-05-07 | 2차 평가자 등급선택 검증 제외 수정 (submitFinalMgr) | Claude Code |
 | 2026-05-07 | final_mgr2_pending 탭 표시 조건 추가, 2차 제출 버튼 연결 수정 | Claude Code |
