@@ -1157,12 +1157,13 @@ async function renderAdmPolicy() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [histVis, histInactive, fbLimit, apprEdit, secondFinal] = await Promise.all([
+    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone] = await Promise.all([
       API.get('/settings/history-visibility'),
       API.get('/settings/history-inactive'),
       API.get('/settings/feedback-limit'),
       API.get('/settings/approval-edit'),
       API.get('/settings/second-final'),
+      API.get('/settings/timezone'),
     ]);
 
     const limitOptions = [
@@ -1255,6 +1256,42 @@ async function renderAdmPolicy() {
           <button class="btn btn-ghost btn-sm" onclick="toggleHistoryInactive()">${histInactive.enabled?'끄기':'켜기'}</button>
         </div>
       </div>
+
+      <div class="srow">
+        <div>
+          <div style="font-size:14px;font-weight:500">시스템 시간대</div>
+          <div style="font-size:12px;color:var(--muted)">로그 및 기록 시간의 기준 시간대 (운영 주체 기준)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <select id="tz-select" style="height:34px;font-size:13px" onchange="saveTimezone()">
+            <optgroup label="아시아">
+              <option value="Asia/Seoul"     ${timezone.timezone==='Asia/Seoul'    ?'selected':''}>한국 (KST, UTC+9)</option>
+              <option value="Asia/Tokyo"     ${timezone.timezone==='Asia/Tokyo'    ?'selected':''}>일본 (JST, UTC+9)</option>
+              <option value="Asia/Shanghai"  ${timezone.timezone==='Asia/Shanghai' ?'selected':''}>중국 (CST, UTC+8)</option>
+              <option value="Asia/Singapore" ${timezone.timezone==='Asia/Singapore'?'selected':''}>싱가포르 (SGT, UTC+8)</option>
+              <option value="Asia/Bangkok"   ${timezone.timezone==='Asia/Bangkok'  ?'selected':''}>태국 (ICT, UTC+7)</option>
+              <option value="Asia/Dubai"     ${timezone.timezone==='Asia/Dubai'    ?'selected':''}>UAE (GST, UTC+4)</option>
+            </optgroup>
+            <optgroup label="유럽">
+              <option value="Europe/London"  ${timezone.timezone==='Europe/London' ?'selected':''}>영국 (GMT, UTC+0)</option>
+              <option value="Europe/Paris"   ${timezone.timezone==='Europe/Paris'  ?'selected':''}>프랑스 (CET, UTC+1)</option>
+              <option value="Europe/Berlin"  ${timezone.timezone==='Europe/Berlin' ?'selected':''}>독일 (CET, UTC+1)</option>
+            </optgroup>
+            <optgroup label="아메리카">
+              <option value="America/New_York"    ${timezone.timezone==='America/New_York'    ?'selected':''}>미국 동부 (EST, UTC-5)</option>
+              <option value="America/Chicago"     ${timezone.timezone==='America/Chicago'     ?'selected':''}>미국 중부 (CST, UTC-6)</option>
+              <option value="America/Los_Angeles" ${timezone.timezone==='America/Los_Angeles' ?'selected':''}>미국 서부 (PST, UTC-8)</option>
+            </optgroup>
+            <optgroup label="오세아니아">
+              <option value="Australia/Sydney"  ${timezone.timezone==='Australia/Sydney' ?'selected':''}>호주 시드니 (AEST, UTC+10)</option>
+              <option value="Pacific/Auckland"  ${timezone.timezone==='Pacific/Auckland' ?'selected':''}>뉴질랜드 (NZST, UTC+12)</option>
+            </optgroup>
+            <optgroup label="기타">
+              <option value="UTC" ${timezone.timezone==='UTC'?'selected':''}>UTC (협정세계시, UTC+0)</option>
+            </optgroup>
+          </select>
+        </div>
+      </div>
     </div>`;
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
@@ -1310,6 +1347,14 @@ async function toggleHistoryInactive() {
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
+async function saveTimezone() {
+  const tz = document.getElementById('tz-select')?.value;
+  if (!tz) return;
+  try {
+    await API.post('/settings/timezone', { timezone: tz });
+    showAlert(`시간대가 "${tz}"로 변경되었습니다. 서버 재시작 없이 즉시 적용됩니다.`, 'green');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
 
 /* ── 평가 등급 기준 관리 ── */
 async function renderAdmGrades() {

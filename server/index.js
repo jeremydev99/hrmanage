@@ -24,6 +24,17 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 initDB();
 
+function loadTimezone() {
+  try {
+    const tz = db.prepare("SELECT value FROM app_settings WHERE key='timezone'").get();
+    process.env.TZ = tz?.value || 'Asia/Seoul';
+    console.log(`✅ 시간대 설정: ${process.env.TZ}`);
+  } catch(e) {
+    process.env.TZ = 'Asia/Seoul';
+  }
+}
+loadTimezone();
+
 // ── 미들웨어 ──────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
@@ -1171,6 +1182,33 @@ app.post('/api/settings/second-final', auth, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
+// 시간대 설정
+app.get('/api/settings/timezone', auth, (req, res) => {
+  const tz = db.prepare("SELECT value FROM app_settings WHERE key='timezone'").get();
+  res.json({ timezone: tz?.value || 'Asia/Seoul' });
+});
+app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
+  try {
+    const { timezone } = req.body;
+    const validTimezones = [
+      'Asia/Seoul', 'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Singapore',
+      'Asia/Bangkok', 'Asia/Dubai', 'Europe/London', 'Europe/Paris',
+      'Europe/Berlin', 'America/New_York', 'America/Los_Angeles',
+      'America/Chicago', 'Australia/Sydney', 'Pacific/Auckland',
+      'UTC'
+    ];
+    if (!validTimezones.includes(timezone))
+      return res.status(400).json({ error: '지원하지 않는 시간대입니다.' });
+    db.prepare("INSERT OR REPLACE INTO app_settings(key,value) VALUES('timezone',?)").run(timezone);
+    process.env.TZ = timezone;
+    auditLog(req.user.sub, 'TIMEZONE_CHANGED', null, null,
+      `시간대 변경: ${timezone}`, req.ip);
+    res.json({ success: true, timezone });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 내가 직속 상사(또는 2차 평가자)인 final_mgr_pending eval 목록
 app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
   try {
@@ -1508,7 +1546,13 @@ function initDB() {
     });
     if (oldRows.length) console.log('[migration] cleaned', oldRows.length, 'audit log actions');
   } catch(e) {}
+  // timezone 기본값 시드
+  try {
+    db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('timezone','Asia/Seoul')").run();
+  } catch(e) {}
+
   seedInitialData();
+  loadTimezone();
 }
 
 function seedInitialData() {

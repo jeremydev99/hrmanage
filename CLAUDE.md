@@ -252,6 +252,10 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
     - self_done=0, mgr_done=0, second_mgr_done=0, locked=0
     - final_score/final_grade/selected_grade=null, 별점(mgr_score, second_mgr_score) null
     - phase='final_self'로 복구 → 자기평가부터 다시 작성 가능
+23. **시스템 시간대**: `app_settings.timezone`으로 관리
+    - 운영 주체 시간대 기준으로 모든 로그/기록 저장
+    - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
+    - 기본값: Asia/Seoul (KST)
 
 ---
 
@@ -325,6 +329,8 @@ GET    /api/settings/history-inactive   비활성 기간 이력 공개 설정
 POST   /api/settings/history-inactive   비활성 기간 이력 공개 설정 변경 (admin+)
 GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
+GET    /api/settings/timezone           시간대 조회
+POST   /api/settings/timezone           시간대 변경 (master)
 
 GET    /api/admin/eval-status           전직원 평가 현황 (기간 필터)
 POST   /api/admin/eval/:evalId/force-phase  평가 단계 강제 변경 (admin+)
@@ -374,6 +380,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | .gitignore에 .env 추가 (보안 강화 사전 준비) | Claude Code |
+| 2026-05-08 | 시스템 시간대 설정 기능 추가 (관리자 설정 - 평가정책, app_settings 기반) | Claude Code |
 | 2026-05-08 | my-eval evs.filter 방어코드 추가 | Claude Code |
 | 2026-05-07 | 2차 최종평가 DB 저장 버그 수정 | Claude Code |
 | 2026-05-07 | 2차 평가자 등급선택 검증 제외 수정 (submitFinalMgr) | Claude Code |
