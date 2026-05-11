@@ -1004,8 +1004,9 @@ async function renderAdmStatus() {
 
 async function changeUserEvalMode(userId, mode) {
   try {
-    await API.patch('/users/' + userId + '/eval-mode', { mode });
-    showAlert('평가 방식이 변경되었습니다.', 'green');
+    const res = await API.patch('/users/' + userId + '/eval-mode', { mode });
+    if (res.warning) showAlert(res.warning, 'orange');
+    else showAlert('평가 방식이 변경되었습니다.', 'green');
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
@@ -1269,16 +1270,22 @@ async function renderAdmPolicy() {
         </div>
       </div>
 
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">전사 기본 평가 방식</div>
-          <div style="font-size:12px;color:var(--muted)">조직장이 별도 설정하지 않은 경우 이 방식이 적용됩니다</div>
+      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-size:14px;font-weight:500">전사 기본 평가 방식</div>
+            <div style="font-size:12px;color:var(--muted)">조직장이 별도 설정하지 않은 경우 이 방식이 적용됩니다</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            ${['MBO','OKR','KPI'].map(m =>
+              `<button class="btn ${evalMode.mode===m?'btn-primary':'btn-ghost'} btn-sm"
+                onclick="setGlobalEvalMode('${m}')">${m}</button>`
+            ).join('')}
+          </div>
         </div>
-        <div style="display:flex;gap:8px">
-          ${['MBO','OKR','KPI'].map(m =>
-            `<button class="btn ${evalMode.mode===m?'btn-primary':'btn-ghost'} btn-sm"
-              onclick="setGlobalEvalMode('${m}')">${m}</button>`
-          ).join('')}
+        <div style="font-size:12px;color:var(--muted);background:var(--o50);border-radius:6px;padding:8px 12px;width:100%;box-sizing:border-box">
+          전사 기본값 변경은 즉시 적용됩니다. 조직장이 개별 설정한 팀은 영향받지 않습니다.<br>
+          개인별 방식은 <strong>전직원 평가 현황</strong> 탭에서 직접 변경할 수 있습니다.
         </div>
       </div>
 

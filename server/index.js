@@ -1063,9 +1063,18 @@ app.post('/api/settings/team-eval-mode', auth, (req, res) => {
     const isAdmin = ['master','admin'].includes(req.user.role);
     if (!isManager && !isAdmin)
       return res.status(403).json({ error: '하위 팀원이 없으면 설정할 수 없습니다.' });
+    const activeEval = db.prepare(
+      "SELECT 1 FROM eval_cycles WHERE user_id=? AND phase NOT IN ('final_done') LIMIT 1"
+    ).get(req.user.sub);
+    if (activeEval && !isAdmin)
+      return res.status(400).json({
+        error: '진행 중인 평가가 있어 평가 방식을 변경할 수 없습니다. 현재 평가 기간이 완료된 후 변경하세요.'
+      });
     db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.user.sub);
     auditLog(req.user.sub, 'TEAM_EVAL_MODE_CHANGED', req.user.sub, null,
       `팀 평가 방식 변경: ${mode}`, req.ip);
+    if (activeEval && isAdmin)
+      return res.json({ success: true, mode, warning: '진행 중인 평가가 있는 사용자의 방식을 변경했습니다.' });
     res.json({ success: true, mode });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -1093,10 +1102,20 @@ app.patch('/api/users/:id/eval-mode', auth, adminOnly, (req, res) => {
     const { mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    const isMaster = req.user.role === 'master';
+    const activeEval = db.prepare(
+      "SELECT 1 FROM eval_cycles WHERE user_id=? AND phase NOT IN ('final_done') LIMIT 1"
+    ).get(req.params.id);
+    if (activeEval && !isMaster)
+      return res.status(400).json({
+        error: '진행 중인 평가가 있어 평가 방식을 변경할 수 없습니다. 현재 평가 기간이 완료된 후 변경하세요.'
+      });
     db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.params.id);
     const target = db.prepare('SELECT name FROM users WHERE id=?').get(req.params.id);
     auditLog(req.user.sub, 'USER_EVAL_MODE_CHANGED', req.params.id, target?.name,
       `평가 방식 변경: ${mode}`, req.ip);
+    if (activeEval && isMaster)
+      return res.json({ success: true, warning: '진행 중인 평가가 있는 사용자의 방식을 변경했습니다.' });
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });

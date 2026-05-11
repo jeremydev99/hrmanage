@@ -399,6 +399,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | 평가 방식 변경 잠금 로직 추가 (진행 중 eval 차단, master 경고 허용), 전사 기본값 안내 문구 추가 | Claude Code |
 | 2026-05-11 | OKR 평가 방식 추가 - 조직도 기반 부서별 설정, okr-eval.js 신규 생성 | Claude Code |
 | 2026-05-11 | .gitignore에 .env 추가 (보안 강화 사전 준비) | Claude Code |
 | 2026-05-08 | 시스템 시간대 설정 기능 추가 (관리자 설정 - 평가정책, app_settings 기반) | Claude Code |
