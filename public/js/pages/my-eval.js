@@ -33,17 +33,20 @@ Pages.myEval = async function() {
     }
 
     // OKR 모드 배너
-    if (evalMode.mode === 'OKR') {
+    if (evalMode?.mode === 'OKR') {
       const banner = document.createElement('div');
       banner.className = 'alert alert-teal';
-      banner.style.marginBottom = '10px';
+      banner.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px';
       banner.innerHTML = `
-        <strong>🎯 OKR 평가 모드</strong>
-        <span style="font-size:12px;margin-left:6px;opacity:.8">
-          (${evalMode.source === 'manager' ? '조직장 설정' : evalMode.source === 'self' ? '내 설정' : '전사 기본값'})
-        </span>
-        <button class="btn btn-ghost btn-sm" style="margin-left:12px"
-          onclick="Pages.okrEval()">OKR 작성하기 →</button>`;
+        <div>
+          <strong>🎯 OKR 평가 모드</strong>
+          <span style="font-size:12px;margin-left:6px;opacity:.8">
+            (${evalMode.source==='org_period'?'조직 설정':evalMode.source==='period'?'기간 기본값':'전사 기본값'})
+          </span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="Pages.okrEval()">
+          OKR 작성하기 →
+        </button>`;
       area.appendChild(banner);
     }
 
