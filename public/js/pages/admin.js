@@ -934,7 +934,7 @@ async function renderAdmStatus() {
 
       const tbl = document.createElement('table');
       tbl.className = 'tbl';
-      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th><th></th><th></th></tr></thead><tbody></tbody>';
+      tbl.innerHTML = '<thead><tr><th>이름</th><th>직책</th><th>평가 방식</th><th>평가 단계</th><th>기간</th><th style="text-align:center">목표</th><th style="text-align:center">피드백</th><th style="text-align:center">최종 점수</th><th></th><th></th><th></th></tr></thead><tbody></tbody>';
       const tbody = tbl.querySelector('tbody');
 
       members.forEach(function(u) {
@@ -949,8 +949,12 @@ async function renderAdmStatus() {
           ? '<span style="font-weight:600;color:var(--o500)">' + u.final_score + '점</span> <span class="grade grade-' + u.final_grade + '">' + u.final_grade + '</span>'
           : '<span style="color:var(--muted);font-size:12px">-</span>';
 
+        const evalModeSelect = '<select style="font-size:11px;height:26px" onclick="event.stopPropagation()" onchange="changeUserEvalMode(' + u.id + ', this.value)">'
+          + ['MBO','OKR','KPI'].map(m => '<option value="' + m + '"' + ((u.eval_mode||'MBO')===m?' selected':'') + '>' + m + '</option>').join('')
+          + '</select>';
         tr.innerHTML = '<td style="font-weight:500">' + u.name + '</td>'
           + '<td style="font-size:12px;color:var(--muted)">' + (u.title||'-') + '</td>'
+          + '<td>' + evalModeSelect + '</td>'
           + '<td><span class="bd ' + ph.cls + '">' + ph.text + '</span></td>'
           + '<td style="font-size:12px;color:var(--muted)">' + (u.period_label||'-') + '</td>'
           + '<td style="text-align:center;font-size:13px">' + (u.goal_count||'-') + '</td>'
@@ -997,6 +1001,13 @@ async function renderAdmStatus() {
   }
 }
 
+
+async function changeUserEvalMode(userId, mode) {
+  try {
+    await API.patch('/users/' + userId + '/eval-mode', { mode });
+    showAlert('평가 방식이 변경되었습니다.', 'green');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
 
 function toggleDeptTable(id, btn) {
   const el = document.getElementById(id);
@@ -1157,13 +1168,14 @@ async function renderAdmPolicy() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone] = await Promise.all([
+    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode] = await Promise.all([
       API.get('/settings/history-visibility'),
       API.get('/settings/history-inactive'),
       API.get('/settings/feedback-limit'),
       API.get('/settings/approval-edit'),
       API.get('/settings/second-final'),
       API.get('/settings/timezone'),
+      API.get('/settings/eval-mode'),
     ]);
 
     const limitOptions = [
@@ -1254,6 +1266,19 @@ async function renderAdmPolicy() {
         <div style="display:flex;align-items:center;gap:8px">
           <span class="bd ${histInactive.enabled?'bd-approved':'bd-rejected'}">${histInactive.enabled?'켜짐 (전체)':'꺼짐 (활성만)'}</span>
           <button class="btn btn-ghost btn-sm" onclick="toggleHistoryInactive()">${histInactive.enabled?'끄기':'켜기'}</button>
+        </div>
+      </div>
+
+      <div class="srow">
+        <div>
+          <div style="font-size:14px;font-weight:500">전사 기본 평가 방식</div>
+          <div style="font-size:12px;color:var(--muted)">조직장이 별도 설정하지 않은 경우 이 방식이 적용됩니다</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${['MBO','OKR','KPI'].map(m =>
+            `<button class="btn ${evalMode.mode===m?'btn-primary':'btn-ghost'} btn-sm"
+              onclick="setGlobalEvalMode('${m}')">${m}</button>`
+          ).join('')}
         </div>
       </div>
 
@@ -1353,6 +1378,14 @@ async function saveTimezone() {
   try {
     await API.post('/settings/timezone', { timezone: tz });
     showAlert(`시간대가 "${tz}"로 변경되었습니다. 서버 재시작 없이 즉시 적용됩니다.`, 'green');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function setGlobalEvalMode(mode) {
+  try {
+    await API.post('/settings/eval-mode', { mode });
+    showAlert(`전사 기본 평가 방식이 ${mode}로 변경되었습니다.`, 'green');
+    renderAdmPolicy();
   } catch(e) { showAlert(e.message, 'red'); }
 }
 

@@ -1037,6 +1037,123 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
   }
 });
 
+// ── 평가 방식 API ─────────────────────────────────────────
+
+// 내 평가 방식 조회 (조직장 설정 상속)
+app.get('/api/settings/my-eval-mode', auth, (req, res) => {
+  try {
+    const me = db.prepare('SELECT manager_id, eval_mode FROM users WHERE id=?').get(req.user.sub);
+    if (me?.manager_id) {
+      const mgr = db.prepare('SELECT eval_mode FROM users WHERE id=?').get(me.manager_id);
+      if (mgr?.eval_mode) return res.json({ mode: mgr.eval_mode, source: 'manager' });
+    }
+    if (me?.eval_mode) return res.json({ mode: me.eval_mode, source: 'self' });
+    const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
+    res.json({ mode: global?.value || 'MBO', source: 'global' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 조직장이 팀 평가 방식 설정
+app.post('/api/settings/team-eval-mode', auth, (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (!['MBO','OKR','KPI'].includes(mode))
+      return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    const isManager = db.prepare('SELECT 1 FROM users WHERE manager_id=? LIMIT 1').get(req.user.sub);
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    if (!isManager && !isAdmin)
+      return res.status(403).json({ error: '하위 팀원이 없으면 설정할 수 없습니다.' });
+    db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.user.sub);
+    auditLog(req.user.sub, 'TEAM_EVAL_MODE_CHANGED', req.user.sub, null,
+      `팀 평가 방식 변경: ${mode}`, req.ip);
+    res.json({ success: true, mode });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 전사 기본 평가 방식 (admin+)
+app.get('/api/settings/eval-mode', auth, (req, res) => {
+  const mode = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
+  res.json({ mode: mode?.value || 'MBO' });
+});
+app.post('/api/settings/eval-mode', auth, adminOnly, (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (!['MBO','OKR','KPI'].includes(mode))
+      return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    db.prepare("INSERT OR REPLACE INTO app_settings(key,value) VALUES('eval_mode',?)").run(mode);
+    auditLog(req.user.sub, 'GLOBAL_EVAL_MODE_CHANGED', null, null,
+      `전사 평가 방식 변경: ${mode}`, req.ip);
+    res.json({ success: true, mode });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 특정 사용자 평가 방식 설정 (admin+)
+app.patch('/api/users/:id/eval-mode', auth, adminOnly, (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (!['MBO','OKR','KPI'].includes(mode))
+      return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.params.id);
+    const target = db.prepare('SELECT name FROM users WHERE id=?').get(req.params.id);
+    auditLog(req.user.sub, 'USER_EVAL_MODE_CHANGED', req.params.id, target?.name,
+      `평가 방식 변경: ${mode}`, req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// OKR CRUD
+app.get('/api/okr', auth, (req, res) => {
+  try {
+    const cycles = db.prepare(
+      'SELECT * FROM okr_cycles WHERE user_id=? ORDER BY created_at DESC'
+    ).all(req.user.sub);
+    const result = cycles.map(c => ({
+      ...c,
+      objectives: db.prepare(
+        'SELECT * FROM okr_objectives WHERE cycle_id=? ORDER BY sort_order'
+      ).all(c.id).map(obj => ({
+        ...obj,
+        key_results: db.prepare(
+          'SELECT * FROM okr_key_results WHERE objective_id=? ORDER BY sort_order'
+        ).all(obj.id)
+      }))
+    }));
+    res.json(result);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/okr', auth, (req, res) => {
+  try {
+    const { period_label, eval_year, objectives } = req.body;
+    const r = db.prepare(
+      "INSERT INTO okr_cycles(user_id,period_label,eval_year) VALUES(?,?,?)"
+    ).run(req.user.sub, period_label, eval_year);
+    const cycleId = r.lastInsertRowid;
+    (objectives||[]).forEach((obj, oi) => {
+      const or = db.prepare(
+        'INSERT INTO okr_objectives(cycle_id,title,description,sort_order) VALUES(?,?,?,?)'
+      ).run(cycleId, obj.title, obj.description||'', oi);
+      (obj.key_results||[]).forEach((kr, ki) => {
+        db.prepare(
+          'INSERT INTO okr_key_results(objective_id,title,target_value,unit,weight,sort_order) VALUES(?,?,?,?,?,?)'
+        ).run(or.lastInsertRowid, kr.title, kr.target_value||100, kr.unit||'%', kr.weight||33, ki);
+      });
+    });
+    res.json({ id: cycleId });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/okr/:id/progress', auth, (req, res) => {
+  try {
+    const { kr_updates } = req.body;
+    (kr_updates||[]).forEach(u => {
+      db.prepare('UPDATE okr_key_results SET current_value=? WHERE id=?')
+        .run(u.current_value, u.kr_id);
+    });
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // 전직원 평가 현황 요약 (admin+)
 app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
   try {
@@ -1515,6 +1632,33 @@ function initDB() {
       created_by INTEGER,
       created_at TEXT DEFAULT (datetime('now'))
     )`,
+    "ALTER TABLE users ADD COLUMN eval_mode TEXT DEFAULT 'MBO'",
+    `CREATE TABLE IF NOT EXISTS okr_cycles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      period_label TEXT NOT NULL,
+      eval_year TEXT NOT NULL,
+      phase TEXT DEFAULT 'draft',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
+    )`,
+    `CREATE TABLE IF NOT EXISTS okr_objectives (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      cycle_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      sort_order INTEGER DEFAULT 0
+    )`,
+    `CREATE TABLE IF NOT EXISTS okr_key_results (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      objective_id INTEGER NOT NULL,
+      title TEXT NOT NULL,
+      target_value REAL DEFAULT 100,
+      current_value REAL DEFAULT 0,
+      unit TEXT DEFAULT '%',
+      weight INTEGER DEFAULT 33,
+      sort_order INTEGER DEFAULT 0
+    )`,
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
@@ -1546,9 +1690,10 @@ function initDB() {
     });
     if (oldRows.length) console.log('[migration] cleaned', oldRows.length, 'audit log actions');
   } catch(e) {}
-  // timezone 기본값 시드
+  // app_settings 기본값 시드
   try {
     db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('timezone','Asia/Seoul')").run();
+    db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('eval_mode','MBO')").run();
   } catch(e) {}
 
   seedInitialData();

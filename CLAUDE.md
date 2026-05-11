@@ -61,7 +61,8 @@ C:\claudeprojects\hrmanage\
 │           ├── feedback.js        ← 중간 피드백 (받기 + 주기, 아코디언 접기/펼치기)
 │           ├── final-eval.js      ← 최종 평가 (자기평가 + 상사평가 + 결과 보기)
 │           ├── progress-report.js ← 중간 보고 (목표별 작성란 + 종합의견)
-│           └── admin.js           ← 관리자 설정 (카테고리/조직도/권한/감사로그/등급기준/평가기간)
+│           ├── okr-eval.js        ← OKR 작성/진행률 관리 (Pages.okrEval, startNewOKR, updateOKRProgress)
+           └── admin.js           ← 관리자 설정 (카테고리/조직도/권한/감사로그/등급기준/평가기간)
 └── data/
     └── hrmanage.db            ← SQLite DB (서버 첫 실행 시 자동 생성, .gitignore 권장)
 ```
@@ -200,6 +201,10 @@ app_settings       key, value
 eval_periods       id, period_type, period_label, eval_year, is_active, created_by
 audit_logs         id, user_id, action, target_id, target_name, detail, ip, created_at
 grade_criteria     id, grade_code, grade_name, description, note, sort_order, is_active
+users:             ... eval_mode TEXT DEFAULT 'MBO' (추가)
+okr_cycles:        id, user_id, period_label, eval_year, phase
+okr_objectives:    id, cycle_id, title, description, sort_order
+okr_key_results:   id, objective_id, title, target_value, current_value, unit, weight, sort_order
 ```
 
 ### 테스트 계정
@@ -256,6 +261,12 @@ grade_criteria     id, grade_code, grade_name, description, note, sort_order, is
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
+24. **평가 방식 (eval_mode)**: MBO / OKR / KPI
+    - 상속 우선순위: 조직장 설정(`users.eval_mode`) > 본인 설정 > 전사 기본값(`app_settings.eval_mode`)
+    - 조직장: `POST /api/settings/team-eval-mode`로 팀 방식 설정
+    - HR: 전사 기본값 + `PATCH /api/users/:id/eval-mode`로 개인별 직접 설정
+    - OKR 페이지: `Pages.okrEval()` (`public/js/pages/okr-eval.js`)
+    - OKR 구조: Objective → Key Results (달성률 0~100%, 70% 이상 성공)
 
 ---
 
@@ -331,6 +342,14 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/settings/my-eval-mode       내 평가 방식 조회 (조직장 상속)
+POST   /api/settings/team-eval-mode     조직장이 팀 평가 방식 설정
+GET    /api/settings/eval-mode          전사 기본 평가 방식 조회
+POST   /api/settings/eval-mode          전사 기본 평가 방식 변경 (admin+)
+PATCH  /api/users/:id/eval-mode         특정 사용자 평가 방식 설정 (admin+)
+GET    /api/okr                         내 OKR 목록
+POST   /api/okr                         OKR 생성
+POST   /api/okr/:id/progress            OKR 달성률 업데이트
 
 GET    /api/admin/eval-status           전직원 평가 현황 (기간 필터)
 POST   /api/admin/eval/:evalId/force-phase  평가 단계 강제 변경 (admin+)
@@ -380,6 +399,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | OKR 평가 방식 추가 - 조직도 기반 부서별 설정, okr-eval.js 신규 생성 | Claude Code |
 | 2026-05-11 | .gitignore에 .env 추가 (보안 강화 사전 준비) | Claude Code |
 | 2026-05-08 | 시스템 시간대 설정 기능 추가 (관리자 설정 - 평가정책, app_settings 기반) | Claude Code |
 | 2026-05-08 | my-eval evs.filter 방어코드 추가 | Claude Code |

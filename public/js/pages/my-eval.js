@@ -2,10 +2,11 @@ Pages.myEval = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [evs, activePeriods, approverRes] = await Promise.all([
+    const [evs, activePeriods, approverRes, evalMode] = await Promise.all([
       API.get('/evals'),
       API.get('/eval-periods/active').catch(() => []),
       API.get(`/users/${App.user.id}/approvers`).catch(() => []),
+      API.get('/settings/my-eval-mode').catch(() => ({ mode: 'MBO', source: 'global' })),
     ]);
 
     // 방어 코드: 배열이 아니면 오류 처리
@@ -29,6 +30,21 @@ Pages.myEval = async function() {
       apprInfo.innerHTML = `<strong>내 승인 체계:</strong> ${approvers.map((a,i) =>
         `${i+1}차 ${a.name}(${a.grade||''} ${a.title||''})`).join(' → ')}`;
       area.appendChild(apprInfo);
+    }
+
+    // OKR 모드 배너
+    if (evalMode.mode === 'OKR') {
+      const banner = document.createElement('div');
+      banner.className = 'alert alert-teal';
+      banner.style.marginBottom = '10px';
+      banner.innerHTML = `
+        <strong>🎯 OKR 평가 모드</strong>
+        <span style="font-size:12px;margin-left:6px;opacity:.8">
+          (${evalMode.source === 'manager' ? '조직장 설정' : evalMode.source === 'self' ? '내 설정' : '전사 기본값'})
+        </span>
+        <button class="btn btn-ghost btn-sm" style="margin-left:12px"
+          onclick="Pages.okrEval()">OKR 작성하기 →</button>`;
+      area.appendChild(banner);
     }
 
     // 활성 기간 중 아직 시작 안 한 것 표시
