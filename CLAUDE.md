@@ -410,6 +410,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | OKR 모드 개선: 다중 활성기간 OKR 우선적용, MBO 카드 숨김 | Claude Code |
 | 2026-05-11 | my-eval OKR 배너 source 레이블 수정 (manager/self → org_period/period/global), 레이아웃 개선 | Claude Code |
 | 2026-05-11 | my-eval-mode 계층 탐색 버그 수정 (직속 상사 1단계만 조회 → 최대 5단계 상위 탐색으로 수정) | Claude Code |
 | 2026-05-11 | 평가방식 3차원 매핑 (조직×기간×방식), eval_period_modes 테이블, 기간별 잠금 기능 | Claude Code |

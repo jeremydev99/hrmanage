@@ -19,8 +19,13 @@ Pages.myEval = async function() {
       ? approverRes
       : (approverRes?.approvers || []);
 
-    const myEvs = evs.filter(e => String(e.user_id) === String(App.user.id));
+    let myEvs = evs.filter(e => String(e.user_id) === String(App.user.id));
     area.innerHTML = '';
+
+    // OKR 모드: 완료된 평가 이력(final_done)만 MBO 카드로 표시
+    if (evalMode?.mode === 'OKR') {
+      myEvs = myEvs.filter(ev => ev.phase === 'final_done');
+    }
 
     // 승인자 체인 표시
     if (approvers.length) {
