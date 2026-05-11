@@ -205,6 +205,9 @@ users:             ... eval_mode TEXT DEFAULT 'MBO' (추가)
 okr_cycles:        id, user_id, period_label, eval_year, phase
 okr_objectives:    id, cycle_id, title, description, sort_order
 okr_key_results:   id, objective_id, title, target_value, current_value, unit, weight, sort_order
+eval_periods:      ... eval_mode TEXT DEFAULT 'MBO', locked INTEGER DEFAULT 0 (추가)
+eval_period_modes: id, period_id, manager_id, eval_mode, locked, created_at
+                   UNIQUE(period_id, manager_id)
 ```
 
 ### 테스트 계정
@@ -261,10 +264,13 @@ okr_key_results:   id, objective_id, title, target_value, current_value, unit, w
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **평가 방식 (eval_mode)**: MBO / OKR / KPI
-    - 상속 우선순위: 조직장 설정(`users.eval_mode`) > 본인 설정 > 전사 기본값(`app_settings.eval_mode`)
-    - 조직장: `POST /api/settings/team-eval-mode`로 팀 방식 설정
-    - HR: 전사 기본값 + `PATCH /api/users/:id/eval-mode`로 개인별 직접 설정
+24. **평가방식 3차원 매핑**: 조직(manager) × 시기(period) × 방식(MBO/OKR/KPI)
+    - 결정 우선순위:
+      1. `eval_period_modes` (조직장+기간 조합)
+      2. `eval_periods.eval_mode` (기간 전사 기본값)
+      3. `app_settings.eval_mode` (전사 전체 기본값)
+    - 잠금: admin이 수동 잠금 → 잠금 후 master만 강제 변경 가능
+    - 관리 위치: 관리자 설정 → 평가기간 관리 탭 (기간별 카드)
     - OKR 페이지: `Pages.okrEval()` (`public/js/pages/okr-eval.js`)
     - OKR 구조: Objective → Key Results (달성률 0~100%, 70% 이상 성공)
 
@@ -342,6 +348,11 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/eval-periods/:id/eval-mode  기간 전사 기본방식 조회 (admin+)
+POST   /api/eval-periods/:id/eval-mode  기간 전사 기본방식 설정 (admin+)
+GET    /api/eval-periods/:id/org-modes  기간 조직별 방식 조회 (admin+)
+POST   /api/eval-periods/:id/org-modes  기간 조직별 방식 설정 (admin+)
+POST   /api/eval-periods/:id/lock       기간 방식 잠금 (admin+)
 GET    /api/settings/my-eval-mode       내 평가 방식 조회 (조직장 상속)
 POST   /api/settings/team-eval-mode     조직장이 팀 평가 방식 설정
 GET    /api/settings/eval-mode          전사 기본 평가 방식 조회
@@ -399,6 +410,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | 평가방식 3차원 매핑 (조직×기간×방식), eval_period_modes 테이블, 기간별 잠금 기능 | Claude Code |
 | 2026-05-11 | 관리자 평가방식 선택 UI 누락 수정 (Promise.all/버튼/함수 모두 정상 확인) | Claude Code |
 | 2026-05-11 | 평가 방식 변경 잠금 로직 추가 (진행 중 eval 차단, master 경고 허용), 전사 기본값 안내 문구 추가 | Claude Code |
 | 2026-05-11 | OKR 평가 방식 추가 - 조직도 기반 부서별 설정, okr-eval.js 신규 생성 | Claude Code |

@@ -1270,23 +1270,16 @@ async function renderAdmPolicy() {
         </div>
       </div>
 
-      <div class="srow" style="flex-direction:column;align-items:flex-start;gap:10px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;width:100%;flex-wrap:wrap;gap:10px">
-          <div>
-            <div style="font-size:14px;font-weight:500">전사 기본 평가 방식</div>
-            <div style="font-size:12px;color:var(--muted)">조직장이 별도 설정하지 않은 경우 이 방식이 적용됩니다</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            ${['MBO','OKR','KPI'].map(m =>
-              `<button class="btn ${evalMode.mode===m?'btn-primary':'btn-ghost'} btn-sm"
-                onclick="setGlobalEvalMode('${m}')">${m}</button>`
-            ).join('')}
+      <div class="srow">
+        <div>
+          <div style="font-size:14px;font-weight:500">평가 방식 설정</div>
+          <div style="font-size:12px;color:var(--muted)">
+            평가방식은 <strong>평가기간 관리</strong> 탭에서 기간별/조직별로 설정하세요.
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);background:var(--o50);border-radius:6px;padding:8px 12px;width:100%;box-sizing:border-box">
-          전사 기본값 변경은 즉시 적용됩니다. 조직장이 개별 설정한 팀은 영향받지 않습니다.<br>
-          개인별 방식은 <strong>전직원 평가 현황</strong> 탭에서 직접 변경할 수 있습니다.
-        </div>
+        <button class="btn btn-ghost btn-sm" onclick="switchAdmTab('adm-periods')">
+          평가기간 관리 →
+        </button>
       </div>
 
       <div class="srow">
@@ -1564,33 +1557,63 @@ async function renderAdmPeriods() {
       </div>
 
       <!-- 기간 목록 -->
-      <table class="tbl">
-        <thead><tr>
-          <th>평가 기간</th><th>구분</th><th>연도</th>
-          <th style="text-align:center">상태</th><th></th>
-        </tr></thead>
-        <tbody>
-          ${!periods.length
-            ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px">등록된 평가 기간이 없습니다.</td></tr>'
-            : periods.map(p => `<tr>
-                <td style="font-weight:500">${p.period_label}</td>
-                <td><span class="bd ${p.period_type==='q'?'bd-q':'bd-h'}">${p.period_type==='q'?'분기':'반기'}</span></td>
-                <td style="font-size:12px;color:var(--muted)">${p.eval_year}</td>
-                <td style="text-align:center">
-                  <span class="bd ${p.is_active?'bd-approved':'bd-rejected'}">${p.is_active?'활성':'비활성'}</span>
-                </td>
-                <td>
-                  <div style="display:flex;gap:4px;justify-content:flex-end">
-                    <button class="btn btn-ghost btn-sm" onclick="togglePeriod(${p.id})">
-                      ${p.is_active?'비활성화':'활성화'}
-                    </button>
-                    ${App.isMaster() ? `<button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:4px 8px;font-size:11px" onclick="deletePeriod(${p.id})">삭제</button>` : ''}
-                  </div>
-                </td>
-              </tr>`).join('')}
-        </tbody>
-      </table>
+      ${!periods.length
+        ? '<div class="alert alert-orange">등록된 평가 기간이 없습니다.</div>'
+        : ''}
     </div>`;
+
+    // 기간별 카드 렌더링
+    periods.forEach(period => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.marginBottom = '12px';
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:15px;font-weight:600">${period.period_label}</span>
+            <span class="bd ${period.period_type==='q'?'bd-q':'bd-h'}">${period.period_type==='q'?'분기':'반기'}</span>
+            <span class="bd ${period.is_active?'bd-approved':'bd-rejected'}">${period.is_active?'활성':'비활성'}</span>
+            ${period.locked ? '<span class="bd bd-locked" style="font-size:11px">🔒 잠김</span>' : ''}
+          </div>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-ghost btn-sm" onclick="togglePeriod(${period.id})">
+              ${period.is_active?'비활성화':'활성화'}
+            </button>
+            ${App.isMaster() ? `<button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:4px 8px;font-size:11px" onclick="deletePeriod(${period.id})">삭제</button>` : ''}
+          </div>
+        </div>
+
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--o100)">
+          <div style="font-size:13px;font-weight:600;color:var(--o800);margin-bottom:10px">
+            📊 평가방식 설정
+            ${period.locked ? '<span class="bd bd-locked" style="font-size:11px;margin-left:6px">🔒 잠김</span>' : ''}
+          </div>
+
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+            <span style="font-size:12px;color:var(--muted);min-width:80px">전사 기본</span>
+            <div style="display:flex;gap:6px">
+              ${['MBO','OKR','KPI'].map(m => `
+                <button class="btn btn-sm ${(period.eval_mode||'MBO')===m?'btn-primary':'btn-ghost'}"
+                  ${period.locked?'disabled':''}
+                  onclick="setPeriodEvalMode(${period.id},'${m}',this)"
+                  style="font-size:12px;padding:3px 10px">${m}</button>
+              `).join('')}
+            </div>
+            ${period.locked
+              ? '<span style="font-size:11px;color:var(--muted)">잠금 상태</span>'
+              : `<button class="btn btn-sm" style="font-size:11px;border:1px solid var(--o300);color:var(--o600)"
+                   onclick="lockPeriodMode(${period.id})">🔒 방식 잠금</button>`}
+          </div>
+
+          <div id="org-modes-${period.id}">
+            <div style="font-size:12px;color:var(--muted)">조직별 설정 로딩 중...</div>
+          </div>
+        </div>`;
+
+      el.appendChild(card);
+      loadOrgModes(period.id, period.locked);
+    });
+
     updatePeriodLabel();
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
@@ -1646,6 +1669,71 @@ async function deletePeriod(id) {
   try {
     await API.del('/eval-periods/' + id);
     showAlert('삭제되었습니다.', 'green');
+    renderAdmPeriods();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function loadOrgModes(periodId, periodLocked) {
+  const container = document.getElementById(`org-modes-${periodId}`);
+  if (!container) return;
+  try {
+    const managers = await API.get(`/eval-periods/${periodId}/org-modes`);
+    if (!managers.length) {
+      container.innerHTML = '<div style="font-size:12px;color:var(--muted)">등록된 조직장이 없습니다.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">조직별 방식</div>
+      ${managers.map(mgr => `
+        <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+                    border-bottom:1px solid var(--o50);flex-wrap:wrap">
+          <div style="min-width:120px">
+            <span style="font-size:12px;font-weight:500">${mgr.name}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:4px">${mgr.title||''}</span>
+          </div>
+          <div style="display:flex;gap:4px">
+            ${['MBO','OKR','KPI'].map(m => `
+              <button class="btn btn-sm ${mgr.eval_mode===m?'btn-primary':'btn-ghost'}"
+                ${periodLocked||mgr.org_locked?'disabled':''}
+                onclick="setOrgEvalMode(${periodId},${mgr.id},'${m}',this)"
+                style="font-size:11px;padding:2px 8px">${m}</button>
+            `).join('')}
+          </div>
+          ${mgr.org_locked
+            ? '<span class="bd bd-locked" style="font-size:10px">🔒</span>'
+            : ''}
+        </div>`).join('')}`;
+  } catch(e) {
+    container.innerHTML = `<div style="font-size:12px;color:var(--red)">로딩 실패: ${e.message}</div>`;
+  }
+}
+
+async function setPeriodEvalMode(periodId, mode, btn) {
+  try {
+    const r = await API.post(`/eval-periods/${periodId}/eval-mode`, { eval_mode: mode });
+    if (r.warning) showAlert(r.warning, 'orange');
+    else showAlert(`전사 기본 평가방식이 ${mode}로 변경되었습니다.`, 'green');
+    const siblings = btn.parentElement.querySelectorAll('button');
+    siblings.forEach(b => { b.className = b.className.replace('btn-primary','btn-ghost'); });
+    btn.className = btn.className.replace('btn-ghost','btn-primary');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function setOrgEvalMode(periodId, managerId, mode, btn) {
+  try {
+    await API.post(`/eval-periods/${periodId}/org-modes`, { manager_id: managerId, eval_mode: mode });
+    showAlert(`평가방식이 ${mode}로 변경되었습니다.`, 'green');
+    const siblings = btn.parentElement.querySelectorAll('button');
+    siblings.forEach(b => { b.className = b.className.replace('btn-primary','btn-ghost'); });
+    btn.className = btn.className.replace('btn-ghost','btn-primary');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function lockPeriodMode(periodId) {
+  if (!confirm('평가방식을 잠그면 더 이상 변경할 수 없습니다. (master만 강제 변경 가능)\n계속하시겠습니까?')) return;
+  try {
+    await API.post(`/eval-periods/${periodId}/lock`, {});
+    showAlert('평가방식이 잠겼습니다.', 'green');
     renderAdmPeriods();
   } catch(e) { showAlert(e.message, 'red'); }
 }

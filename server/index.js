@@ -935,6 +935,87 @@ app.delete('/api/eval-periods/:id', auth, masterOnly, (req, res) => {
   }
 });
 
+// 평가기간 전사 기본방식 조회/설정
+app.get('/api/eval-periods/:id/eval-mode', auth, adminOnly, (req, res) => {
+  try {
+    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
+    res.json({ eval_mode: period.eval_mode || 'MBO', locked: period.locked });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/eval-periods/:id/eval-mode', auth, adminOnly, (req, res) => {
+  try {
+    const { eval_mode } = req.body;
+    if (!['MBO','OKR','KPI'].includes(eval_mode))
+      return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
+    if (period.locked && req.user.role !== 'master')
+      return res.status(400).json({ error: '잠긴 평가 기간의 방식은 변경할 수 없습니다.' });
+    db.prepare('UPDATE eval_periods SET eval_mode=? WHERE id=?').run(eval_mode, req.params.id);
+    auditLog(req.user.sub, 'PERIOD_EVAL_MODE_CHANGED', req.params.id,
+      period.period_label, `평가기간 방식 변경: ${eval_mode}`, req.ip);
+    const warning = period.locked ? '⚠ 잠긴 기간을 강제 변경했습니다.' : null;
+    res.json({ success: true, warning });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 조직별 기간별 평가방식 조회
+app.get('/api/eval-periods/:id/org-modes', auth, adminOnly, (req, res) => {
+  try {
+    const managers = db.prepare(`
+      SELECT DISTINCT u.id, u.name, u.title, u.dept,
+        COALESCE(epm.eval_mode, ep.eval_mode, 'MBO') as eval_mode,
+        epm.locked as org_locked
+      FROM users u
+      LEFT JOIN eval_period_modes epm ON epm.manager_id=u.id AND epm.period_id=?
+      LEFT JOIN eval_periods ep ON ep.id=?
+      WHERE u.id IN (SELECT DISTINCT manager_id FROM users WHERE manager_id IS NOT NULL)
+      AND u.is_active=1
+      ORDER BY u.name
+    `).all(req.params.id, req.params.id);
+    res.json(managers);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 조직별 기간별 평가방식 설정
+app.post('/api/eval-periods/:id/org-modes', auth, adminOnly, (req, res) => {
+  try {
+    const { manager_id, eval_mode } = req.body;
+    if (!['MBO','OKR','KPI'].includes(eval_mode))
+      return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
+    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
+    const existing = db.prepare(
+      'SELECT locked FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+    ).get(req.params.id, manager_id);
+    if (existing?.locked && req.user.role !== 'master')
+      return res.status(400).json({ error: '잠긴 조직의 방식은 변경할 수 없습니다.' });
+    db.prepare(`
+      INSERT INTO eval_period_modes(period_id, manager_id, eval_mode)
+      VALUES(?,?,?)
+      ON CONFLICT(period_id, manager_id) DO UPDATE SET eval_mode=?
+    `).run(req.params.id, manager_id, eval_mode, eval_mode);
+    const mgr = db.prepare('SELECT name FROM users WHERE id=?').get(manager_id);
+    auditLog(req.user.sub, 'ORG_EVAL_MODE_CHANGED', manager_id, mgr?.name,
+      `조직 평가방식 변경 (${period.period_label}): ${eval_mode}`, req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 평가기간 방식 잠금 (admin+)
+app.post('/api/eval-periods/:id/lock', auth, adminOnly, (req, res) => {
+  try {
+    db.prepare('UPDATE eval_periods SET locked=1 WHERE id=?').run(req.params.id);
+    db.prepare('UPDATE eval_period_modes SET locked=1 WHERE period_id=?').run(req.params.id);
+    const period = db.prepare('SELECT period_label FROM eval_periods WHERE id=?').get(req.params.id);
+    auditLog(req.user.sub, 'PERIOD_LOCKED', req.params.id,
+      period?.period_label, '평가기간 방식 잠금', req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── 중간 보고 API ────────────────────────────────────────
 
 // 중간 보고 목록 조회
@@ -1043,11 +1124,35 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
 app.get('/api/settings/my-eval-mode', auth, (req, res) => {
   try {
     const me = db.prepare('SELECT manager_id, eval_mode FROM users WHERE id=?').get(req.user.sub);
-    if (me?.manager_id) {
-      const mgr = db.prepare('SELECT eval_mode FROM users WHERE id=?').get(me.manager_id);
-      if (mgr?.eval_mode) return res.json({ mode: mgr.eval_mode, source: 'manager' });
+
+    // 현재 활성 평가 기간 조회
+    const activePeriod = db.prepare(
+      "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC LIMIT 1"
+    ).get();
+
+    if (activePeriod) {
+      // 1순위: 조직장 + 기간 조합
+      if (me?.manager_id) {
+        const orgMode = db.prepare(
+          'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+        ).get(activePeriod.id, me.manager_id);
+        if (orgMode) return res.json({ mode: orgMode.eval_mode, source: 'org_period',
+          period: activePeriod.period_label });
+      }
+      // 본인이 조직장인 경우
+      const selfMode = db.prepare(
+        'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+      ).get(activePeriod.id, req.user.sub);
+      if (selfMode) return res.json({ mode: selfMode.eval_mode, source: 'org_period',
+        period: activePeriod.period_label });
+
+      // 2순위: 기간 전사 기본값
+      if (activePeriod.eval_mode)
+        return res.json({ mode: activePeriod.eval_mode, source: 'period',
+          period: activePeriod.period_label });
     }
-    if (me?.eval_mode) return res.json({ mode: me.eval_mode, source: 'self' });
+
+    // 3순위: 전사 전체 기본값
     const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
     res.json({ mode: global?.value || 'MBO', source: 'global' });
   } catch(err) { res.status(500).json({ error: err.message }); }
@@ -1677,6 +1782,17 @@ function initDB() {
       unit TEXT DEFAULT '%',
       weight INTEGER DEFAULT 33,
       sort_order INTEGER DEFAULT 0
+    )`,
+    "ALTER TABLE eval_periods ADD COLUMN eval_mode TEXT DEFAULT 'MBO'",
+    "ALTER TABLE eval_periods ADD COLUMN locked INTEGER DEFAULT 0",
+    `CREATE TABLE IF NOT EXISTS eval_period_modes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      period_id   INTEGER NOT NULL,
+      manager_id  INTEGER NOT NULL,
+      eval_mode   TEXT NOT NULL DEFAULT 'MBO',
+      locked      INTEGER DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now')),
+      UNIQUE(period_id, manager_id)
     )`,
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
