@@ -410,6 +410,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-11 | my-eval-mode 계층 탐색 버그 수정 (직속 상사 1단계만 조회 → 최대 5단계 상위 탐색으로 수정) | Claude Code |
 | 2026-05-11 | 평가방식 3차원 매핑 (조직×기간×방식), eval_period_modes 테이블, 기간별 잠금 기능 | Claude Code |
 | 2026-05-11 | 관리자 평가방식 선택 UI 누락 수정 (Promise.all/버튼/함수 모두 정상 확인) | Claude Code |
 | 2026-05-11 | 평가 방식 변경 잠금 로직 추가 (진행 중 eval 차단, master 경고 허용), 전사 기본값 안내 문구 추가 | Claude Code |
