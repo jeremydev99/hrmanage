@@ -22,9 +22,11 @@ const App = {
   async login(email, pw) {
     const data = await API.post('/auth/login', { email, password: pw });
     this.user = data.user;
+    API.setToken(data.token);           // 토큰 먼저 설정 (이후 API 호출에 사용)
     this.categories = await API.get('/categories');
     await applySessionPolicy(data.token);
     this.render();
+    updateNavForRole();                 // 관리자 메뉴 표시 갱신
     this.navigate('my-eval');
     startSessionCheck();
   },

@@ -252,8 +252,12 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .pc-only     { display: block; }
 .mobile-only { display: none;  }
 
-/* nav 드롭다운 기본 표시 */
-.nav-tabs-wrap { display: flex !important; align-items: center; }
+/* nav 드롭다운 기본 표시 (topbar와 동일한 배경 — white 버튼 가시성 확보) */
+.nav-tabs-wrap {
+  display: flex !important;
+  align-items: center;
+  background: var(--o500);
+}
 
 /* ── PC 드롭다운 메뉴 ─────────────────────── */
 .nav-tab {

@@ -1,12 +1,14 @@
 Pages.myEval = async function() {
   if (!App.user) { App.renderLogin(); return; }
+  const userId = App.user?.id;
+  if (!userId) { App.renderLogin(); return; }
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
     const [evs, activePeriods, approverRes, evalMode, periodModes] = await Promise.all([
       API.get('/evals'),
       API.get('/eval-periods/active').catch(() => []),
-      API.get(`/users/${App.user.id}/approvers`).catch(() => []),
+      API.get(`/users/${userId}/approvers`).catch(() => []),
       API.get('/settings/my-eval-mode').catch(() => ({ mode: 'MBO', source: 'global' })),
       API.get('/eval-periods/my-modes').catch(() => []),
     ]);
