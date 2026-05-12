@@ -286,6 +286,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
   left: 0;
   background: white !important;
   background-color: #ffffff !important;
+  color: #333333 !important;
   border-radius: 8px;
   min-width: 150px;
   box-shadow: 0 8px 24px rgba(0,0,0,.15);
@@ -305,16 +306,18 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .dd-item {
   padding: 10px 16px;
   font-size: 13px;
-  color: var(--o700);
+  color: #333333 !important;
   cursor: pointer;
   border-bottom: 1px solid var(--o50);
   transition: background .1s;
   white-space: nowrap;
+  display: block !important;
+  background-color: #ffffff !important;
 }
 .dd-item:last-child { border-bottom: none; }
 .dd-item:hover {
-  background: var(--o50);
-  color: var(--o500);
+  background-color: var(--o50) !important;
+  color: var(--o500) !important;
 }
 .dd-section-label {
   padding: 6px 16px;

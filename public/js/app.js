@@ -283,9 +283,30 @@ function toggleMobileMenu() {
 
     groupToggle.onclick = () => {
       const isOpen = subMenu.style.display === 'block';
-      subMenu.style.display = isOpen ? 'none' : 'block';
       const arrow = groupToggle.querySelector(`.menu-arrow-${gi}`);
-      if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
+      if (!isOpen) {
+        // 펼치기
+        subMenu.style.display = 'block';
+        subMenu.style.overflow = 'hidden';
+        subMenu.style.maxHeight = '0px';
+        subMenu.style.opacity = '0';
+        subMenu.style.transition = 'max-height 0.25s ease-out, opacity 0.2s ease-out';
+        requestAnimationFrame(() => {
+          subMenu.style.maxHeight = subMenu.scrollHeight + 'px';
+          subMenu.style.opacity = '1';
+        });
+        if (arrow) arrow.style.transform = 'rotate(180deg)';
+      } else {
+        // 접기
+        subMenu.style.maxHeight = subMenu.scrollHeight + 'px';
+        subMenu.style.transition = 'max-height 0.2s ease-in, opacity 0.15s ease-in';
+        requestAnimationFrame(() => {
+          subMenu.style.maxHeight = '0px';
+          subMenu.style.opacity = '0';
+        });
+        setTimeout(() => { subMenu.style.display = 'none'; }, 220);
+        if (arrow) arrow.style.transform = '';
+      }
     };
 
     groupHeader.appendChild(groupLabel);

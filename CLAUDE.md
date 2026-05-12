@@ -473,6 +473,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 드롭다운 텍스트 표시 수정, 모바일 아코디언 애니메이션 추가 | Claude Code |
 | 2026-05-12 | 드롭다운 메뉴 z-index 및 배경색 수정 (z-index:9999, background:white !important) | Claude Code |
 | 2026-05-12 | PC 헤더 메뉴 수평 중앙 정렬 (nav topbar 내부 이동, position absolute 중앙) | Claude Code |
 | 2026-05-12 | perfHome/okrDashboard navigate 미등록 수정 (var Pages 초기화, navigate 직접 처리 추가) | Claude Code |
