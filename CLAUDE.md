@@ -275,7 +275,8 @@ users:             ... org_id INTEGER (추가)
       `close_on_browser_close`: sessionStorage 사용
       `timeout_minutes`: 만료 시각 localStorage, 1분마다 체크
       최대 8시간 강제 제한, 관리: 관리자 설정 → 평가 정책 (master만)
-    - 성과관리 홈: `Pages.perfHome` (프롬프트 31 상세 구현 예정)
+    - 성과관리 홈 (`Pages.perfHome`): 역할별 뷰(내 성과/우리팀/전체조직), AI 요약(`loadAISummary`)
+      MBO: 최종점수, OKR: 달성률%, 대시보드 계층: 기본 2단계·최대 3단계
     - OKR 현황: `Pages.okrDashboard` (조회 전용)
 25. **메뉴 구조 (PC/모바일 공통)**:
     - 내 평가 ▼: 내 평가 홈, 승인관리, 최종평가
@@ -394,6 +395,11 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/settings/dashboard-depth     대시보드 계층 설정 조회
+POST   /api/settings/dashboard-depth    대시보드 계층 설정 변경 (admin+)
+GET    /api/perf/my-summary             내 성과 요약
+GET    /api/perf/team-summary           팀 성과 요약 (조직장)
+POST   /api/perf/ai-summary             AI 성과 요약 생성
 GET    /api/settings/session-policy      세션 정책 조회
 POST   /api/settings/session-policy     세션 정책 설정 (master)
 GET    /api/notice                       공지사항 조회 (인증 불필요)
@@ -467,6 +473,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 성과관리 홈 대시보드 (역할별 뷰, 기간별 차트, AI 요약, 계층 설정) | Claude Code |
 | 2026-05-12 | PC 드롭다운 메뉴(0.15s 슬라이드 애니), 성과관리 메뉴, OKR 현황, 세션 보안 정책 | Claude Code |
 | 2026-05-12 | PC 드롭다운 메뉴 (내평가/성과관리/관리자설정), OKR 현황 대시보드 추가 | Claude Code |
 | 2026-05-12 | 햄버거 메뉴 1레벨 탭이동/아코디언 분리, 로그인 공지사항 기능 추가 (DB마이그레이션, 감사로그) | Claude Code |

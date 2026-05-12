@@ -1479,6 +1479,201 @@ app.get('/api/admin/eval-detail/:userId', auth, adminOnly, (req, res) => {
   }
 });
 
+// ── 성과관리 API ──────────────────────────────────────────
+
+// 대시보드 계층 설정
+app.get('/api/settings/dashboard-depth', auth, (req, res) => {
+  try {
+    const s = db.prepare("SELECT value FROM app_settings WHERE key='dashboard_depth'").get();
+    res.json({ depth: parseInt(s?.value || '2') });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/settings/dashboard-depth', auth, adminOnly, (req, res) => {
+  try {
+    const depth = parseInt(req.body.depth);
+    if (![1,2,3].includes(depth))
+      return res.status(400).json({ error: '1~3단계만 설정 가능합니다. (4단계 미지원)' });
+    db.prepare(`
+      INSERT INTO app_settings(key,value,updated_by,updated_at)
+      VALUES('dashboard_depth',?,?,datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value=excluded.value, updated_by=excluded.updated_by, updated_at=excluded.updated_at
+    `).run(depth.toString(), req.user.sub);
+    auditLog(req.user.sub, 'DASHBOARD_DEPTH_CHANGED', null, null,
+      `대시보드 계층 변경: ${depth}단계`, req.ip);
+    res.json({ success: true, depth });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 내 성과 요약
+app.get('/api/perf/my-summary', auth, (req, res) => {
+  try {
+    const { period_id } = req.query;
+    const userId = req.user.sub;
+    const periods = period_id
+      ? [db.prepare('SELECT * FROM eval_periods WHERE id=?').get(period_id)]
+      : db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC').all();
+
+    const result = periods.filter(Boolean).map(period => {
+      const evals = db.prepare(`
+        SELECT e.*, fe.final_score, fe.selected_grade, fe.self_done, fe.mgr_done
+        FROM eval_cycles e
+        LEFT JOIN final_evaluations fe ON fe.eval_id=e.id
+        WHERE e.user_id=? AND e.period_label=? AND e.eval_year=?
+      `).all(userId, period.period_label, period.eval_year);
+
+      const reportCount = db.prepare(`
+        SELECT COUNT(*) as c FROM progress_reports pr
+        JOIN eval_cycles e ON pr.eval_id=e.id
+        WHERE e.user_id=? AND e.period_label=?
+      `).get(userId, period.period_label)?.c || 0;
+
+      const feedbackCount = db.prepare(`
+        SELECT COUNT(*) as c FROM feedbacks f
+        JOIN eval_cycles e ON f.eval_id=e.id
+        WHERE e.user_id=? AND e.period_label=?
+      `).get(userId, period.period_label)?.c || 0;
+
+      const okrCycles = db.prepare(`
+        SELECT oc.*, (SELECT COUNT(*) FROM okr_objectives WHERE cycle_id=oc.id) as obj_count
+        FROM okr_cycles oc
+        WHERE oc.user_id=? AND oc.period_label=?
+      `).all(userId, period.period_label);
+
+      let okrAvg = null;
+      if (okrCycles.length) {
+        let totalKRs = 0, totalPct = 0;
+        okrCycles.forEach(cycle => {
+          const objs = db.prepare('SELECT * FROM okr_objectives WHERE cycle_id=?').all(cycle.id);
+          objs.forEach(obj => {
+            db.prepare('SELECT * FROM okr_key_results WHERE objective_id=?').all(obj.id).forEach(kr => {
+              totalKRs++;
+              totalPct += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
+            });
+          });
+        });
+        okrAvg = totalKRs > 0 ? Math.round(totalPct / totalKRs) : 0;
+      }
+
+      return {
+        period_id: period.id,
+        period_label: period.period_label,
+        eval_year: period.eval_year,
+        eval_mode: period.eval_mode || 'MBO',
+        mbo_score: evals[0]?.final_score || null,
+        okr_avg: okrAvg,
+        report_count: reportCount,
+        feedback_count: feedbackCount,
+        phase: evals[0]?.phase || null,
+        self_done: evals[0]?.self_done || 0,
+        mgr_done: evals[0]?.mgr_done || 0,
+      };
+    });
+
+    res.json(result);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 팀 성과 요약 (조직장용)
+app.get('/api/perf/team-summary', auth, (req, res) => {
+  try {
+    const { period_id } = req.query;
+    const userId = req.user.sub;
+    const maxDepth = parseInt(
+      db.prepare("SELECT value FROM app_settings WHERE key='dashboard_depth'").get()?.value || '2'
+    );
+
+    const myOrg = db.prepare('SELECT * FROM organizations WHERE leader_id=? AND is_active=1').get(userId);
+    if (!myOrg) return res.json({ is_leader: false, teams: [] });
+
+    function getSubMembers(orgId, depth) {
+      if (depth > maxDepth) return [];
+      const members = db.prepare('SELECT id, name, title FROM users WHERE org_id=? AND is_active=1').all(orgId);
+      const subOrgs = db.prepare('SELECT * FROM organizations WHERE parent_id=? AND is_active=1').all(orgId);
+      return [...members, ...subOrgs.flatMap(o => getSubMembers(o.id, depth + 1))];
+    }
+    const members = getSubMembers(myOrg.id, 1);
+
+    const periods = period_id
+      ? [db.prepare('SELECT * FROM eval_periods WHERE id=?').get(period_id)]
+      : db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC LIMIT 3').all();
+
+    const teamData = periods.filter(Boolean).map(period => {
+      const memberStats = members.map(m => {
+        const ev = db.prepare(`
+          SELECT e.phase, fe.final_score, fe.mgr_done
+          FROM eval_cycles e
+          LEFT JOIN final_evaluations fe ON fe.eval_id=e.id
+          WHERE e.user_id=? AND e.period_label=?
+          ORDER BY e.id DESC LIMIT 1
+        `).get(m.id, period.period_label);
+
+        const okr = db.prepare('SELECT * FROM okr_cycles WHERE user_id=? AND period_label=?').all(m.id, period.period_label);
+        let okrAvg = null;
+        if (okr.length) {
+          let t = 0, p = 0;
+          okr.forEach(c => {
+            db.prepare('SELECT * FROM okr_objectives WHERE cycle_id=?').all(c.id).forEach(obj => {
+              db.prepare('SELECT * FROM okr_key_results WHERE objective_id=?').all(obj.id).forEach(kr => {
+                t++;
+                p += kr.target_value > 0 ? (kr.current_value/kr.target_value)*100 : 0;
+              });
+            });
+          });
+          okrAvg = t > 0 ? Math.round(p/t) : 0;
+        }
+        return { user_id: m.id, name: m.name, title: m.title,
+          phase: ev?.phase||null, final_score: ev?.final_score||null, okr_avg: okrAvg, mgr_done: ev?.mgr_done||0 };
+      });
+
+      const scored    = memberStats.filter(m => m.final_score !== null);
+      const okrScored = memberStats.filter(m => m.okr_avg !== null);
+      return {
+        period_label: period.period_label, eval_year: period.eval_year,
+        eval_mode: period.eval_mode || 'MBO',
+        member_count: members.length,
+        team_avg_score: scored.length
+          ? Math.round(scored.reduce((a,m)=>a+m.final_score,0)/scored.length*10)/10 : null,
+        team_okr_avg: okrScored.length
+          ? Math.round(okrScored.reduce((a,m)=>a+m.okr_avg,0)/okrScored.length) : null,
+        members: memberStats,
+      };
+    });
+
+    res.json({ is_leader: true, org_name: myOrg.name, teams: teamData });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// AI 성과 요약 (Claude API)
+app.post('/api/perf/ai-summary', auth, async (req, res) => {
+  try {
+    const { type, data } = req.body;
+    let prompt = '';
+    if (type === 'personal') {
+      prompt = `다음은 ${data.name}님의 성과 데이터입니다. 3줄로 성과를 요약하고 개선 포인트 1가지를 제안해주세요.\n\n평가 데이터:\n${JSON.stringify(data.periods, null, 2)}\n\n형식:\n📊 성과 요약: (2줄)\n💡 개선 제안: (1줄)`;
+    } else if (type === 'team') {
+      prompt = `다음은 ${data.org_name} 팀의 성과 데이터입니다. 팀 전체 성과를 3줄로 요약하고 리더를 위한 액션 제안 1가지를 해주세요.\n\n팀 데이터:\n${JSON.stringify(data.teams, null, 2)}\n\n형식:\n📊 팀 성과 요약: (2줄)\n💡 리더 액션 제안: (1줄)`;
+    }
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    const result = await response.json();
+    const text = result.content?.[0]?.text || '요약을 생성할 수 없습니다.';
+    res.json({ summary: text });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ── 조직 관리 API ─────────────────────────────────────────
 
 app.get('/api/organizations', auth, (req, res) => {

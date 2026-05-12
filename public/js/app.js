@@ -426,21 +426,194 @@ Pages.okrDashboard = async function() {
   }
 };
 
-// 성과관리 홈 (프롬프트 31에서 상세 구현)
 Pages.perfHome = async function() {
   const area = document.getElementById('main-area');
-  area.innerHTML = `
-    <div style="margin-bottom:16px">
-      <div style="font-size:18px;font-weight:700;color:var(--o800)">📊 성과관리 홈</div>
-      <div style="font-size:12px;color:var(--muted)">기간별 성과 요약 및 AI 분석</div>
-    </div>
-    <div class="card">
-      <div class="alert alert-teal">
-        🚧 성과관리 대시보드 준비 중입니다.
-        <div style="font-size:12px;margin-top:4px">중간 보고, 중간 피드백, OKR 현황은 각 메뉴에서 확인하세요.</div>
+  area.innerHTML = '<div class="spinner">로딩 중...</div>';
+  try {
+    const user = App.user;
+    const isAdmin = ['master','admin'].includes(user?.role);
+
+    const [mySummary, teamSummary] = await Promise.all([
+      API.get('/perf/my-summary').catch(() => []),
+      API.get('/perf/team-summary').catch(() => ({ is_leader: false, teams: [] })),
+    ]);
+
+    area.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.style.marginBottom = '16px';
+    header.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--o800)">📊 성과관리 홈</div>
+          <div style="font-size:12px;color:var(--muted)">기간별 성과 요약 및 AI 분석</div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-primary btn-sm perf-view-btn" id="view-my" onclick="switchPerfView('my')">내 성과</button>
+          ${teamSummary.is_leader ? `<button class="btn btn-ghost btn-sm perf-view-btn" id="view-team" onclick="switchPerfView('team')">우리 팀</button>` : ''}
+          ${isAdmin ? `<button class="btn btn-ghost btn-sm perf-view-btn" id="view-org" onclick="switchPerfView('org')">전체 조직</button>` : ''}
+        </div>
+      </div>`;
+    area.appendChild(header);
+
+    const myView = document.createElement('div');
+    myView.id = 'perf-view-my';
+    myView.innerHTML = renderMyPerfView(mySummary, user);
+    area.appendChild(myView);
+
+    if (teamSummary.is_leader) {
+      const teamView = document.createElement('div');
+      teamView.id = 'perf-view-team';
+      teamView.style.display = 'none';
+      teamView.innerHTML = renderTeamPerfView(teamSummary);
+      area.appendChild(teamView);
+    }
+
+    if (isAdmin) {
+      const orgView = document.createElement('div');
+      orgView.id = 'perf-view-org';
+      orgView.style.display = 'none';
+      orgView.innerHTML = '<div class="card"><div class="alert alert-teal">🚧 전체 조직 뷰는 준비 중입니다.</div></div>';
+      area.appendChild(orgView);
+    }
+
+    const aiSection = document.createElement('div');
+    aiSection.id = 'ai-summary-section';
+    aiSection.className = 'card';
+    aiSection.style.marginTop = '12px';
+    aiSection.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:600">🤖 AI 성과 요약</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAISummary('personal')">요약 생성</button>
       </div>
-    </div>`;
+      <div id="ai-summary-content" style="font-size:13px;color:var(--muted);line-height:1.8">
+        '요약 생성' 버튼을 클릭하면 AI가 성과를 분석합니다.
+      </div>`;
+    area.appendChild(aiSection);
+
+    window._perfData = { mySummary, teamSummary, user };
+  } catch(err) {
+    area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
+  }
 };
+
+function renderMyPerfView(summary, user) {
+  if (!summary.length) {
+    return `<div class="card"><div class="alert alert-orange">활성화된 평가 기간이 없습니다.</div></div>`;
+  }
+  return summary.map(s => {
+    const score = s.eval_mode === 'OKR' ? s.okr_avg : s.mbo_score;
+    const scoreLabel = s.eval_mode === 'OKR' ? '달성률' : '최종 점수';
+    const scoreColor = score >= 70 ? 'var(--green)' : score >= 50 ? 'var(--o500)' : '#E53935';
+    return `
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:600">${s.period_label}</div>
+          <div style="font-size:12px;color:var(--muted)">
+            ${s.eval_year} ·
+            <span class="bd bd-${s.eval_mode==='OKR'?'teal':'approved'}" style="font-size:10px">${s.eval_mode}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:16px;align-items:center">
+          ${score !== null ? `
+          <div style="text-align:center">
+            <div style="font-size:24px;font-weight:800;color:${scoreColor}">${score}${s.eval_mode==='OKR'?'%':'점'}</div>
+            <div style="font-size:11px;color:var(--muted)">${scoreLabel}</div>
+          </div>` : ''}
+          <div style="text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--o500)">${s.report_count}건</div>
+            <div style="font-size:11px;color:var(--muted)">중간 보고</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--o500)">${s.feedback_count}건</div>
+            <div style="font-size:11px;color:var(--muted)">받은 피드백</div>
+          </div>
+        </div>
+      </div>
+      ${score !== null ? `
+      <div style="background:var(--o100);border-radius:20px;height:8px">
+        <div style="background:${scoreColor};border-radius:20px;height:100%;
+                    width:${Math.min(s.eval_mode==='OKR'?score:score/5*100,100)}%;transition:width .4s"></div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderTeamPerfView(teamData) {
+  if (!teamData.teams.length) {
+    return `<div class="card"><div class="alert alert-orange">팀 데이터가 없습니다.</div></div>`;
+  }
+  return `
+    <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:10px">${teamData.org_name} 팀 현황</div>
+    ${teamData.teams.map(t => `
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <div>
+          <div style="font-size:15px;font-weight:600">${t.period_label}</div>
+          <div style="font-size:12px;color:var(--muted)">
+            팀원 ${t.member_count}명 ·
+            <span class="bd bd-${t.eval_mode==='OKR'?'teal':'approved'}" style="font-size:10px">${t.eval_mode}</span>
+          </div>
+        </div>
+        ${t.team_avg_score !== null || t.team_okr_avg !== null ? `
+        <div style="text-align:center">
+          <div style="font-size:24px;font-weight:800;color:var(--o500)">
+            ${t.eval_mode==='OKR'?(t.team_okr_avg||0)+'%':(t.team_avg_score||0)+'점'}
+          </div>
+          <div style="font-size:11px;color:var(--muted)">팀 평균</div>
+        </div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${t.members.map(m => {
+          const score = t.eval_mode==='OKR' ? m.okr_avg : m.final_score;
+          const pct = score !== null ? (t.eval_mode==='OKR' ? score : score/5*100) : 0;
+          const col = pct>=70?'var(--green)':pct>=50?'var(--o500)':'#E53935';
+          return `
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:12px;min-width:80px;color:var(--o700)">${m.name} ${m.title||''}</span>
+            <div style="flex:1;background:var(--o100);border-radius:10px;height:6px">
+              <div style="background:${col};border-radius:10px;height:100%;width:${Math.min(pct,100)}%;transition:width .4s"></div>
+            </div>
+            <span style="font-size:12px;font-weight:600;color:${col};min-width:40px;text-align:right">
+              ${score !== null ? (t.eval_mode==='OKR' ? score+'%' : score+'점') : '-'}
+            </span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('')}`;
+}
+
+function switchPerfView(view) {
+  ['my','team','org'].forEach(v => {
+    const el  = document.getElementById('perf-view-'+v);
+    const btn = document.getElementById('view-'+v);
+    if (el)  el.style.display  = v===view ? 'block' : 'none';
+    if (btn) { btn.classList.toggle('btn-primary', v===view); btn.classList.toggle('btn-ghost', v!==view); }
+  });
+  const aiBtn = document.querySelector('#ai-summary-section button');
+  if (aiBtn) aiBtn.onclick = () => loadAISummary(
+    view==='my' ? 'personal' : view==='team' ? 'team' : 'org'
+  );
+}
+
+async function loadAISummary(type) {
+  const content = document.getElementById('ai-summary-content');
+  if (!content) return;
+  content.innerHTML = '<div class="spinner" style="font-size:13px">AI 분석 중...</div>';
+  try {
+    const d = window._perfData;
+    const payload = type === 'personal'
+      ? { type, data: { name: d.user?.name, periods: d.mySummary } }
+      : { type, data: d.teamSummary };
+    const r = await API.post('/perf/ai-summary', payload);
+    content.innerHTML = `
+      <div style="white-space:pre-wrap;line-height:1.8;color:var(--o800)">${r.summary}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">AI 분석 결과는 참고용입니다. 실제 평가와 다를 수 있습니다.</div>`;
+  } catch(e) {
+    content.innerHTML = `<div style="color:#E53935;font-size:13px">AI 요약 생성 실패: ${e.message}</div>`;
+  }
+}
 
 // 세션 관리
 function getToken() {

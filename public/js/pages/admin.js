@@ -1355,7 +1355,7 @@ async function renderAdmPolicy() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode, notice, sessionPolicy] = await Promise.all([
+    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode, notice, sessionPolicy, dashDepth] = await Promise.all([
       API.get('/settings/history-visibility'),
       API.get('/settings/history-inactive'),
       API.get('/settings/feedback-limit'),
@@ -1365,6 +1365,7 @@ async function renderAdmPolicy() {
       API.get('/settings/eval-mode'),
       fetch('/api/notice').then(r => r.json()).catch(() => ({ content: '', author_name: '', updated_at: '' })),
       API.get('/settings/session-policy').catch(() => ({ close_on_browser_close: false, timeout_minutes: 480 })),
+      API.get('/settings/dashboard-depth').catch(() => ({ depth: 2 })),
     ]);
 
     const limitOptions = [
@@ -1444,6 +1445,21 @@ async function renderAdmPolicy() {
         </div>
         <button class="btn btn-primary btn-sm" style="margin-top:12px"
           onclick="saveSessionPolicy()">세션 정책 저장</button>
+      </div>
+
+      <div class="srow">
+        <div>
+          <div style="font-size:14px;font-weight:500">대시보드 표시 계층</div>
+          <div style="font-size:12px;color:var(--muted)">성과관리 홈에서 조직 성과를 몇 단계까지 표시할지 설정 (4단계 이상 미지원)</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${[1,2,3].map(d => `
+            <button class="btn btn-sm ${dashDepth.depth===d?'btn-primary':'btn-ghost'}"
+              onclick="saveDashDepth(${d})" style="font-size:12px">
+              ${d}단계${d===2?' (기본)':d===3?' (옵션)':''}
+            </button>`).join('')}
+          <span style="font-size:11px;color:var(--muted)">4단계 이상 미지원</span>
+        </div>
       </div>
 
       <div class="srow">
@@ -1668,6 +1684,14 @@ async function saveSessionPolicy() {
       timeout>=60?Math.round(timeout/60)+'시간':timeout+'분'
     }${closeOnBrowser?', 브라우저 종료 시 만료':''})`, 'green');
     _sessionTimeoutSel = null;
+    renderAdmPolicy();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function saveDashDepth(depth) {
+  try {
+    await API.post('/settings/dashboard-depth', { depth });
+    showAlert(`대시보드 계층이 ${depth}단계로 설정되었습니다.`, 'green');
     renderAdmPolicy();
   } catch(e) { showAlert(e.message, 'red'); }
 }
