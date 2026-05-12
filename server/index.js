@@ -149,7 +149,7 @@ app.get('/api/auth/me', auth, (req, res) => {
 //  USERS & ORG
 // ════════════════════════════════════════════════════════════
 app.get('/api/users', auth, (req, res) => {
-  const users = db.prepare('SELECT id,name,email,role,dept,title,manager_id,is_active FROM users').all();
+  const users = db.prepare('SELECT id,name,email,role,dept,grade,title,manager_id,is_active,account_status,org_id FROM users').all();
   res.json(users);
 });
 
