@@ -239,7 +239,7 @@ async function reopenEval(evalId, periodType, periodLabel, evalYear) {
 }
 
 let _period = 'q', _subP = '1', _cats = [], _goals = {};
-let _currentEvalId = null, _currentPeriodLabel = '', _currentEvalYear = '2025년';
+let _currentEvalId = null;
 
 function renderGoalSetForm(ev, approvers) {
   const area = document.getElementById('main-area');
