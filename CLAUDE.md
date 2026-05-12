@@ -414,6 +414,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | okr-eval.js 스크립트 로딩 순서 수정 (app.js를 api.js 직후로 이동, Pages 객체 먼저 정의) | Claude Code |
 | 2026-05-12 | OKR 작성하기 버튼 작동 버그 수정 (빈 중간 화면 제거 → 바로 작성 폼으로 이동) | Claude Code |
 | 2026-05-12 | 평가기간별 평가방식 분기 (OKR/KPI기간→OKR버튼, MBO기간→MBO버튼) | Claude Code |
 | 2026-05-11 | OKR 모드 개선: 다중 활성기간 OKR 우선적용, MBO 카드 숨김 | Claude Code |
