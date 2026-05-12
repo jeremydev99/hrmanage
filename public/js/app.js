@@ -67,8 +67,75 @@ const App = {
             onclick="App.logout()">로그아웃</button>
         </div>
       </div>
-      <div class="nav-tabs-wrap">
-        <nav class="nav-tabs" id="nav-tabs"></nav>
+      <div class="nav-tabs-wrap" style="display:flex;align-items:center;gap:4px;padding:0 8px">
+
+        <!-- 내 평가 드롭다운 -->
+        <div class="nav-dropdown" style="position:relative">
+          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-myeval')"
+            style="display:flex;align-items:center;gap:4px">
+            내 평가 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+          </button>
+          <div id="dd-myeval" class="nav-dropdown-menu" style="display:none;position:absolute;
+            top:100%;left:0;background:white;border-radius:8px;min-width:140px;
+            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
+            border:1px solid var(--o100)">
+            <div class="dd-item dd-header" onclick="closeNavDropdown();App.navigate('my-eval')"
+              style="padding:10px 16px;font-size:13px;font-weight:600;color:var(--o700);
+                     cursor:pointer;border-bottom:1px solid var(--o100);background:var(--o50)">
+              📋 내 평가 홈
+            </div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('approvals')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
+                     border-bottom:1px solid var(--o50)">승인 관리</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('final')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">최종 평가</div>
+          </div>
+        </div>
+
+        <!-- 성과관리 드롭다운 -->
+        <div class="nav-dropdown" style="position:relative">
+          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-performance')"
+            style="display:flex;align-items:center;gap:4px">
+            성과관리 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+          </button>
+          <div id="dd-performance" class="nav-dropdown-menu" style="display:none;position:absolute;
+            top:100%;left:0;background:white;border-radius:8px;min-width:140px;
+            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
+            border:1px solid var(--o100)">
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('progress')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
+                     border-bottom:1px solid var(--o50)">중간 보고</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('feedback')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
+                     border-bottom:1px solid var(--o50)">중간 피드백</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('okrDashboard')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">
+              🎯 OKR 현황</div>
+          </div>
+        </div>
+
+        <!-- 관리자 설정 드롭다운 (admin+ 만 표시) -->
+        <div class="nav-dropdown admin-only" style="position:relative;display:none">
+          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-admin')"
+            style="display:flex;align-items:center;gap:4px">
+            관리자 설정 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+          </button>
+          <div id="dd-admin" class="nav-dropdown-menu" style="display:none;position:absolute;
+            top:100%;right:0;background:white;border-radius:8px;min-width:160px;
+            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
+            border:1px solid var(--o100)">
+            <div class="dd-item dd-header"
+              style="padding:8px 16px;font-size:11px;color:var(--muted);
+                     background:var(--o50);border-bottom:1px solid var(--o100)">관리자 메뉴</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;border-bottom:1px solid var(--o50)">계정 승인 관리</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;border-bottom:1px solid var(--o50)">전직원 평가 현황</div>
+            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin')"
+              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">관리자 설정 전체</div>
+          </div>
+        </div>
+
       </div>
       <div id="main-alert" style="padding:0 20px;max-width:900px;margin:0 auto"></div>
       <div class="main" id="main-area"></div>
@@ -80,36 +147,25 @@ const App = {
     const u = this.user;
     document.getElementById('nav-user-name').innerHTML =
       `<span style="font-size:11px;opacity:.8">${u.dept||''} ${u.title||''}</span> ${u.name} ${roleBadge(u.role)}`;
-
-    const tabs = [
-      { id:'my-eval',   label:'내 평가' },
-      { id:'approvals', label:'승인 관리' },
-      { id:'progress',  label:'중간 보고' },
-      { id:'feedback',  label:'중간 피드백' },
-      { id:'final',     label:'최종 평가' },
-    ];
-    if (this.isAdmin()) tabs.push({ id:'admin', label:'관리자 설정' });
-
-    const nav = document.getElementById('nav-tabs');
-    nav.innerHTML = tabs.map(t =>
-      `<button class="ntb" id="ntb-${t.id}" onclick="App.navigate('${t.id}')">${t.label}</button>`
-    ).join('');
+    updateNavForRole();
   },
 
   navigate(page) {
     closeMobileMenu();
-    document.querySelectorAll('.ntb').forEach(b => b.classList.remove('active'));
-    const btn = document.getElementById('ntb-'+page);
-    if (btn) btn.classList.add('active');
+    closeNavDropdown();
     const area = document.getElementById('main-area');
     area.innerHTML = '<div class="spinner">로딩 중...</div>';
     const P = {
-      'my-eval':   Pages.myEval,
-      'approvals': Pages.approvals,
-      'progress':  Pages.progressReport,
-      'feedback':  Pages.feedback,
-      'final':     Pages.finalEval,
-      'admin':     Pages.admin,
+      'my-eval':        Pages.myEval,
+      'myEval':         Pages.myEval,
+      'approvals':      Pages.approvals,
+      'progress':       Pages.progressReport,
+      'progressReport': Pages.progressReport,
+      'feedback':       Pages.feedback,
+      'final':          Pages.finalEval,
+      'finalEval':      Pages.finalEval,
+      'admin':          Pages.admin,
+      'okrDashboard':   Pages.okrDashboard,
     };
     if (P[page]) P[page]();
     else area.innerHTML = '';
@@ -130,11 +186,20 @@ function toggleMobileMenu() {
     {
       label: '내 평가',
       icon: '📋',
+      navigate: 'my-eval',
       items: [
-        { label: '승인 관리',   tab: 'approvals' },
-        { label: '중간 보고',   tab: 'progress'  },
-        { label: '중간 피드백', tab: 'feedback'  },
-        { label: '최종 평가',   tab: 'final'     },
+        { label: '승인 관리', navigate: 'approvals' },
+        { label: '최종 평가', navigate: 'final'     },
+      ]
+    },
+    {
+      label: '성과관리',
+      icon: '📊',
+      navigate: null,
+      items: [
+        { label: '중간 보고',   navigate: 'progress'      },
+        { label: '중간 피드백', navigate: 'feedback'      },
+        { label: '🎯 OKR 현황', navigate: 'okrDashboard'  },
       ]
     },
   ];
@@ -143,6 +208,7 @@ function toggleMobileMenu() {
     menuGroups.push({
       label: '관리자 설정',
       icon: '⚙',
+      navigate: 'admin',
       items: [
         { label: '계정 승인 관리',   tab: 'adm-accounts'  },
         { label: '전직원 평가 현황', tab: 'adm-status'    },
@@ -187,8 +253,7 @@ function toggleMobileMenu() {
     groupLabel.innerHTML = `${group.icon} ${group.label}`;
     groupLabel.onclick = () => {
       closeMobileMenu();
-      if (group.label === '내 평가') App.navigate('my-eval');
-      else if (group.label === '관리자 설정') App.navigate('admin');
+      if (group.navigate) App.navigate(group.navigate);
     };
 
     // 우측: 아코디언 토글 버튼
@@ -206,10 +271,12 @@ function toggleMobileMenu() {
       itemDiv.innerHTML = `<span style="color:var(--o300)">›</span> ${item.label}`;
       itemDiv.onclick = () => {
         closeMobileMenu();
-        if (item.tab.startsWith('adm-')) {
+        if (item.tab?.startsWith('adm-')) {
           App.navigate('admin');
           setTimeout(() => switchAdmTab(item.tab), 300);
-        } else {
+        } else if (item.navigate) {
+          App.navigate(item.navigate);
+        } else if (item.tab) {
           App.navigate(item.tab);
         }
       };
@@ -250,3 +317,129 @@ function closeMobileMenu() {
   document.getElementById('mobile-nav-menu')?.remove();
   document.getElementById('mobile-nav-overlay')?.remove();
 }
+
+// PC 드롭다운 메뉴
+function toggleNavDropdown(id) {
+  const menus  = document.querySelectorAll('.nav-dropdown-menu');
+  const arrows = document.querySelectorAll('.dd-arrow');
+  const target = document.getElementById(id);
+  const isOpen = target?.style.display === 'block';
+
+  menus.forEach(m => m.style.display = 'none');
+  arrows.forEach(a => a.style.transform = '');
+
+  if (!isOpen && target) {
+    target.style.display = 'block';
+    const btn   = target.previousElementSibling;
+    const arrow = btn?.querySelector('.dd-arrow');
+    if (arrow) arrow.style.transform = 'rotate(180deg)';
+    setTimeout(() => {
+      document.addEventListener('click', closeNavDropdownOnOutside, { once: true });
+    }, 100);
+  }
+}
+
+function closeNavDropdown() {
+  document.querySelectorAll('.nav-dropdown-menu').forEach(m => m.style.display = 'none');
+  document.querySelectorAll('.dd-arrow').forEach(a => a.style.transform = '');
+}
+
+function closeNavDropdownOnOutside(e) {
+  if (!e.target.closest('.nav-dropdown')) closeNavDropdown();
+}
+
+function updateNavForRole() {
+  const isAdmin = App.isAdmin();
+  document.querySelectorAll('.admin-only').forEach(el => {
+    el.style.display = isAdmin ? 'block' : 'none';
+  });
+}
+
+// OKR 현황 대시보드 (조회 전용)
+Pages.okrDashboard = async function() {
+  const area = document.getElementById('main-area');
+  area.innerHTML = '<div class="spinner">로딩 중...</div>';
+  try {
+    const cycles = await API.get('/okr').catch(() => []);
+    area.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'margin-bottom:16px';
+    header.innerHTML = `
+      <div style="font-size:18px;font-weight:700;color:var(--o800)">🎯 OKR 현황</div>
+      <div style="font-size:12px;color:var(--muted)">전체 기간 OKR 달성률 조회</div>`;
+    area.appendChild(header);
+
+    if (!cycles.length) {
+      area.innerHTML += '<div class="card"><div class="alert alert-orange">작성된 OKR이 없습니다. 내 평가 탭에서 OKR을 작성해주세요.</div></div>';
+      return;
+    }
+
+    cycles.forEach(cycle => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.marginBottom = '12px';
+
+      let totalKRs = 0, totalPct = 0;
+      cycle.objectives.forEach(obj =>
+        obj.key_results.forEach(kr => {
+          totalKRs++;
+          totalPct += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
+        })
+      );
+      const avg = totalKRs > 0 ? Math.round(totalPct / totalKRs) : 0;
+      const col = avg >= 70 ? 'var(--green)' : avg >= 40 ? 'var(--o500)' : '#E53935';
+
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:15px;font-weight:600">${cycle.period_label}</div>
+            <div style="font-size:12px;color:var(--muted)">${cycle.eval_year} · OKR</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:800;color:${col}">${avg}%</div>
+            <div style="font-size:11px;color:var(--muted)">전체 달성률</div>
+          </div>
+        </div>
+        <div style="background:var(--o100);border-radius:20px;height:10px;margin-bottom:16px">
+          <div style="background:${col};border-radius:20px;height:100%;
+                      width:${Math.min(avg,100)}%;transition:width .4s"></div>
+        </div>
+        ${cycle.objectives.map((obj, oi) => {
+          const op = obj.key_results.length
+            ? Math.round(obj.key_results.reduce((a,kr) =>
+                a + (kr.target_value>0?(kr.current_value/kr.target_value)*100:0),0)
+                / obj.key_results.length) : 0;
+          const oc = op>=70?'var(--green)':op>=40?'var(--o500)':'#E53935';
+          return `
+          <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <div style="font-size:13px;font-weight:600;color:var(--o800)">🎯 O${oi+1}. ${obj.title}</div>
+              <span style="font-size:14px;font-weight:700;color:${oc}">${op}%</span>
+            </div>
+            ${obj.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${obj.description}</div>`:''}
+            ${obj.key_results.map((kr,ki) => {
+              const kp = kr.target_value>0?Math.round((kr.current_value/kr.target_value)*100):0;
+              const kc = kp>=70?'var(--green)':kp>=40?'var(--o500)':'#E53935';
+              return `
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+                          font-size:12px;border-top:1px solid var(--o50)">
+                <span style="color:var(--muted);white-space:nowrap">KR${ki+1}</span>
+                <span style="flex:1;color:var(--o700)">${kr.title}</span>
+                <span style="color:var(--muted);white-space:nowrap">
+                  ${kr.current_value}/${kr.target_value}${kr.unit}</span>
+                <div style="width:80px;background:var(--o100);border-radius:10px;height:6px;flex-shrink:0">
+                  <div style="background:${kc};border-radius:10px;height:100%;width:${Math.min(kp,100)}%"></div>
+                </div>
+                <span style="font-weight:700;color:${kc};width:36px;text-align:right">${kp}%</span>
+              </div>`;
+            }).join('')}
+          </div>`;
+        }).join('')}`;
+      area.appendChild(card);
+    });
+  } catch(err) {
+    area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
+  }
+};

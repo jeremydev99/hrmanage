@@ -252,6 +252,26 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .pc-only     { display: block; }
 .mobile-only { display: none;  }
 
+/* 드롭다운 메뉴 */
+.dd-item:hover {
+  background: var(--o50) !important;
+  color: var(--o500) !important;
+}
+.nav-dropdown-btn.active {
+  color: var(--o500);
+  border-bottom: 2px solid var(--o500);
+}
+.nav-tab {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 14px;
+  padding: 6px 12px;
+  cursor: pointer;
+  opacity: .85;
+  border-radius: 6px;
+}
+
 /* 모바일 (480px 이하) */
 @media (max-width: 480px) {
   .pc-only     { display: none !important; }

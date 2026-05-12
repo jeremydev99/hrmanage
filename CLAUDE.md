@@ -266,7 +266,14 @@ users:             ... org_id INTEGER (추가)
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **로그인 공지사항**:
+24. **메뉴 구조 (PC/모바일 공통)**:
+    - 내 평가 ▼: 내 평가 홈, 승인관리, 최종평가
+    - 성과관리 ▼: 중간보고, 중간피드백, OKR 현황
+    - 관리자 설정 ▼: 관리자 탭들 (admin+, `.admin-only` 클래스로 토글)
+    - PC: `.nav-tabs-wrap` 드롭다운 (`toggleNavDropdown`, `closeNavDropdown`)
+    - 모바일(480px): `nav-tabs-wrap` 숨김 → 햄버거 전체화면 메뉴
+    - OKR 현황: `Pages.okrDashboard` (조회 전용, 편집 없음) — `app.js`에 정의
+25. **로그인 공지사항**:
     - `app_settings.notice` (value, updated_by, updated_at)
     - `GET /api/notice`: 인증 없이 조회 가능
     - 수정 시 감사 로그 자동 기록
@@ -447,6 +454,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | PC 드롭다운 메뉴 (내평가/성과관리/관리자설정), OKR 현황 대시보드 추가 | Claude Code |
 | 2026-05-12 | 햄버거 메뉴 1레벨 탭이동/아코디언 분리, 로그인 공지사항 기능 추가 (DB마이그레이션, 감사로그) | Claude Code |
 | 2026-05-12 | 모바일 햄버거 메뉴 재설계 (아코디언 2레벨, 사용자정보 메뉴 상단 이동) | Claude Code |
 | 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 버튼 줄바꿈 방지, 768px/480px 미디어쿼리) | Claude Code |
