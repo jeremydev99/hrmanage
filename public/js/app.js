@@ -56,6 +56,7 @@ const App = {
           <button id="hamburger-btn" class="hamburger-btn"
             style="display:none;background:none;border:none;cursor:pointer;padding:6px;
                    flex-direction:column;gap:5px;align-items:center;justify-content:center;flex-shrink:0"
+            ontouchstart="event.preventDefault();toggleMobileMenu()"
             onclick="toggleMobileMenu()">
             <span style="display:block;width:22px;height:2px;background:white;border-radius:2px"></span>
             <span style="display:block;width:22px;height:2px;background:white;border-radius:2px"></span>
@@ -348,7 +349,7 @@ function toggleNavDD(id, e) {
     if (arrow) arrow.style.transform = 'rotate(180deg)';
     setTimeout(() => {
       document.addEventListener('click', closeNavDD, { once: true });
-    }, 50);
+    }, 300);
   }
 }
 
