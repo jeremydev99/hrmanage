@@ -41,11 +41,16 @@ Pages.okrEval = async function(periodLabel, evalYear, mode) {
     area.appendChild(header);
 
     if (!cycles.length) {
+      // 기간 지정 진입(내 평가 탭 버튼)이면 바로 작성 폼으로
+      if (periodLabel) {
+        startNewOKR(periodLabel, evalYear);
+        return;
+      }
       const empty = document.createElement('div');
       empty.className = 'card';
-      empty.innerHTML = `<div class="alert alert-orange">작성된 ${mode||'OKR'}이 없습니다.
+      empty.innerHTML = `<div class="alert alert-orange">작성된 OKR이 없습니다.
         <button class="btn btn-ghost btn-sm" style="margin-left:8px"
-          onclick="startNewOKR('${periodLabel||''}','${evalYear||''}')">지금 작성하기 →</button>
+          onclick="startNewOKR()">지금 작성하기 →</button>
       </div>`;
       area.appendChild(empty);
       return;
