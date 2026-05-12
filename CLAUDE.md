@@ -427,6 +427,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | my-modes API MBO 제외 조건 추가, eval_period_modes 잘못된 데이터 정리 | Claude Code |
 | 2026-05-12 | organizations 테이블 추가 (계층구조, 조직장, 멤버), org_id 기반 평가방식 조회 | Claude Code |
 | 2026-05-12 | _currentPeriodLabel 중복 선언 제거 (SyntaxError 수정) | Claude Code |
 | 2026-05-12 | okr-eval.js API 경로 확인 (/okr 유지, api.js base='/api'로 자동 prefix됨 — 수정 불필요) | Claude Code |

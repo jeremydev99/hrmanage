@@ -1149,12 +1149,12 @@ app.get('/api/eval-periods/my-modes', auth, (req, res) => {
     const leaderChain = getMyOrgLeaderChain(req.user.sub);
 
     const result = activePeriods.map(period => {
-      // org_id 기반 조직장 체인 탐색
+      // org_id 기반 조직장 체인 탐색 (MBO가 아닌 명시적 설정만 반환)
       for (const leaderId of leaderChain) {
         const orgMode = db.prepare(
           'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
         ).get(period.id, leaderId);
-        if (orgMode) return {
+        if (orgMode && orgMode.eval_mode !== 'MBO') return {
           period_id: period.id, period_label: period.period_label,
           eval_year: period.eval_year, mode: orgMode.eval_mode, source: 'org_period'
         };
