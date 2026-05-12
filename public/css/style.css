@@ -252,15 +252,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .pc-only     { display: block; }
 .mobile-only { display: none;  }
 
-/* 드롭다운 메뉴 */
-.dd-item:hover {
-  background: var(--o50) !important;
-  color: var(--o500) !important;
-}
-.nav-dropdown-btn.active {
-  color: var(--o500);
-  border-bottom: 2px solid var(--o500);
-}
+/* ── PC 드롭다운 메뉴 ─────────────────────── */
 .nav-tab {
   background: none;
   border: none;
@@ -270,6 +262,52 @@ textarea:focus{outline:none;border-color:var(--o400)}
   cursor: pointer;
   opacity: .85;
   border-radius: 6px;
+}
+.nav-tab:hover { opacity: 1; }
+
+.nav-dd-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  background: white;
+  border-radius: 8px;
+  min-width: 150px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
+  z-index: 200;
+  overflow: hidden;
+  border: 1px solid var(--o100);
+  transform-origin: top center;
+}
+.nav-dd-menu.open {
+  display: block;
+  animation: ddSlideDown 0.15s ease-out forwards;
+}
+@keyframes ddSlideDown {
+  from { opacity: 0; transform: scaleY(0.85) translateY(-6px); }
+  to   { opacity: 1; transform: scaleY(1)    translateY(0);    }
+}
+.dd-item {
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--o700);
+  cursor: pointer;
+  border-bottom: 1px solid var(--o50);
+  transition: background .1s;
+  white-space: nowrap;
+}
+.dd-item:last-child { border-bottom: none; }
+.dd-item:hover {
+  background: var(--o50);
+  color: var(--o500);
+}
+.dd-section-label {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: var(--muted);
+  background: var(--o50);
+  border-bottom: 1px solid var(--o100);
+  font-weight: 500;
 }
 
 /* 모바일 (480px 이하) */

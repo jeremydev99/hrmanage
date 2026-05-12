@@ -144,6 +144,34 @@ app.post('/api/notice', auth, adminOnly, (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// 세션 정책 조회
+app.get('/api/settings/session-policy', auth, (req, res) => {
+  try {
+    const policy = db.prepare("SELECT value FROM app_settings WHERE key='session_policy'").get();
+    res.json(JSON.parse(policy?.value || '{"close_on_browser_close":false,"timeout_minutes":480}'));
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 세션 정책 설정 (master만)
+app.post('/api/settings/session-policy', auth, masterOnly, (req, res) => {
+  try {
+    const { close_on_browser_close, timeout_minutes } = req.body;
+    const safeTimeout = Math.min(parseInt(timeout_minutes) || 480, 480);
+    if (safeTimeout < 1)
+      return res.status(400).json({ error: '최소 1분 이상이어야 합니다.' });
+    const policy = { close_on_browser_close: !!close_on_browser_close, timeout_minutes: safeTimeout };
+    db.prepare(`
+      INSERT INTO app_settings(key,value,updated_by,updated_at)
+      VALUES('session_policy',?,?,datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value=excluded.value, updated_by=excluded.updated_by, updated_at=excluded.updated_at
+    `).run(JSON.stringify(policy), req.user.sub);
+    auditLog(req.user.sub, 'SESSION_POLICY_CHANGED', null, null,
+      `세션 정책 변경: 브라우저종료=${policy.close_on_browser_close}, 만료=${safeTimeout}분`, req.ip);
+    res.json({ success: true, policy });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ════════════════════════════════════════════════════════════
 //  AUTH API
 // ════════════════════════════════════════════════════════════

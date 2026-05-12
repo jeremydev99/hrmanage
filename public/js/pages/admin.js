@@ -1355,7 +1355,7 @@ async function renderAdmPolicy() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode, notice] = await Promise.all([
+    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode, notice, sessionPolicy] = await Promise.all([
       API.get('/settings/history-visibility'),
       API.get('/settings/history-inactive'),
       API.get('/settings/feedback-limit'),
@@ -1364,6 +1364,7 @@ async function renderAdmPolicy() {
       API.get('/settings/timezone'),
       API.get('/settings/eval-mode'),
       fetch('/api/notice').then(r => r.json()).catch(() => ({ content: '', author_name: '', updated_at: '' })),
+      API.get('/settings/session-policy').catch(() => ({ close_on_browser_close: false, timeout_minutes: 480 })),
     ]);
 
     const limitOptions = [
@@ -1398,6 +1399,51 @@ async function renderAdmPolicy() {
           style="width:100%;min-height:120px;font-size:13px;resize:vertical;padding:10px;border-radius:6px;border:1px solid var(--border)"
         >${(notice.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">공지 내용이 없으면 로그인 화면에 공지 영역이 표시되지 않습니다.</div>
+      </div>
+
+      <!-- 세션 보안 정책 -->
+      <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid var(--o100)">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px">🔐 세션 보안 정책</div>
+
+        <div class="srow">
+          <div>
+            <div style="font-size:13px;font-weight:500">브라우저 종료 시 자동 로그아웃</div>
+            <div style="font-size:12px;color:var(--muted)">탭/브라우저 닫으면 즉시 세션 만료</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="session-close-on-browser"
+              ${sessionPolicy.close_on_browser_close ? 'checked' : ''}
+              style="width:16px;height:16px">
+            <span style="font-size:13px">${sessionPolicy.close_on_browser_close ? '켜짐' : '꺼짐'}</span>
+          </label>
+        </div>
+
+        <div style="margin-top:12px">
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px">세션 유지 시간</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            ${[5,10,30,60].map(m => `
+              <button class="btn btn-sm session-timeout-btn ${sessionPolicy.timeout_minutes===m?'btn-primary':'btn-ghost'}"
+                onclick="selectSessionTimeout(${m},this)" style="font-size:12px">
+                ${m>=60?m/60+'시간':m+'분'}
+              </button>`).join('')}
+            <div style="display:flex;align-items:center;gap:4px">
+              <input id="session-custom-hours" type="number" min="1" max="8"
+                placeholder="직접입력"
+                value="${![5,10,30,60].includes(sessionPolicy.timeout_minutes)&&sessionPolicy.timeout_minutes<480
+                  ? Math.round(sessionPolicy.timeout_minutes/60) : ''}"
+                style="width:70px;height:32px;font-size:12px;text-align:center">
+              <span style="font-size:12px;color:var(--muted)">시간 (최대 8시간)</span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">
+            ⚠ 최대 8시간을 초과할 수 없습니다.
+            현재: ${sessionPolicy.timeout_minutes>=60
+              ? Math.round(sessionPolicy.timeout_minutes/60)+'시간'
+              : sessionPolicy.timeout_minutes+'분'}
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px"
+          onclick="saveSessionPolicy()">세션 정책 저장</button>
       </div>
 
       <div class="srow">
@@ -1591,6 +1637,37 @@ async function saveNotice() {
   try {
     const r = await API.post('/notice', { content });
     showAlert(`공지사항이 저장되었습니다. (저장자: ${r.author_name||''})`, 'green');
+    renderAdmPolicy();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+let _sessionTimeoutSel = null;
+
+function selectSessionTimeout(minutes, btn) {
+  _sessionTimeoutSel = minutes;
+  document.querySelectorAll('.session-timeout-btn').forEach(b => {
+    b.classList.remove('btn-primary'); b.classList.add('btn-ghost');
+  });
+  btn.classList.remove('btn-ghost');
+  btn.classList.add('btn-primary');
+  document.getElementById('session-custom-hours').value = '';
+}
+
+async function saveSessionPolicy() {
+  const closeOnBrowser = document.getElementById('session-close-on-browser')?.checked;
+  const customH = parseFloat(document.getElementById('session-custom-hours')?.value);
+  let timeout = _sessionTimeoutSel || 480;
+  if (!isNaN(customH) && customH > 0) timeout = Math.round(customH * 60);
+  if (timeout > 480) { showAlert('최대 8시간을 초과할 수 없습니다.', 'red'); return; }
+  try {
+    await API.post('/settings/session-policy', {
+      close_on_browser_close: closeOnBrowser,
+      timeout_minutes: timeout
+    });
+    showAlert(`세션 정책 저장 완료 (${
+      timeout>=60?Math.round(timeout/60)+'시간':timeout+'분'
+    }${closeOnBrowser?', 브라우저 종료 시 만료':''})`, 'green');
+    _sessionTimeoutSel = null;
     renderAdmPolicy();
   } catch(e) { showAlert(e.message, 'red'); }
 }

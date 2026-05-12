@@ -266,7 +266,18 @@ users:             ... org_id INTEGER (추가)
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **메뉴 구조 (PC/모바일 공통)**:
+24. **PC 드롭다운 메뉴**:
+    - 상위 클릭: 드롭다운만 펼침 (이동 없음), `toggleNavDD(id, event)`
+    - 하위 클릭: 페이지 이동, `closeNavDD()`
+    - 애니메이션: 0.15s `ddSlideDown` (scaleY + translateY)
+    - CSS: `.nav-dd-menu`, `.nav-dd-menu.open`, `.dd-item`, `.dd-section-label`
+    - 세션 보안 (`app_settings.session_policy` JSON):
+      `close_on_browser_close`: sessionStorage 사용
+      `timeout_minutes`: 만료 시각 localStorage, 1분마다 체크
+      최대 8시간 강제 제한, 관리: 관리자 설정 → 평가 정책 (master만)
+    - 성과관리 홈: `Pages.perfHome` (프롬프트 31 상세 구현 예정)
+    - OKR 현황: `Pages.okrDashboard` (조회 전용)
+25. **메뉴 구조 (PC/모바일 공통)**:
     - 내 평가 ▼: 내 평가 홈, 승인관리, 최종평가
     - 성과관리 ▼: 중간보고, 중간피드백, OKR 현황
     - 관리자 설정 ▼: 관리자 탭들 (admin+, `.admin-only` 클래스로 토글)
@@ -383,6 +394,8 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/settings/session-policy      세션 정책 조회
+POST   /api/settings/session-policy     세션 정책 설정 (master)
 GET    /api/notice                       공지사항 조회 (인증 불필요)
 POST   /api/notice                       공지사항 수정 (admin+, 감사로그)
 GET    /api/organizations                조직 목록 (계층 포함)
@@ -454,6 +467,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | PC 드롭다운 메뉴(0.15s 슬라이드 애니), 성과관리 메뉴, OKR 현황, 세션 보안 정책 | Claude Code |
 | 2026-05-12 | PC 드롭다운 메뉴 (내평가/성과관리/관리자설정), OKR 현황 대시보드 추가 | Claude Code |
 | 2026-05-12 | 햄버거 메뉴 1레벨 탭이동/아코디언 분리, 로그인 공지사항 기능 추가 (DB마이그레이션, 감사로그) | Claude Code |
 | 2026-05-12 | 모바일 햄버거 메뉴 재설계 (아코디언 2레벨, 사용자정보 메뉴 상단 이동) | Claude Code |

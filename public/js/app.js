@@ -4,13 +4,15 @@ const App = {
   categories: [],
 
   async init() {
-    const token = API.token();
+    const token = getToken();
     if (token) {
       try {
+        API.setToken(token);
         this.user = await API.get('/auth/me');
         this.categories = await API.get('/categories');
         this.render();
         this.navigate('my-eval');
+        startSessionCheck();
       } catch { this.renderLogin(); }
     } else { this.renderLogin(); }
   },
@@ -19,15 +21,19 @@ const App = {
 
   async login(email, pw) {
     const data = await API.post('/auth/login', { email, password: pw });
-    API.setToken(data.token);
     this.user = data.user;
     this.categories = await API.get('/categories');
+    await applySessionPolicy(data.token);
     this.render();
     this.navigate('my-eval');
+    startSessionCheck();
   },
 
   logout() {
     API.clearToken();
+    sessionStorage.removeItem('synap_token');
+    localStorage.removeItem('synap_token');
+    localStorage.removeItem('synap_expire');
     this.user = null;
     document.getElementById('app').innerHTML = '';
     this.renderLogin();
@@ -67,76 +73,52 @@ const App = {
             onclick="App.logout()">로그아웃</button>
         </div>
       </div>
-      <div class="nav-tabs-wrap" style="display:flex;align-items:center;gap:4px;padding:0 8px">
+      <nav class="nav-tabs-wrap" style="display:flex;align-items:center;gap:2px;padding:0 8px">
 
-        <!-- 내 평가 드롭다운 -->
+        <!-- 내 평가 -->
         <div class="nav-dropdown" style="position:relative">
-          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-myeval')"
+          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-myeval',event)"
             style="display:flex;align-items:center;gap:4px">
             내 평가 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
           </button>
-          <div id="dd-myeval" class="nav-dropdown-menu" style="display:none;position:absolute;
-            top:100%;left:0;background:white;border-radius:8px;min-width:140px;
-            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
-            border:1px solid var(--o100)">
-            <div class="dd-item dd-header" onclick="closeNavDropdown();App.navigate('my-eval')"
-              style="padding:10px 16px;font-size:13px;font-weight:600;color:var(--o700);
-                     cursor:pointer;border-bottom:1px solid var(--o100);background:var(--o50)">
-              📋 내 평가 홈
-            </div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('approvals')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
-                     border-bottom:1px solid var(--o50)">승인 관리</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('final')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">최종 평가</div>
+          <div id="dd-myeval" class="nav-dd-menu">
+            <div class="dd-item" onclick="closeNavDD();App.navigate('myEval')">📋 내 평가 홈</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('approvals')">승인 관리</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('finalEval')">최종 평가</div>
           </div>
         </div>
 
-        <!-- 성과관리 드롭다운 -->
+        <!-- 성과관리 -->
         <div class="nav-dropdown" style="position:relative">
-          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-performance')"
+          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-perf',event)"
             style="display:flex;align-items:center;gap:4px">
             성과관리 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
           </button>
-          <div id="dd-performance" class="nav-dropdown-menu" style="display:none;position:absolute;
-            top:100%;left:0;background:white;border-radius:8px;min-width:140px;
-            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
-            border:1px solid var(--o100)">
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('progress')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
-                     border-bottom:1px solid var(--o50)">중간 보고</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('feedback')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;
-                     border-bottom:1px solid var(--o50)">중간 피드백</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('okrDashboard')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">
-              🎯 OKR 현황</div>
+          <div id="dd-perf" class="nav-dd-menu">
+            <div class="dd-item" onclick="closeNavDD();App.navigate('perfHome')">📊 성과관리 홈</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('progressReport')">중간 보고</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('feedback')">중간 피드백</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
           </div>
         </div>
 
-        <!-- 관리자 설정 드롭다운 (admin+ 만 표시) -->
+        <!-- 관리자 설정 (admin+만) -->
         <div class="nav-dropdown admin-only" style="position:relative;display:none">
-          <button class="nav-tab nav-dropdown-btn" onclick="toggleNavDropdown('dd-admin')"
+          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-admin',event)"
             style="display:flex;align-items:center;gap:4px">
             관리자 설정 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
           </button>
-          <div id="dd-admin" class="nav-dropdown-menu" style="display:none;position:absolute;
-            top:100%;right:0;background:white;border-radius:8px;min-width:160px;
-            box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;overflow:hidden;
-            border:1px solid var(--o100)">
-            <div class="dd-item dd-header"
-              style="padding:8px 16px;font-size:11px;color:var(--muted);
-                     background:var(--o50);border-bottom:1px solid var(--o100)">관리자 메뉴</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;border-bottom:1px solid var(--o50)">계정 승인 관리</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer;border-bottom:1px solid var(--o50)">전직원 평가 현황</div>
-            <div class="dd-item" onclick="closeNavDropdown();App.navigate('admin')"
-              style="padding:10px 16px;font-size:13px;color:var(--o700);cursor:pointer">관리자 설정 전체</div>
+          <div id="dd-admin" class="nav-dd-menu" style="right:0;left:auto">
+            <div class="dd-section-label">관리자 메뉴</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)">계정 승인 관리</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)">전직원 평가 현황</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-periods'),300)">평가 기간 관리</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-policy'),300)">평가 정책</div>
+            <div class="dd-item" onclick="closeNavDD();App.navigate('admin')">관리자 설정 전체</div>
           </div>
         </div>
 
-      </div>
+      </nav>
       <div id="main-alert" style="padding:0 20px;max-width:900px;margin:0 auto"></div>
       <div class="main" id="main-area"></div>
     `;
@@ -152,7 +134,7 @@ const App = {
 
   navigate(page) {
     closeMobileMenu();
-    closeNavDropdown();
+    closeNavDD();
     const area = document.getElementById('main-area');
     area.innerHTML = '<div class="spinner">로딩 중...</div>';
     const P = {
@@ -166,6 +148,7 @@ const App = {
       'finalEval':      Pages.finalEval,
       'admin':          Pages.admin,
       'okrDashboard':   Pages.okrDashboard,
+      'perfHome':       Pages.perfHome,
     };
     if (P[page]) P[page]();
     else area.innerHTML = '';
@@ -319,34 +302,29 @@ function closeMobileMenu() {
 }
 
 // PC 드롭다운 메뉴
-function toggleNavDropdown(id) {
-  const menus  = document.querySelectorAll('.nav-dropdown-menu');
-  const arrows = document.querySelectorAll('.dd-arrow');
+function toggleNavDD(id, e) {
+  e?.stopPropagation();
   const target = document.getElementById(id);
-  const isOpen = target?.style.display === 'block';
-
-  menus.forEach(m => m.style.display = 'none');
-  arrows.forEach(a => a.style.transform = '');
-
+  const isOpen = target?.classList.contains('open');
+  closeNavDD();
   if (!isOpen && target) {
-    target.style.display = 'block';
+    target.classList.add('open');
     const btn   = target.previousElementSibling;
     const arrow = btn?.querySelector('.dd-arrow');
     if (arrow) arrow.style.transform = 'rotate(180deg)';
     setTimeout(() => {
-      document.addEventListener('click', closeNavDropdownOnOutside, { once: true });
-    }, 100);
+      document.addEventListener('click', closeNavDD, { once: true });
+    }, 50);
   }
 }
 
-function closeNavDropdown() {
-  document.querySelectorAll('.nav-dropdown-menu').forEach(m => m.style.display = 'none');
-  document.querySelectorAll('.dd-arrow').forEach(a => a.style.transform = '');
+function closeNavDD() {
+  document.querySelectorAll('.nav-dd-menu').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.nav-dropdown .dd-arrow').forEach(a => a.style.transform = '');
 }
 
-function closeNavDropdownOnOutside(e) {
-  if (!e.target.closest('.nav-dropdown')) closeNavDropdown();
-}
+// 하위 호환 별칭
+const closeNavDropdown = closeNavDD;
 
 function updateNavForRole() {
   const isAdmin = App.isAdmin();
@@ -364,14 +342,18 @@ Pages.okrDashboard = async function() {
     area.innerHTML = '';
 
     const header = document.createElement('div');
-    header.style.cssText = 'margin-bottom:16px';
+    header.style.marginBottom = '16px';
     header.innerHTML = `
       <div style="font-size:18px;font-weight:700;color:var(--o800)">🎯 OKR 현황</div>
-      <div style="font-size:12px;color:var(--muted)">전체 기간 OKR 달성률 조회</div>`;
+      <div style="font-size:12px;color:var(--muted)">전체 기간 OKR 달성률 (편집은 내 평가 탭에서)</div>`;
     area.appendChild(header);
 
     if (!cycles.length) {
-      area.innerHTML += '<div class="card"><div class="alert alert-orange">작성된 OKR이 없습니다. 내 평가 탭에서 OKR을 작성해주세요.</div></div>';
+      area.innerHTML += `<div class="card"><div class="alert alert-orange">
+        작성된 OKR이 없습니다.
+        <button class="btn btn-ghost btn-sm" style="margin-left:8px"
+          onclick="App.navigate('myEval')">내 평가로 이동 →</button>
+      </div></div>`;
       return;
     }
 
@@ -443,3 +425,59 @@ Pages.okrDashboard = async function() {
     area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
   }
 };
+
+// 성과관리 홈 (프롬프트 31에서 상세 구현)
+Pages.perfHome = async function() {
+  const area = document.getElementById('main-area');
+  area.innerHTML = `
+    <div style="margin-bottom:16px">
+      <div style="font-size:18px;font-weight:700;color:var(--o800)">📊 성과관리 홈</div>
+      <div style="font-size:12px;color:var(--muted)">기간별 성과 요약 및 AI 분석</div>
+    </div>
+    <div class="card">
+      <div class="alert alert-teal">
+        🚧 성과관리 대시보드 준비 중입니다.
+        <div style="font-size:12px;margin-top:4px">중간 보고, 중간 피드백, OKR 현황은 각 메뉴에서 확인하세요.</div>
+      </div>
+    </div>`;
+};
+
+// 세션 관리
+function getToken() {
+  return localStorage.getItem('synap_token') || sessionStorage.getItem('synap_token');
+}
+
+async function applySessionPolicy(token) {
+  try {
+    const policy = await fetch('/api/settings/session-policy', {
+      headers: { Authorization: 'Bearer ' + token }
+    }).then(r => r.json());
+    if (policy.close_on_browser_close) {
+      sessionStorage.setItem('synap_token', token);
+      localStorage.removeItem('synap_token');
+    } else {
+      localStorage.setItem('synap_token', token);
+      sessionStorage.removeItem('synap_token');
+    }
+    if (policy.timeout_minutes && policy.timeout_minutes < 480) {
+      localStorage.setItem('synap_expire', (Date.now() + policy.timeout_minutes * 60 * 1000).toString());
+    } else {
+      localStorage.removeItem('synap_expire');
+    }
+  } catch(e) {
+    localStorage.setItem('synap_token', token);
+  }
+}
+
+function startSessionCheck() {
+  setInterval(() => {
+    const exp = localStorage.getItem('synap_expire');
+    if (exp && Date.now() > parseInt(exp)) {
+      localStorage.removeItem('synap_token');
+      localStorage.removeItem('synap_expire');
+      sessionStorage.removeItem('synap_token');
+      showAlert('세션이 만료되었습니다. 다시 로그인해주세요.', 'orange');
+      setTimeout(() => App.logout(), 1500);
+    }
+  }, 60 * 1000);
+}
