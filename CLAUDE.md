@@ -473,6 +473,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 목표 작성 기간 선택 UI 숨김 (데이터 충돌 방지, 활성 기간 텍스트로만 표시) | Claude Code |
 | 2026-05-12 | 모바일 햄버거 메뉴 터치 지연 수정 (ontouchstart 추가, closeNavDD 딜레이 300ms) | Claude Code |
 | 2026-05-12 | 드롭다운 텍스트 표시 수정, 모바일 아코디언 애니메이션 추가 | Claude Code |
 | 2026-05-12 | 드롭다운 메뉴 z-index 및 배경색 수정 (z-index:9999, background:white !important) | Claude Code |

@@ -256,25 +256,27 @@ function renderGoalSetForm(ev, approvers) {
     ? `<div class="alert alert-orange">승인 체계: ${approvers.map((a,i)=>`${i+1}차 ${a.name}(${a.title})`).join(' → ')}</div>`
     : `<div class="alert alert-red">조직도에 상위 승인자가 없습니다. 인사팀에 문의하세요.</div>`;
 
+  // 기간 표시 텍스트 (신규: 활성 기간, 편집: 기존 기간 + 잠금 표시)
+  const periodLabel = _currentPeriodLabel || ev?.period_label || '';
+  const evalYear    = _currentEvalYear    || ev?.eval_year    || '';
+  const isEdit      = !!ev?.id;
+  const periodHtml  = `
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">
+      📅 평가 기간:
+      <strong style="color:var(--o800)">${periodLabel} (${evalYear})</strong>
+      ${isEdit ? '<span style="font-size:11px;color:var(--muted);margin-left:6px">🔒 변경 불가</span>' : ''}
+    </div>`;
+
   const card = html(`<div class="card">
     <div class="card-header"><div><div class="card-header-t">목표 설정</div><div class="card-header-s">카테고리별 목표를 입력하고 승인을 요청하세요</div></div></div>
     <div class="form-row">
       <div class="form-group"><label>사원명</label><input value="${App.user.name}" disabled style="background:var(--o50)"></div>
       <div class="form-group"><label>부서</label><input value="${App.user.dept||''}" disabled style="background:var(--o50)"></div>
-      <div class="form-group"><label>평가 연도</label><select id="ev-year"><option>2025년</option><option>2026년</option></select></div>
     </div>
+    ${periodHtml}
     ${apprHtml}
-    <label class="form-group" style="margin-bottom:6px"><span style="font-size:12px;color:var(--o600);font-weight:500">평가 주기</span></label>
-    <div class="period-pick">
-      <div class="popt${_period==='q'?' sel':''}" id="po-q"><div class="pt">분기 평가</div><div class="ps">연 4회</div></div>
-      <div class="popt${_period==='h'?' sel':''}" id="po-h"><div class="pt">반기 평가</div><div class="ps">연 2회</div></div>
-    </div>
-    <div class="sub-periods" id="subPeriods"></div>
   </div>`);
   area.appendChild(card);
-  document.getElementById('po-q').onclick = () => { _period='q';_subP='1'; document.querySelectorAll('.popt').forEach(x=>x.classList.remove('sel')); document.getElementById('po-q').classList.add('sel'); renderSubP(); };
-  document.getElementById('po-h').onclick = () => { _period='h';_subP='1'; document.querySelectorAll('.popt').forEach(x=>x.classList.remove('sel')); document.getElementById('po-h').classList.add('sel'); renderSubP(); };
-  renderSubP();
 
   // Category goal blocks
   const catArea = document.createElement('div');
