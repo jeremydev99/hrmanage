@@ -1127,41 +1127,33 @@ app.get('/api/eval-periods/my-modes', auth, (req, res) => {
     const activePeriods = db.prepare(
       "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, id DESC"
     ).all();
+    const me = db.prepare('SELECT manager_id FROM users WHERE id=?').get(req.user.sub);
 
     const result = activePeriods.map(period => {
-      // 계층 탐색 (최대 5단계)
-      let currentId = req.user.sub;
-      for (let depth = 0; depth < 5; depth++) {
-        const user = db.prepare(
-          'SELECT manager_id FROM users WHERE id=?'
-        ).get(currentId);
+      // 1) 본인이 조직장인 경우 (본인 직속 팀의 설정)
+      const selfMode = db.prepare(
+        'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+      ).get(period.id, req.user.sub);
+      if (selfMode) return {
+        period_id: period.id, period_label: period.period_label,
+        eval_year: period.eval_year, mode: selfMode.eval_mode, source: 'org_period'
+      };
 
-        const checkId = currentId;
-        const orgMode = db.prepare(
+      // 2) 직속 상사의 설정 (1단계만)
+      if (me?.manager_id) {
+        const mgrMode = db.prepare(
           'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, checkId);
-
-        if (orgMode) {
-          return {
-            period_id: period.id,
-            period_label: period.period_label,
-            eval_year: period.eval_year,
-            mode: orgMode.eval_mode,
-            source: 'org_period'
-          };
-        }
-
-        if (!user?.manager_id) break;
-        currentId = user.manager_id;
+        ).get(period.id, me.manager_id);
+        if (mgrMode) return {
+          period_id: period.id, period_label: period.period_label,
+          eval_year: period.eval_year, mode: mgrMode.eval_mode, source: 'org_period'
+        };
       }
 
-      // 기간 전사 기본값
+      // 3) 기간 전사 기본값
       return {
-        period_id: period.id,
-        period_label: period.period_label,
-        eval_year: period.eval_year,
-        mode: period.eval_mode || 'MBO',
-        source: 'period'
+        period_id: period.id, period_label: period.period_label,
+        eval_year: period.eval_year, mode: period.eval_mode || 'MBO', source: 'period'
       };
     });
 
@@ -1171,62 +1163,42 @@ app.get('/api/eval-periods/my-modes', auth, (req, res) => {
 
 app.get('/api/settings/my-eval-mode', auth, (req, res) => {
   try {
-    const me = db.prepare(
-      'SELECT manager_id, eval_mode FROM users WHERE id=?'
-    ).get(req.user.sub);
+    const me = db.prepare('SELECT manager_id FROM users WHERE id=?').get(req.user.sub);
 
-    // 모든 활성 기간 조회
     const activePeriods = db.prepare(
       "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC"
     ).all();
 
     if (!activePeriods.length) {
-      const global = db.prepare(
-        "SELECT value FROM app_settings WHERE key='eval_mode'"
-      ).get();
+      const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
       return res.json({ mode: global?.value || 'MBO', source: 'global' });
     }
 
-    // 모든 활성 기간에서 조직 방식 확인 (OKR/KPI 우선)
+    // 각 활성 기간에서 직속 관계(본인 or 직속 상사)만 확인, OKR/KPI 우선
     for (const period of activePeriods) {
-      // 최대 5단계 상위 계층 탐색
-      let currentId = req.user.sub;
-      for (let depth = 0; depth < 5; depth++) {
-        const user = db.prepare(
-          'SELECT manager_id FROM users WHERE id=?'
-        ).get(currentId);
-        const checkId = depth === 0 ? currentId : user?.manager_id;
-        if (!checkId) break;
+      // 1) 본인이 조직장인 경우
+      const selfMode = db.prepare(
+        'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+      ).get(period.id, req.user.sub);
+      if (selfMode && selfMode.eval_mode !== 'MBO')
+        return res.json({ mode: selfMode.eval_mode, source: 'org_period', period: period.period_label });
 
-        const orgMode = db.prepare(
+      // 2) 직속 상사 설정 (1단계만)
+      if (me?.manager_id) {
+        const mgrMode = db.prepare(
           'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, checkId);
-
-        if (orgMode && orgMode.eval_mode !== 'MBO') {
-          return res.json({
-            mode: orgMode.eval_mode,
-            source: 'org_period',
-            period: period.period_label
-          });
-        }
-        currentId = user?.manager_id;
-        if (!currentId) break;
+        ).get(period.id, me.manager_id);
+        if (mgrMode && mgrMode.eval_mode !== 'MBO')
+          return res.json({ mode: mgrMode.eval_mode, source: 'org_period', period: period.period_label });
       }
 
-      // 기간 전사 기본값 확인
-      if (period.eval_mode && period.eval_mode !== 'MBO') {
-        return res.json({
-          mode: period.eval_mode,
-          source: 'period',
-          period: period.period_label
-        });
-      }
+      // 3) 기간 전사 기본값
+      if (period.eval_mode && period.eval_mode !== 'MBO')
+        return res.json({ mode: period.eval_mode, source: 'period', period: period.period_label });
     }
 
-    // 전사 기본값
-    const global = db.prepare(
-      "SELECT value FROM app_settings WHERE key='eval_mode'"
-    ).get();
+    // 4) 전사 전체 기본값
+    const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
     res.json({ mode: global?.value || 'MBO', source: 'global' });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
