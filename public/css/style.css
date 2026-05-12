@@ -253,7 +253,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .mobile-only { display: none;  }
 
 /* nav 드롭다운 기본 표시 */
-.nav-tabs-wrap { display: flex; align-items: center; }
+.nav-tabs-wrap { display: flex !important; align-items: center; }
 
 /* ── PC 드롭다운 메뉴 ─────────────────────── */
 .nav-tab {

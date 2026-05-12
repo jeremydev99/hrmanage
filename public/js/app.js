@@ -137,6 +137,7 @@ const App = {
     closeNavDD();
     const area = document.getElementById('main-area');
     area.innerHTML = '<div class="spinner">로딩 중...</div>';
+    console.log('[navigate]', page, 'Pages:', Object.keys(Pages));
     const P = {
       'my-eval':        Pages.myEval,
       'myEval':         Pages.myEval,
@@ -151,7 +152,7 @@ const App = {
       'perfHome':       Pages.perfHome,
     };
     if (P[page]) P[page]();
-    else area.innerHTML = '';
+    else { console.warn('[navigate] 미등록 페이지:', page); area.innerHTML = ''; }
   },
 };
 
@@ -171,18 +172,20 @@ function toggleMobileMenu() {
       icon: '📋',
       navigate: 'my-eval',
       items: [
-        { label: '승인 관리', navigate: 'approvals' },
-        { label: '최종 평가', navigate: 'final'     },
+        { label: '내 평가 홈',  navigate: 'myEval'    },
+        { label: '승인 관리',   navigate: 'approvals' },
+        { label: '최종 평가',   navigate: 'final'     },
       ]
     },
     {
       label: '성과관리',
       icon: '📊',
-      navigate: null,
+      navigate: 'perfHome',
       items: [
-        { label: '중간 보고',   navigate: 'progress'      },
-        { label: '중간 피드백', navigate: 'feedback'      },
-        { label: '🎯 OKR 현황', navigate: 'okrDashboard'  },
+        { label: '성과관리 홈', navigate: 'perfHome'     },
+        { label: '중간 보고',   navigate: 'progress'     },
+        { label: '중간 피드백', navigate: 'feedback'     },
+        { label: '🎯 OKR 현황', navigate: 'okrDashboard' },
       ]
     },
   ];
