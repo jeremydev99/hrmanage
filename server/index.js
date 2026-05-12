@@ -994,6 +994,7 @@ app.delete('/api/eval-periods/:id', auth, masterOnly, (req, res) => {
       'SELECT 1 FROM eval_cycles WHERE period_label=? AND eval_year=?'
     ).get(p.period_label, p.eval_year);
     if (inUse) return res.status(409).json({ error: '이미 사용 중인 기간은 삭제할 수 없습니다.' });
+    db.prepare('DELETE FROM eval_period_modes WHERE period_id=?').run(req.params.id);
     db.prepare('DELETE FROM eval_periods WHERE id=?').run(req.params.id);
     res.json({ success: true });
   } catch(err) {
