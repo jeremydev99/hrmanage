@@ -329,7 +329,7 @@ async function renderAdmOrgTable() {
 
     function renderOrgTree(org, depth = 0) {
       const children = orgs.filter(o => o.parent_id === org.id);
-      const members  = users.filter(u => u.org_id === org.id);
+      const members  = users.filter(u => String(u.org_id) === String(org.id) && u.is_active);
       const indent   = depth * 20;
       return `
         <div style="margin-left:${indent}px;margin-bottom:8px;
