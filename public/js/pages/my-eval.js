@@ -2,11 +2,12 @@ Pages.myEval = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [evs, activePeriods, approverRes, evalMode] = await Promise.all([
+    const [evs, activePeriods, approverRes, evalMode, periodModes] = await Promise.all([
       API.get('/evals'),
       API.get('/eval-periods/active').catch(() => []),
       API.get(`/users/${App.user.id}/approvers`).catch(() => []),
       API.get('/settings/my-eval-mode').catch(() => ({ mode: 'MBO', source: 'global' })),
+      API.get('/eval-periods/my-modes').catch(() => []),
     ]);
 
     // 방어 코드: 배열이 아니면 오류 처리
@@ -19,13 +20,8 @@ Pages.myEval = async function() {
       ? approverRes
       : (approverRes?.approvers || []);
 
-    let myEvs = evs.filter(e => String(e.user_id) === String(App.user.id));
+    const myEvs = evs.filter(e => String(e.user_id) === String(App.user.id));
     area.innerHTML = '';
-
-    // OKR 모드: 완료된 평가 이력(final_done)만 MBO 카드로 표시
-    if (evalMode?.mode === 'OKR') {
-      myEvs = myEvs.filter(ev => ev.phase === 'final_done');
-    }
 
     // 승인자 체인 표시
     if (approvers.length) {
@@ -37,21 +33,18 @@ Pages.myEval = async function() {
       area.appendChild(apprInfo);
     }
 
-    // OKR 모드 배너
-    if (evalMode?.mode === 'OKR') {
+    // OKR/KPI 모드 배너
+    if (evalMode?.mode === 'OKR' || evalMode?.mode === 'KPI') {
       const banner = document.createElement('div');
       banner.className = 'alert alert-teal';
       banner.style.cssText = 'margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px';
       banner.innerHTML = `
         <div>
-          <strong>🎯 OKR 평가 모드</strong>
+          <strong>🎯 ${evalMode.mode} 평가 모드 적용 중</strong>
           <span style="font-size:12px;margin-left:6px;opacity:.8">
             (${evalMode.source==='org_period'?'조직 설정':evalMode.source==='period'?'기간 기본값':'전사 기본값'})
           </span>
-        </div>
-        <button class="btn btn-primary btn-sm" onclick="Pages.okrEval()">
-          OKR 작성하기 →
-        </button>`;
+        </div>`;
       area.appendChild(banner);
     }
 
@@ -59,6 +52,27 @@ Pages.myEval = async function() {
     safeActivePeriods.forEach(p => {
       const ev = myEvs.find(e => e.period_label === p.period_label && e.eval_year === p.eval_year);
       if (!ev) {
+        // 해당 기간의 평가방식 확인
+        const safeModes = Array.isArray(periodModes) ? periodModes : [];
+        const matchedMode = safeModes.find(pm =>
+          pm.period_label === p.period_label && String(pm.eval_year) === String(p.eval_year)
+        );
+        const periodMode = matchedMode?.mode || 'MBO';
+        console.log('[period card]', p.period_label, p.eval_year, periodMode,
+          '| periodModes:', safeModes.map(pm => `${pm.period_label}/${pm.eval_year}=${pm.mode}`).join(', ') || '(empty)',
+          '| matched:', matchedMode ? JSON.stringify(matchedMode) : 'none');
+
+        // 버튼 분기
+        const actionBtn = periodMode === 'OKR' || periodMode === 'KPI'
+          ? `<button class="btn btn-primary"
+               onclick="Pages.okrEval('${p.period_label}', '${p.eval_year}', '${periodMode}')">
+               🎯 ${periodMode} 작성하기 →
+             </button>`
+          : `<button class="btn btn-primary"
+               onclick="startNewEval('${p.period_type}','${p.period_label}','${p.eval_year}')">
+               목표 작성 시작 →
+             </button>`;
+
         const card = document.createElement('div');
         card.className = 'card';
         card.style.cssText = 'border:1.5px dashed var(--o200);background:var(--o50);margin-bottom:10px';
@@ -68,10 +82,7 @@ Pages.myEval = async function() {
               <div style="font-size:15px;font-weight:600">${p.period_label}</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px">${p.period_type==='q'?'분기 평가':'반기 평가'} · 아직 목표를 작성하지 않았습니다</div>
             </div>
-            <button class="btn btn-primary"
-              onclick="startNewEval('${p.period_type}','${p.period_label}','${p.eval_year}')">
-              목표 작성 시작 →
-            </button>
+            ${actionBtn}
           </div>`;
         area.appendChild(card);
       }

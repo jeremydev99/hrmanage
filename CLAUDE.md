@@ -271,8 +271,11 @@ eval_period_modes: id, period_id, manager_id, eval_mode, locked, created_at
       3. `app_settings.eval_mode` (전사 전체 기본값)
     - 잠금: admin이 수동 잠금 → 잠금 후 master만 강제 변경 가능
     - 관리 위치: 관리자 설정 → 평가기간 관리 탭 (기간별 카드)
-    - OKR 페이지: `Pages.okrEval()` (`public/js/pages/okr-eval.js`)
+    - OKR 페이지: `Pages.okrEval(periodLabel, evalYear, mode)` (`public/js/pages/okr-eval.js`)
     - OKR 구조: Objective → Key Results (달성률 0~100%, 70% 이상 성공)
+    - 내 평가 탭 기간 카드 버튼 분기:
+      해당 기간 평가방식이 OKR/KPI → 🎯 OKR 작성하기 버튼
+      해당 기간 평가방식이 MBO → 목표 작성 시작 버튼 (기존)
 
 ---
 
@@ -348,6 +351,7 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/eval-periods/my-modes        활성 기간별 내 평가방식 목록
 GET    /api/eval-periods/:id/eval-mode  기간 전사 기본방식 조회 (admin+)
 POST   /api/eval-periods/:id/eval-mode  기간 전사 기본방식 설정 (admin+)
 GET    /api/eval-periods/:id/org-modes  기간 조직별 방식 조회 (admin+)
@@ -410,6 +414,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 평가기간별 평가방식 분기 (OKR/KPI기간→OKR버튼, MBO기간→MBO버튼) | Claude Code |
 | 2026-05-11 | OKR 모드 개선: 다중 활성기간 OKR 우선적용, MBO 카드 숨김 | Claude Code |
 | 2026-05-11 | my-eval OKR 배너 source 레이블 수정 (manager/self → org_period/period/global), 레이아웃 개선 | Claude Code |
 | 2026-05-11 | my-eval-mode 계층 탐색 버그 수정 (직속 상사 1단계만 조회 → 최대 5단계 상위 탐색으로 수정) | Claude Code |

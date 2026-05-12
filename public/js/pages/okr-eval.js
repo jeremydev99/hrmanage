@@ -1,29 +1,53 @@
-Pages.okrEval = async function() {
+Pages.okrEval = async function(periodLabel, evalYear, mode) {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const cycles = await API.get('/okr').catch(() => []);
+    const allCycles = await API.get('/okr').catch(() => []);
+    // 기간 파라미터가 있으면 해당 기간 OKR만 표시
+    const cycles = periodLabel
+      ? allCycles.filter(c => c.period_label === periodLabel && String(c.eval_year) === String(evalYear))
+      : allCycles;
     area.innerHTML = '';
 
     const header = document.createElement('div');
     header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px';
-    header.innerHTML = `
-      <div>
-        <div style="font-size:18px;font-weight:700;color:var(--o800)">🎯 OKR 목표 설정</div>
-        <div style="font-size:12px;color:var(--muted)">Objectives and Key Results</div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-ghost btn-sm" onclick="Pages.myEval()">← 내 평가</button>
-        <button class="btn btn-primary" onclick="startNewOKR()">+ 새 OKR 작성</button>
-      </div>`;
+    if (periodLabel) {
+      header.innerHTML = `
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--o800)">
+            🎯 ${mode || 'OKR'} 목표 설정
+          </div>
+          <div style="font-size:12px;color:var(--muted)">
+            ${periodLabel} · ${evalYear}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="Pages.myEval()">← 내 평가</button>
+          <button class="btn btn-primary" onclick="startNewOKR('${periodLabel}','${evalYear}')">
+            + 새 ${mode || 'OKR'} 작성
+          </button>
+        </div>`;
+    } else {
+      header.innerHTML = `
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--o800)">🎯 OKR 목표 설정</div>
+          <div style="font-size:12px;color:var(--muted)">Objectives and Key Results</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="Pages.myEval()">← 내 평가</button>
+          <button class="btn btn-primary" onclick="startNewOKR()">+ 새 OKR 작성</button>
+        </div>`;
+    }
     area.appendChild(header);
 
     if (!cycles.length) {
-      area.innerHTML += `<div class="card">
-        <div class="alert alert-orange">작성된 OKR이 없습니다.
-          <button class="btn btn-ghost btn-sm" style="margin-left:8px"
-            onclick="startNewOKR()">지금 작성하기 →</button>
-        </div></div>`;
+      const empty = document.createElement('div');
+      empty.className = 'card';
+      empty.innerHTML = `<div class="alert alert-orange">작성된 ${mode||'OKR'}이 없습니다.
+        <button class="btn btn-ghost btn-sm" style="margin-left:8px"
+          onclick="startNewOKR('${periodLabel||''}','${evalYear||''}')">지금 작성하기 →</button>
+      </div>`;
+      area.appendChild(empty);
       return;
     }
 
@@ -104,9 +128,12 @@ Pages.okrEval = async function() {
 };
 
 let _okrObjCount = 0, _okrKRCount = {};
+let _currentPeriodLabel = null, _currentEvalYear = null;
 
-function startNewOKR() {
+function startNewOKR(periodLabel, evalYear) {
   _okrObjCount = 0; _okrKRCount = {};
+  _currentPeriodLabel = periodLabel || null;
+  _currentEvalYear = evalYear || null;
   const area = document.getElementById('main-area');
   area.innerHTML = '';
   const card = document.createElement('div');
@@ -114,7 +141,7 @@ function startNewOKR() {
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <div class="card-header-t">🎯 OKR 작성</div>
+        <div class="card-header-t">🎯 OKR 작성${periodLabel ? ` — ${periodLabel}` : ''}</div>
         <div class="card-header-s">Objective(목표)와 Key Results(핵심 결과)를 설정하세요</div>
       </div>
     </div>
@@ -126,7 +153,7 @@ function startNewOKR() {
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;border:1px dashed var(--o300)"
       onclick="addOKRObjective()">+ Objective 추가</button>
     <div class="abar" style="margin-top:16px">
-      <button class="btn btn-ghost" onclick="Pages.okrEval()">취소</button>
+      <button class="btn btn-ghost" onclick="Pages.okrEval('${periodLabel||''}','${evalYear||''}')">취소</button>
       <button class="btn btn-primary" onclick="submitOKR()">OKR 저장</button>
     </div>`;
   area.appendChild(card);
@@ -246,12 +273,18 @@ async function submitOKR() {
     return;
   }
   try {
-    const periods = await API.get('/eval-periods/active').catch(() => []);
-    const period = periods[0];
-    if (!period) { showAlert('활성화된 평가 기간이 없습니다.', 'red'); return; }
-    await API.post('/okr', { period_label: period.period_label, eval_year: period.eval_year, objectives });
+    let label = _currentPeriodLabel;
+    let year  = _currentEvalYear;
+    if (!label) {
+      const periods = await API.get('/eval-periods/active').catch(() => []);
+      const period = periods[0];
+      if (!period) { showAlert('활성화된 평가 기간이 없습니다.', 'red'); return; }
+      label = period.period_label;
+      year  = period.eval_year;
+    }
+    await API.post('/okr', { period_label: label, eval_year: year, objectives });
     showAlert('OKR이 저장되었습니다!', 'green');
-    setTimeout(() => Pages.okrEval(), 600);
+    setTimeout(() => Pages.okrEval(_currentPeriodLabel, _currentEvalYear), 600);
   } catch(e) { showAlert(e.message, 'red'); }
 }
 

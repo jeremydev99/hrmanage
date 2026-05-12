@@ -1121,6 +1121,54 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
 // ── 평가 방식 API ─────────────────────────────────────────
 
 // 내 평가 방식 조회 (조직장 설정 상속)
+// 활성 기간별 내 평가방식 목록
+app.get('/api/eval-periods/my-modes', auth, (req, res) => {
+  try {
+    const activePeriods = db.prepare(
+      "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, id DESC"
+    ).all();
+
+    const result = activePeriods.map(period => {
+      // 계층 탐색 (최대 5단계)
+      let currentId = req.user.sub;
+      for (let depth = 0; depth < 5; depth++) {
+        const user = db.prepare(
+          'SELECT manager_id FROM users WHERE id=?'
+        ).get(currentId);
+
+        const checkId = currentId;
+        const orgMode = db.prepare(
+          'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
+        ).get(period.id, checkId);
+
+        if (orgMode) {
+          return {
+            period_id: period.id,
+            period_label: period.period_label,
+            eval_year: period.eval_year,
+            mode: orgMode.eval_mode,
+            source: 'org_period'
+          };
+        }
+
+        if (!user?.manager_id) break;
+        currentId = user.manager_id;
+      }
+
+      // 기간 전사 기본값
+      return {
+        period_id: period.id,
+        period_label: period.period_label,
+        eval_year: period.eval_year,
+        mode: period.eval_mode || 'MBO',
+        source: 'period'
+      };
+    });
+
+    res.json(result);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/settings/my-eval-mode', auth, (req, res) => {
   try {
     const me = db.prepare(
