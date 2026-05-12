@@ -266,7 +266,19 @@ users:             ... org_id INTEGER (추가)
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **반응형 브레이크포인트**:
+24. **로그인 공지사항**:
+    - `app_settings.notice` (value, updated_by, updated_at)
+    - `GET /api/notice`: 인증 없이 조회 가능
+    - 수정 시 감사 로그 자동 기록
+    - 관리 위치: 관리자 설정 → 평가 정책 탭 상단
+    - 표시: 작성자명 + 직책 + 날짜 표시
+25. **모바일 햄버거 메뉴**:
+    - 헤더: ≡ + 로고 + 로그아웃 (3요소만, `.pc-only` / `.mobile-only` 유틸 클래스)
+    - 메뉴: 사용자정보 + 내평가(아코디언) + 관리자설정(아코디언, 관리자만)
+    - 아코디언: 클릭 시 하위 메뉴 펼침/접힘
+    - 외부 클릭: 오버레이(id=`mobile-nav-overlay`) 클릭으로 닫힘
+    - 관리자 하위탭: `switchAdmTab()` + 300ms setTimeout 으로 연동
+25. **반응형 브레이크포인트**:
     - 768px: 탭 가로 스크롤, user-info 숨김
     - 480px: 햄버거 메뉴(`.hamburger-btn`), `.nav-tabs-wrap` 토글, 세로 스택 레이아웃
     - 버튼: `white-space:nowrap`으로 줄바꿈 방지
@@ -364,6 +376,8 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/notice                       공지사항 조회 (인증 불필요)
+POST   /api/notice                       공지사항 수정 (admin+, 감사로그)
 GET    /api/organizations                조직 목록 (계층 포함)
 POST   /api/organizations                조직 추가 (admin+)
 PUT    /api/organizations/:id            조직 수정 (admin+)
@@ -433,6 +447,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 햄버거 메뉴 1레벨 탭이동/아코디언 분리, 로그인 공지사항 기능 추가 (DB마이그레이션, 감사로그) | Claude Code |
+| 2026-05-12 | 모바일 햄버거 메뉴 재설계 (아코디언 2레벨, 사용자정보 메뉴 상단 이동) | Claude Code |
 | 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 버튼 줄바꿈 방지, 768px/480px 미디어쿼리) | Claude Code |
 | 2026-05-12 | 조직관리 멤버 표시 타입 불일치 수정, 강영업 org_id 배정 | Claude Code |
 | 2026-05-12 | my-modes API MBO 제외 조건 추가, eval_period_modes 잘못된 데이터 정리 | Claude Code |

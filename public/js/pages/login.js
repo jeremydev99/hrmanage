@@ -26,17 +26,7 @@ Pages.login = function() {
         </div>
         <button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="doLogin()">로그인</button>
         <button class="btn btn-ghost" style="width:100%;font-size:13px" onclick="showSignupModal()">신규 가입 신청</button>
-        <div class="login-hint">
-          <strong>테스트 계정</strong><br>
-          [마스터관리자] ceo@synapsoft.com / admin1234<br>
-          [인사팀장] hr1@synapsoft.com / admin1234<br>
-          [인사팀원] hr2@synapsoft.com / admin1234<br>
-          [개발팀장] dev1@synapsoft.com / user1234<br>
-          [시니어개발자] dev2@synapsoft.com / user1234<br>
-          [주니어개발자] dev3@synapsoft.com / user1234<br>
-          [영업팀장] sales1@synapsoft.com / user1234<br>
-          [영업사원] sales2@synapsoft.com / user1234
-        </div>
+        <div id="notice-container" style="display:none"></div>
       </div>
     </div>
 
@@ -101,7 +91,31 @@ Pages.login = function() {
         </div>
       </div>
     </div>`;
+  loadNotice();
 };
+
+async function loadNotice() {
+  try {
+    const data = await fetch('/api/notice').then(r => r.json());
+    const container = document.getElementById('notice-container');
+    if (!container) return;
+    if (!data.content) { container.style.display = 'none'; return; }
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:14px;margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+          <div style="font-size:12px;font-weight:600;color:var(--o600)">📢 공지사항</div>
+          ${data.author_name ? `
+          <div style="font-size:11px;color:var(--muted)">
+            ${data.author_name} ${data.author_title||''} · ${(data.updated_at||'').slice(0,10)}
+          </div>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--o800);white-space:pre-wrap;line-height:1.6;max-height:160px;overflow-y:auto">${data.content.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+      </div>`;
+  } catch(e) {
+    console.log('공지사항 로드 실패:', e.message);
+  }
+}
 
 function showSignupModal() {
   const ov = document.getElementById('signup-overlay');

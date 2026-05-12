@@ -106,6 +106,44 @@ function masterOnly(req, res, next) {
   next();
 }
 
+// 공지사항 조회 (인증 불필요 — 로그인 화면에서도 사용)
+app.get('/api/notice', (req, res) => {
+  try {
+    const notice = db.prepare(
+      "SELECT value, updated_by, updated_at FROM app_settings WHERE key='notice'"
+    ).get();
+    if (!notice) return res.json({ content: '', author_name: '', author_title: '', updated_at: '' });
+    const author = notice.updated_by
+      ? db.prepare('SELECT name, title FROM users WHERE id=?').get(notice.updated_by)
+      : null;
+    res.json({
+      content: notice.value || '',
+      author_name: author?.name || '',
+      author_title: author?.title || '',
+      updated_at: notice.updated_at || '',
+    });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// 공지사항 수정 (admin+)
+app.post('/api/notice', auth, adminOnly, (req, res) => {
+  try {
+    const { content } = req.body;
+    db.prepare(`
+      INSERT INTO app_settings(key, value, updated_by, updated_at)
+      VALUES('notice', ?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value=excluded.value,
+        updated_by=excluded.updated_by,
+        updated_at=excluded.updated_at
+    `).run(content || '', req.user.sub);
+    auditLog(req.user.sub, 'NOTICE_UPDATED', null, null,
+      `공지사항 수정 (${(content||'').length}자)`, req.ip);
+    const author = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
+    res.json({ success: true, author_name: author?.name });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // ════════════════════════════════════════════════════════════
 //  AUTH API
 // ════════════════════════════════════════════════════════════
@@ -1918,6 +1956,8 @@ function initDB() {
       created_at  TEXT DEFAULT (datetime('now'))
     )`,
     "ALTER TABLE users ADD COLUMN org_id INTEGER",
+    "ALTER TABLE app_settings ADD COLUMN updated_by INTEGER",
+    "ALTER TABLE app_settings ADD COLUMN updated_at TEXT",
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
@@ -1977,6 +2017,27 @@ function initDB() {
       console.log('[DB] organizations 초기 데이터 생성 완료');
     }
   } catch(e) { console.log('[org seed skip]', e.message); }
+
+  // 공지사항 초기 데이터
+  try {
+    const noticeExists = db.prepare("SELECT value FROM app_settings WHERE key='notice'").get();
+    if (!noticeExists) {
+      const noticeContent = `테스트 계정 안내
+
+[마스터관리자] ceo@synapsoft.com / admin1234
+[인사팀장] hr1@synapsoft.com / admin1234
+[인사팀원] hr2@synapsoft.com / admin1234
+[개발팀장] dev1@synapsoft.com / user1234
+[시니어개발자] dev2@synapsoft.com / user1234
+[주니어개발자] dev3@synapsoft.com / user1234
+[영업팀장] sales1@synapsoft.com / user1234
+[영업사원] sales2@synapsoft.com / user1234`;
+      db.prepare(
+        "INSERT INTO app_settings(key, value, updated_by, updated_at) VALUES('notice', ?, 1, datetime('now'))"
+      ).run(noticeContent);
+      console.log('[DB] 공지사항 초기 데이터 생성 완료');
+    }
+  } catch(e) { console.log('[notice seed skip]', e.message); }
 
   seedInitialData();
   loadTimezone();

@@ -248,10 +248,22 @@ textarea:focus{outline:none;border-color:var(--o400)}
   }
 }
 
+/* PC/모바일 가시성 유틸 */
+.pc-only     { display: block; }
+.mobile-only { display: none;  }
+
 /* 모바일 (480px 이하) */
 @media (max-width: 480px) {
+  .pc-only     { display: none !important; }
+  .mobile-only { display: flex !important; }
   .hamburger-btn {
     display: flex !important;
+  }
+  .topbar-logo {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: calc(100vw - 140px);
   }
   .nav-tabs-wrap {
     display: none;

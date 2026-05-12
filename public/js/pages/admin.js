@@ -1355,7 +1355,7 @@ async function renderAdmPolicy() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode] = await Promise.all([
+    const [histVis, histInactive, fbLimit, apprEdit, secondFinal, timezone, evalMode, notice] = await Promise.all([
       API.get('/settings/history-visibility'),
       API.get('/settings/history-inactive'),
       API.get('/settings/feedback-limit'),
@@ -1363,6 +1363,7 @@ async function renderAdmPolicy() {
       API.get('/settings/second-final'),
       API.get('/settings/timezone'),
       API.get('/settings/eval-mode'),
+      fetch('/api/notice').then(r => r.json()).catch(() => ({ content: '', author_name: '', updated_at: '' })),
     ]);
 
     const limitOptions = [
@@ -1380,6 +1381,24 @@ async function renderAdmPolicy() {
         <div class="card-header-t">평가 정책 설정</div>
         <div class="card-header-s">전사 평가 운영 정책을 관리합니다</div>
       </div></div>
+
+      <!-- 공지사항 편집 -->
+      <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid var(--o100)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:14px;font-weight:600">📢 로그인 화면 공지사항</div>
+            ${notice.author_name
+              ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">최근 수정: ${notice.author_name} ${notice.author_title||''} · ${(notice.updated_at||'').slice(0,16)}</div>`
+              : '<div style="font-size:11px;color:var(--muted)">작성된 공지가 없습니다</div>'}
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveNotice()">저장하기</button>
+        </div>
+        <textarea id="notice-textarea"
+          placeholder="로그인 화면에 표시할 공지사항을 입력하세요..."
+          style="width:100%;min-height:120px;font-size:13px;resize:vertical;padding:10px;border-radius:6px;border:1px solid var(--border)"
+        >${(notice.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">공지 내용이 없으면 로그인 화면에 공지 영역이 표시되지 않습니다.</div>
+      </div>
 
       <div class="srow">
         <div>
@@ -1564,6 +1583,15 @@ async function saveTimezone() {
   try {
     await API.post('/settings/timezone', { timezone: tz });
     showAlert(`시간대가 "${tz}"로 변경되었습니다. 서버 재시작 없이 즉시 적용됩니다.`, 'green');
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function saveNotice() {
+  const content = document.getElementById('notice-textarea')?.value || '';
+  try {
+    const r = await API.post('/notice', { content });
+    showAlert(`공지사항이 저장되었습니다. (저장자: ${r.author_name||''})`, 'green');
+    renderAdmPolicy();
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
