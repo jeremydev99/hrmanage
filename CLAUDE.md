@@ -266,7 +266,13 @@ users:             ... org_id INTEGER (추가)
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **조직 구조**: `organizations` 테이블 (계층구조)
+24. **반응형 브레이크포인트**:
+    - 768px: 탭 가로 스크롤, user-info 숨김
+    - 480px: 햄버거 메뉴(`.hamburger-btn`), `.nav-tabs-wrap` 토글, 세로 스택 레이아웃
+    - 버튼: `white-space:nowrap`으로 줄바꿈 방지
+    - 입력폼: `font-size:16px` (iOS 자동 확대 방지)
+    - 함수: `toggleMobileMenu()`, `closeMobileMenu()`, `closeMobileMenuOnOutside()`
+25. **조직 구조**: `organizations` 테이블 (계층구조)
     - `leader_id = null` 허용 (미지정 시 parent 조직장에게 자동 위임)
     - `users.org_id` → 소속 조직 지정
     - 평가방식 조회: `org_id` 기반 조직장 체인 탐색 (`getMyOrgLeaderChain`)
@@ -427,6 +433,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 버튼 줄바꿈 방지, 768px/480px 미디어쿼리) | Claude Code |
 | 2026-05-12 | 조직관리 멤버 표시 타입 불일치 수정, 강영업 org_id 배정 | Claude Code |
 | 2026-05-12 | my-modes API MBO 제외 조건 추가, eval_period_modes 잘못된 데이터 정리 | Claude Code |
 | 2026-05-12 | organizations 테이블 추가 (계층구조, 조직장, 멤버), org_id 기반 평가방식 조회 | Claude Code |

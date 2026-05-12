@@ -203,3 +203,180 @@ textarea:focus{outline:none;border-color:var(--o400)}
   .form-group{min-width:0}
   .topbar-logo span{display:none}
 }
+
+/* ── 반응형 레이아웃 ─────────────────────────── */
+
+/* 태블릿 (768px 이하) */
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 12px;
+    height: 52px;
+  }
+  .topbar-user .user-info {
+    display: none;
+  }
+  .nav-tabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 8px;
+  }
+  .nav-tabs::-webkit-scrollbar { display: none; }
+  .ntb {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .card {
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .btn {
+    white-space: nowrap;
+  }
+  .btn-sm {
+    min-width: fit-content;
+    white-space: nowrap;
+  }
+  .abar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .flow-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* 모바일 (480px 이하) */
+@media (max-width: 480px) {
+  .hamburger-btn {
+    display: flex !important;
+  }
+  .nav-tabs-wrap {
+    display: none;
+  }
+  .nav-tabs-wrap.mobile-open {
+    display: flex !important;
+    position: fixed;
+    top: 52px;
+    left: 0;
+    right: 0;
+    background: var(--white);
+    flex-direction: column;
+    z-index: 200;
+    box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    padding: 8px 0;
+    max-height: calc(100vh - 52px);
+    overflow-y: auto;
+  }
+  .nav-tabs-wrap.mobile-open .ntb {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--o50);
+    border-radius: 0;
+    font-size: 14px;
+    text-align: left;
+    width: 100%;
+  }
+  .nav-tabs-wrap.mobile-open .ntb.active {
+    background: var(--o50);
+    color: var(--o500);
+  }
+  .topbar {
+    padding: 0 12px;
+  }
+  .topbar-logo {
+    font-size: 14px;
+  }
+  .topbar-user {
+    gap: 6px;
+  }
+  #main-area {
+    padding: 12px;
+  }
+  .card {
+    padding: 12px;
+    border-radius: 8px;
+  }
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .btn-group {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .btn {
+    white-space: nowrap;
+    min-width: fit-content;
+  }
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  .eval-card-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .eval-card-actions .btn {
+    width: 100%;
+    text-align: center;
+  }
+  .resp-table thead {
+    display: none;
+  }
+  .resp-table tr {
+    display: block;
+    margin-bottom: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+  }
+  .resp-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    border: none;
+    font-size: 13px;
+  }
+  .resp-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 11px;
+    min-width: 80px;
+  }
+  .flow-bar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+  .flow-step-label {
+    font-size: 10px;
+  }
+  .stabs {
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 4px;
+    padding: 8px 0;
+  }
+  .stabs::-webkit-scrollbar { display: none; }
+  .stb {
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 5px 10px;
+  }
+  .srow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .okr-kr-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}

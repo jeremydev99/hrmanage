@@ -40,15 +40,27 @@ const App = {
     const app = document.getElementById('app');
     app.innerHTML = `
       <div class="topbar">
-        <div class="topbar-logo">
-          ㈜사이냅소프트 <span>인사평가 시스템</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button id="hamburger-btn" class="hamburger-btn"
+            style="display:none;background:none;border:none;cursor:pointer;
+                   padding:6px;flex-direction:column;gap:4px;align-items:center;justify-content:center"
+            onclick="toggleMobileMenu()">
+            <span style="display:block;width:20px;height:2px;background:var(--white);border-radius:2px"></span>
+            <span style="display:block;width:20px;height:2px;background:var(--white);border-radius:2px"></span>
+            <span style="display:block;width:20px;height:2px;background:var(--white);border-radius:2px"></span>
+          </button>
+          <div class="topbar-logo">
+            ㈜사이냅소프트 <span>인사평가 시스템</span>
+          </div>
         </div>
         <div class="topbar-user">
           <div id="nav-user-name" style="font-size:13px"></div>
           <button onclick="App.logout()">로그아웃</button>
         </div>
       </div>
-      <nav class="nav-tabs" id="nav-tabs"></nav>
+      <div class="nav-tabs-wrap">
+        <nav class="nav-tabs" id="nav-tabs"></nav>
+      </div>
       <div id="main-alert" style="padding:0 20px;max-width:900px;margin:0 auto"></div>
       <div class="main" id="main-area"></div>
     `;
@@ -76,6 +88,7 @@ const App = {
   },
 
   navigate(page) {
+    closeMobileMenu();
     document.querySelectorAll('.ntb').forEach(b => b.classList.remove('active'));
     const btn = document.getElementById('ntb-'+page);
     if (btn) btn.classList.add('active');
@@ -95,3 +108,27 @@ const App = {
 };
 
 window.addEventListener('DOMContentLoaded', () => App.init());
+
+// 모바일 햄버거 메뉴 토글
+function toggleMobileMenu() {
+  const wrap = document.querySelector('.nav-tabs-wrap');
+  if (!wrap) return;
+  wrap.classList.toggle('mobile-open');
+  if (wrap.classList.contains('mobile-open')) {
+    setTimeout(() => {
+      document.addEventListener('click', closeMobileMenuOnOutside, { once: true });
+    }, 100);
+  }
+}
+
+function closeMobileMenuOnOutside(e) {
+  const wrap = document.querySelector('.nav-tabs-wrap');
+  const btn  = document.getElementById('hamburger-btn');
+  if (wrap && !wrap.contains(e.target) && !btn?.contains(e.target)) {
+    wrap.classList.remove('mobile-open');
+  }
+}
+
+function closeMobileMenu() {
+  document.querySelector('.nav-tabs-wrap')?.classList.remove('mobile-open');
+}
