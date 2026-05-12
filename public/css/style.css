@@ -275,16 +275,21 @@ textarea:focus{outline:none;border-color:var(--o400)}
 }
 .nav-tab:hover { opacity: 1; }
 
+.nav-dropdown {
+  position: relative;
+  z-index: 9999;
+}
 .nav-dd-menu {
   display: none;
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
-  background: white;
+  background: white !important;
+  background-color: #ffffff !important;
   border-radius: 8px;
   min-width: 150px;
-  box-shadow: 0 4px 20px rgba(0,0,0,.12);
-  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+  z-index: 9999 !important;
   overflow: hidden;
   border: 1px solid var(--o100);
   transform-origin: top center;
