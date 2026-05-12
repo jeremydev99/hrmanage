@@ -116,12 +116,19 @@ const App = {
               관리자 설정 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
             </button>
             <div id="dd-admin" class="nav-dd-menu" style="right:0;left:auto">
-              <div class="dd-section-label">관리자 메뉴</div>
+              <div class="dd-section-label">평가 관리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)">계정 승인 관리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)">전직원 평가 현황</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-cat'),300)">목표 카테고리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-periods'),300)">평가 기간 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-grades'),300)">평가 등급</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-policy'),300)">평가 정책</div>
-              <div class="dd-item" onclick="closeNavDD();App.navigate('admin')">관리자 설정 전체</div>
+              <div class="dd-section-label">조직 / 권한</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-org'),300)">조직도 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-orgtable'),300)">조직 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-roles'),300)">권한 관리</div>
+              <div class="dd-section-label">로그</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-audit'),300)">감사 로그</div>
             </div>
           </div>
 

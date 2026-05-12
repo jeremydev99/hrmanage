@@ -473,6 +473,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | PC 관리자 설정 드롭다운 전체 메뉴 표시 + 섹션 구분 | Claude Code |
 | 2026-05-12 | 목표작성 기간 선택 UI 숨김, eval_periods 삭제 시 eval_period_modes 함께 삭제 | Claude Code |
 | 2026-05-12 | 목표 작성 기간 선택 UI 숨김 (데이터 충돌 방지, 활성 기간 텍스트로만 표시) | Claude Code |
 | 2026-05-12 | 모바일 햄버거 메뉴 터치 지연 수정 (ontouchstart 추가, closeNavDD 딜레이 300ms) | Claude Code |
