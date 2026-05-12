@@ -19,6 +19,7 @@ Pages.admin = async function() {
       <button class="stb"        id="stb-adm-cat"      onclick="switchAdmTab('adm-cat')">목표 카테고리</button>
       <button class="stb"        id="stb-adm-periods"  onclick="switchAdmTab('adm-periods')">평가 기간 관리</button>
       <button class="stb"        id="stb-adm-org"      onclick="switchAdmTab('adm-org')">조직도 관리</button>
+      <button class="stb"        id="stb-adm-orgtable" onclick="switchAdmTab('adm-orgtable')">조직 관리</button>
       <button class="stb"        id="stb-adm-roles"    onclick="switchAdmTab('adm-roles')">권한 관리</button>
       <button class="stb"        id="stb-adm-policy"  onclick="switchAdmTab('adm-policy')">평가 정책</button>
       <button class="stb"        id="stb-adm-grades"  onclick="switchAdmTab('adm-grades')">평가 등급</button>
@@ -29,6 +30,7 @@ Pages.admin = async function() {
     <div class="sp"        id="adm-cat"></div>
     <div class="sp"        id="adm-periods"></div>
     <div class="sp"        id="adm-org"></div>
+    <div class="sp"        id="adm-orgtable"></div>
     <div class="sp"        id="adm-roles"></div>
     <div class="sp"        id="adm-policy"></div>
     <div class="sp"        id="adm-grades"></div>
@@ -236,6 +238,7 @@ function switchAdmTab(id) {
   if (id==='adm-cat')      renderAdmCat();
   if (id==='adm-periods')  renderAdmPeriods();
   if (id==='adm-org')      renderAdmOrg();
+  if (id==='adm-orgtable') renderAdmOrgTable();
   if (id==='adm-roles')    renderAdmRoles();
   if (id==='adm-policy')   renderAdmPolicy();
   if (id==='adm-grades')   renderAdmGrades();
@@ -312,6 +315,189 @@ async function saveCats() {
 }
 
 /* ── 조직도 관리 ── */
+/* ── 조직 관리 (organizations 테이블 기반) ── */
+async function renderAdmOrgTable() {
+  const el = document.getElementById('adm-orgtable');
+  if (!el) return;
+  el.innerHTML = '<div class="spinner">로딩 중...</div>';
+  try {
+    const [orgs, users] = await Promise.all([
+      API.get('/organizations'),
+      API.get('/users'),
+    ]);
+    const rootOrgs = orgs.filter(o => !o.parent_id);
+
+    function renderOrgTree(org, depth = 0) {
+      const children = orgs.filter(o => o.parent_id === org.id);
+      const members  = users.filter(u => u.org_id === org.id);
+      const indent   = depth * 20;
+      return `
+        <div style="margin-left:${indent}px;margin-bottom:8px;
+                    border:1px solid var(--border);border-radius:8px;padding:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div>
+              <span style="font-size:14px;font-weight:600;color:var(--o800)">${org.name}</span>
+              ${org.leader_name
+                ? `<span style="font-size:12px;color:var(--muted);margin-left:8px">리더: ${org.leader_name} ${org.leader_title||''}</span>`
+                : `<span style="font-size:12px;color:#E53935;margin-left:8px">리더 미지정</span>`}
+              <span style="font-size:11px;color:var(--muted);margin-left:8px">멤버 ${members.length}명</span>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm"
+                onclick="editOrg(${org.id},'${org.name.replace(/'/g,"\\'")}',${org.leader_id||'null'},${org.parent_id||'null'})">편집</button>
+              <button class="btn btn-sm" style="font-size:11px;border:1px solid #F09595;color:#A32D2D"
+                onclick="deleteOrg(${org.id},'${org.name.replace(/'/g,"\\'")}')">삭제</button>
+            </div>
+          </div>
+          ${members.length ? `
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">
+            ${members.map(m => `
+              <span style="font-size:11px;background:var(--o50);padding:2px 8px;border-radius:12px;color:var(--o700)">
+                ${m.name} ${m.title||''}
+                <button style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px"
+                  onclick="removeFromOrg(${m.id},'${m.name}')">✕</button>
+              </span>`).join('')}
+          </div>` : ''}
+          ${children.map(child => renderOrgTree(child, depth + 1)).join('')}
+        </div>`;
+    }
+
+    const unassigned = users.filter(u => !u.org_id && u.is_active);
+    el.innerHTML = `<div class="card">
+      <div class="card-header"><div>
+        <div class="card-header-t">조직 구조 관리</div>
+        <div class="card-header-s">계층 구조로 조직을 정의하고 멤버를 배정합니다</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="showAddOrgModal()">+ 조직 추가</button></div>
+      ${rootOrgs.map(org => renderOrgTree(org)).join('') || '<div class="alert alert-orange">등록된 조직이 없습니다.</div>'}
+      <div style="margin-top:16px">
+        <div style="font-size:13px;font-weight:500;color:var(--muted);margin-bottom:8px">조직 미배정 직원</div>
+        ${unassigned.map(u => `
+          <span style="font-size:12px;background:var(--o50);padding:3px 10px;border-radius:12px;margin:3px;display:inline-block">
+            ${u.name} ${u.title||''}
+            <button class="btn btn-sm" style="font-size:10px;margin-left:4px"
+              onclick="assignOrgModal(${u.id},'${u.name}')">조직 배정</button>
+          </span>`).join('') || '<span style="font-size:12px;color:var(--muted)">없음</span>'}
+      </div>
+    </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
+  }
+}
+
+function showAddOrgModal(parentId) {
+  showOrgModal({ id: null, name: '', leader_id: null, parent_id: parentId||null });
+}
+
+async function editOrg(id, name, leaderId, parentId) {
+  showOrgModal({ id, name, leader_id: leaderId, parent_id: parentId });
+}
+
+async function showOrgModal(org) {
+  document.getElementById('org-modal')?.remove();
+  const [users, orgs] = await Promise.all([API.get('/users'), API.get('/organizations')]);
+  const overlay = document.createElement('div');
+  overlay.id = 'org-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--white);border-radius:12px;padding:24px;width:100%;max-width:400px;margin:20px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:16px">${org.id ? '조직 편집' : '조직 추가'}</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">조직명 *</label>
+        <input id="org-modal-name" value="${org.name||''}" placeholder="조직명 입력" style="width:100%;height:36px;font-size:13px">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">상위 조직</label>
+        <select id="org-modal-parent" style="width:100%;height:36px;font-size:13px">
+          <option value="">최상위 (없음)</option>
+          ${orgs.filter(o => o.id !== org.id).map(o =>
+            `<option value="${o.id}" ${o.id===org.parent_id?'selected':''}>${o.name}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">조직장 (선택사항)</label>
+        <select id="org-modal-leader" style="width:100%;height:36px;font-size:13px">
+          <option value="">미지정</option>
+          ${users.filter(u=>u.is_active).map(u =>
+            `<option value="${u.id}" ${u.id===org.leader_id?'selected':''}>${u.name} ${u.title||''}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('org-modal').remove()">취소</button>
+        <button class="btn btn-primary" onclick="saveOrg(${org.id||'null'})">저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function saveOrg(orgId) {
+  const name      = document.getElementById('org-modal-name')?.value.trim();
+  const parent_id = document.getElementById('org-modal-parent')?.value || null;
+  const leader_id = document.getElementById('org-modal-leader')?.value || null;
+  if (!name) { showAlert('조직명을 입력해주세요.', 'orange'); return; }
+  try {
+    if (orgId) await API.put('/organizations/' + orgId, { name, leader_id, parent_id });
+    else       await API.post('/organizations', { name, leader_id, parent_id });
+    showAlert('저장되었습니다.', 'green');
+    document.getElementById('org-modal')?.remove();
+    renderAdmOrgTable();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function deleteOrg(id, name) {
+  if (!confirm(`"${name}" 조직을 삭제하시겠습니까?`)) return;
+  try {
+    await API.del('/organizations/' + id);
+    showAlert('삭제되었습니다.', 'green');
+    renderAdmOrgTable();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function assignOrgModal(userId, userName) {
+  const orgs = await API.get('/organizations');
+  document.getElementById('assign-org-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'assign-org-modal';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:500;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--white);border-radius:12px;padding:24px;width:100%;max-width:360px;margin:20px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:16px">${userName} 조직 배정</div>
+      <select id="assign-org-select" style="width:100%;height:38px;font-size:13px;margin-bottom:16px">
+        <option value="">조직 선택</option>
+        ${orgs.map(o => `<option value="${o.id}">${o.name}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="document.getElementById('assign-org-modal').remove()">취소</button>
+        <button class="btn btn-primary" onclick="assignOrg(${userId})">배정</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function assignOrg(userId) {
+  const orgId = document.getElementById('assign-org-select')?.value;
+  if (!orgId) { showAlert('조직을 선택해주세요.', 'orange'); return; }
+  try {
+    await API.patch('/users/' + userId + '/org', { org_id: parseInt(orgId) });
+    showAlert('조직이 배정되었습니다.', 'green');
+    document.getElementById('assign-org-modal')?.remove();
+    renderAdmOrgTable();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function removeFromOrg(userId, userName) {
+  if (!confirm(`${userName}을(를) 조직에서 제외하시겠습니까?`)) return;
+  try {
+    await API.patch('/users/' + userId + '/org', { org_id: null });
+    showAlert('조직에서 제외되었습니다.', 'green');
+    renderAdmOrgTable();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+/* ── loadOrgModes 표시 방식 수정: 조직명 기준 ── */
+
 let _orgViewMode = localStorage.getItem('orgViewMode') || 'list';
 let _orgChartCtrl = null; // AbortController for chart event listeners
 
@@ -1687,15 +1873,17 @@ async function loadOrgModes(periodId, periodLocked) {
       ${managers.map(mgr => `
         <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
                     border-bottom:1px solid var(--o50);flex-wrap:wrap">
-          <div style="min-width:120px">
-            <span style="font-size:12px;font-weight:500">${mgr.name}</span>
-            <span style="font-size:11px;color:var(--muted);margin-left:4px">${mgr.title||''}</span>
+          <div style="min-width:140px">
+            <span style="font-size:12px;font-weight:600">${mgr.org_name}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:4px">
+              리더: ${mgr.leader_name||'미지정'}
+            </span>
           </div>
           <div style="display:flex;gap:4px">
             ${['MBO','OKR','KPI'].map(m => `
               <button class="btn btn-sm ${mgr.eval_mode===m?'btn-primary':'btn-ghost'}"
                 ${periodLocked||mgr.org_locked?'disabled':''}
-                onclick="setOrgEvalMode(${periodId},${mgr.id},'${m}',this)"
+                onclick="setOrgEvalMode(${periodId},${mgr.leader_id},'${m}',this)"
                 style="font-size:11px;padding:2px 8px">${m}</button>
             `).join('')}
           </div>

@@ -1,3 +1,4 @@
+console.log('okr-eval.js 실행됨');
 Pages.okrEval = async function(periodLabel, evalYear, mode) {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';

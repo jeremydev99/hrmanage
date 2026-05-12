@@ -961,21 +961,22 @@ app.post('/api/eval-periods/:id/eval-mode', auth, adminOnly, (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 조직별 기간별 평가방식 조회
+// 조직별 기간별 평가방식 조회 (organizations 기반)
 app.get('/api/eval-periods/:id/org-modes', auth, adminOnly, (req, res) => {
   try {
-    const managers = db.prepare(`
-      SELECT DISTINCT u.id, u.name, u.title, u.dept,
+    const orgs = db.prepare(`
+      SELECT o.id as org_id, o.name as org_name,
+        o.leader_id, u.name as leader_name,
         COALESCE(epm.eval_mode, ep.eval_mode, 'MBO') as eval_mode,
         epm.locked as org_locked
-      FROM users u
-      LEFT JOIN eval_period_modes epm ON epm.manager_id=u.id AND epm.period_id=?
+      FROM organizations o
+      LEFT JOIN users u ON o.leader_id = u.id
+      LEFT JOIN eval_period_modes epm ON epm.manager_id=o.leader_id AND epm.period_id=?
       LEFT JOIN eval_periods ep ON ep.id=?
-      WHERE u.id IN (SELECT DISTINCT manager_id FROM users WHERE manager_id IS NOT NULL)
-      AND u.is_active=1
-      ORDER BY u.name
+      WHERE o.is_active=1 AND o.leader_id IS NOT NULL
+      ORDER BY o.sort_order, o.id
     `).all(req.params.id, req.params.id);
-    res.json(managers);
+    res.json(orgs);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1122,35 +1123,43 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
 
 // 내 평가 방식 조회 (조직장 설정 상속)
 // 활성 기간별 내 평가방식 목록
+// 내 소속 조직의 리더 체인 (org_id 기반)
+function getMyOrgLeaderChain(userId) {
+  try {
+    const me = db.prepare('SELECT org_id FROM users WHERE id=?').get(userId);
+    if (!me?.org_id) return [];
+    const chain = [];
+    let currentOrgId = me.org_id;
+    for (let depth = 0; depth < 10; depth++) {
+      const org = db.prepare('SELECT * FROM organizations WHERE id=?').get(currentOrgId);
+      if (!org) break;
+      if (org.leader_id) chain.push(org.leader_id);
+      if (!org.parent_id) break;
+      currentOrgId = org.parent_id;
+    }
+    return chain;
+  } catch(e) { return []; }
+}
+
 app.get('/api/eval-periods/my-modes', auth, (req, res) => {
   try {
     const activePeriods = db.prepare(
       "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, id DESC"
     ).all();
-    const me = db.prepare('SELECT manager_id FROM users WHERE id=?').get(req.user.sub);
+    const leaderChain = getMyOrgLeaderChain(req.user.sub);
 
     const result = activePeriods.map(period => {
-      // 1) 본인이 조직장인 경우 (본인 직속 팀의 설정)
-      const selfMode = db.prepare(
-        'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-      ).get(period.id, req.user.sub);
-      if (selfMode) return {
-        period_id: period.id, period_label: period.period_label,
-        eval_year: period.eval_year, mode: selfMode.eval_mode, source: 'org_period'
-      };
-
-      // 2) 직속 상사의 설정 (1단계만)
-      if (me?.manager_id) {
-        const mgrMode = db.prepare(
+      // org_id 기반 조직장 체인 탐색
+      for (const leaderId of leaderChain) {
+        const orgMode = db.prepare(
           'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, me.manager_id);
-        if (mgrMode) return {
+        ).get(period.id, leaderId);
+        if (orgMode) return {
           period_id: period.id, period_label: period.period_label,
-          eval_year: period.eval_year, mode: mgrMode.eval_mode, source: 'org_period'
+          eval_year: period.eval_year, mode: orgMode.eval_mode, source: 'org_period'
         };
       }
-
-      // 3) 기간 전사 기본값
+      // 기간 전사 기본값
       return {
         period_id: period.id, period_label: period.period_label,
         eval_year: period.eval_year, mode: period.eval_mode || 'MBO', source: 'period'
@@ -1163,8 +1172,6 @@ app.get('/api/eval-periods/my-modes', auth, (req, res) => {
 
 app.get('/api/settings/my-eval-mode', auth, (req, res) => {
   try {
-    const me = db.prepare('SELECT manager_id FROM users WHERE id=?').get(req.user.sub);
-
     const activePeriods = db.prepare(
       "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC"
     ).all();
@@ -1174,30 +1181,22 @@ app.get('/api/settings/my-eval-mode', auth, (req, res) => {
       return res.json({ mode: global?.value || 'MBO', source: 'global' });
     }
 
-    // 각 활성 기간에서 직속 관계(본인 or 직속 상사)만 확인, OKR/KPI 우선
+    const leaderChain = getMyOrgLeaderChain(req.user.sub);
+
     for (const period of activePeriods) {
-      // 1) 본인이 조직장인 경우
-      const selfMode = db.prepare(
-        'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-      ).get(period.id, req.user.sub);
-      if (selfMode && selfMode.eval_mode !== 'MBO')
-        return res.json({ mode: selfMode.eval_mode, source: 'org_period', period: period.period_label });
-
-      // 2) 직속 상사 설정 (1단계만)
-      if (me?.manager_id) {
-        const mgrMode = db.prepare(
+      // org_id 기반 조직장 체인 탐색
+      for (const leaderId of leaderChain) {
+        const orgMode = db.prepare(
           'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, me.manager_id);
-        if (mgrMode && mgrMode.eval_mode !== 'MBO')
-          return res.json({ mode: mgrMode.eval_mode, source: 'org_period', period: period.period_label });
+        ).get(period.id, leaderId);
+        if (orgMode && orgMode.eval_mode !== 'MBO')
+          return res.json({ mode: orgMode.eval_mode, source: 'org_period', period: period.period_label });
       }
-
-      // 3) 기간 전사 기본값
+      // 기간 전사 기본값
       if (period.eval_mode && period.eval_mode !== 'MBO')
         return res.json({ mode: period.eval_mode, source: 'period', period: period.period_label });
     }
 
-    // 4) 전사 전체 기본값
     const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
     res.json({ mode: global?.value || 'MBO', source: 'global' });
   } catch(err) { res.status(500).json({ error: err.message }); }
@@ -1412,6 +1411,75 @@ app.get('/api/admin/eval-detail/:userId', auth, adminOnly, (req, res) => {
     console.error('[eval-detail]', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── 조직 관리 API ─────────────────────────────────────────
+
+app.get('/api/organizations', auth, (req, res) => {
+  try {
+    const orgs = db.prepare(`
+      SELECT o.*, u.name as leader_name, u.title as leader_title, p.name as parent_name
+      FROM organizations o
+      LEFT JOIN users u ON o.leader_id = u.id
+      LEFT JOIN organizations p ON o.parent_id = p.id
+      WHERE o.is_active = 1
+      ORDER BY o.sort_order, o.id
+    `).all();
+    res.json(orgs);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/organizations', auth, adminOnly, (req, res) => {
+  try {
+    const { name, leader_id, parent_id, description, sort_order } = req.body;
+    if (!name) return res.status(400).json({ error: '조직명은 필수입니다.' });
+    const r = db.prepare(
+      "INSERT INTO organizations(name,leader_id,parent_id,description,sort_order) VALUES(?,?,?,?,?)"
+    ).run(name, leader_id||null, parent_id||null, description||'', sort_order||0);
+    auditLog(req.user.sub, 'ORG_CREATED', r.lastInsertRowid, name, `조직 생성: ${name}`, req.ip);
+    res.json({ id: r.lastInsertRowid });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/organizations/:id', auth, adminOnly, (req, res) => {
+  try {
+    const { name, leader_id, parent_id, description, sort_order } = req.body;
+    db.prepare(
+      "UPDATE organizations SET name=?,leader_id=?,parent_id=?,description=?,sort_order=? WHERE id=?"
+    ).run(name, leader_id||null, parent_id||null, description||'', sort_order||0, req.params.id);
+    auditLog(req.user.sub, 'ORG_UPDATED', req.params.id, name, `조직 수정: ${name}`, req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/organizations/:id', auth, masterOnly, (req, res) => {
+  try {
+    const org = db.prepare('SELECT name FROM organizations WHERE id=?').get(req.params.id);
+    db.prepare('UPDATE organizations SET is_active=0 WHERE id=?').run(req.params.id);
+    auditLog(req.user.sub, 'ORG_DELETED', req.params.id, org?.name, '조직 비활성화', req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/organizations/:id/members', auth, (req, res) => {
+  try {
+    const members = db.prepare(
+      'SELECT id, name, title, grade, dept, role FROM users WHERE org_id=? AND is_active=1'
+    ).all(req.params.id);
+    res.json(members);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+app.patch('/api/users/:id/org', auth, adminOnly, (req, res) => {
+  try {
+    const { org_id } = req.body;
+    db.prepare('UPDATE users SET org_id=? WHERE id=?').run(org_id||null, req.params.id);
+    const target = db.prepare('SELECT name FROM users WHERE id=?').get(req.params.id);
+    const org = org_id ? db.prepare('SELECT name FROM organizations WHERE id=?').get(org_id) : null;
+    auditLog(req.user.sub, 'USER_ORG_CHANGED', req.params.id, target?.name,
+      `조직 변경: ${org?.name||'미지정'}`, req.ip);
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // ── 앱 설정 API ──────────────────────────────────────────
@@ -1839,6 +1907,17 @@ function initDB() {
       created_at  TEXT DEFAULT (datetime('now')),
       UNIQUE(period_id, manager_id)
     )`,
+    `CREATE TABLE IF NOT EXISTS organizations (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL,
+      leader_id   INTEGER,
+      parent_id   INTEGER,
+      description TEXT,
+      sort_order  INTEGER DEFAULT 0,
+      is_active   INTEGER DEFAULT 1,
+      created_at  TEXT DEFAULT (datetime('now'))
+    )`,
+    "ALTER TABLE users ADD COLUMN org_id INTEGER",
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
@@ -1875,6 +1954,29 @@ function initDB() {
     db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('timezone','Asia/Seoul')").run();
     db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('eval_mode','MBO')").run();
   } catch(e) {}
+
+  // organizations 초기 데이터
+  try {
+    const orgCount = db.prepare('SELECT COUNT(*) as c FROM organizations').get();
+    if (orgCount.c === 0) {
+      const rootOrg = db.prepare(
+        "INSERT INTO organizations(name, leader_id, parent_id, sort_order) VALUES(?,?,?,?)"
+      ).run('㈜사이냅소프트', 1, null, 0);
+      const rootId = rootOrg.lastInsertRowid;
+      const hrOrg    = db.prepare("INSERT INTO organizations(name, leader_id, parent_id, sort_order) VALUES(?,?,?,?)").run('인사팀', 2, rootId, 1);
+      const devOrg   = db.prepare("INSERT INTO organizations(name, leader_id, parent_id, sort_order) VALUES(?,?,?,?)").run('개발팀', 4, rootId, 2);
+      const salesOrg = db.prepare("INSERT INTO organizations(name, leader_id, parent_id, sort_order) VALUES(?,?,?,?)").run('영업팀', 7, rootId, 3);
+      const orgMap = [
+        [1, rootId], [2, hrOrg.lastInsertRowid], [3, hrOrg.lastInsertRowid],
+        [4, devOrg.lastInsertRowid], [5, devOrg.lastInsertRowid], [6, devOrg.lastInsertRowid],
+        [7, salesOrg.lastInsertRowid],
+      ];
+      orgMap.forEach(([userId, orgId]) => {
+        db.prepare('UPDATE users SET org_id=? WHERE id=?').run(orgId, userId);
+      });
+      console.log('[DB] organizations 초기 데이터 생성 완료');
+    }
+  } catch(e) { console.log('[org seed skip]', e.message); }
 
   seedInitialData();
   loadTimezone();

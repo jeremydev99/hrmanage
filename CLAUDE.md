@@ -208,6 +208,8 @@ okr_key_results:   id, objective_id, title, target_value, current_value, unit, w
 eval_periods:      ... eval_mode TEXT DEFAULT 'MBO', locked INTEGER DEFAULT 0 (추가)
 eval_period_modes: id, period_id, manager_id, eval_mode, locked, created_at
                    UNIQUE(period_id, manager_id)
+organizations:     id, name, leader_id, parent_id, description, sort_order, is_active
+users:             ... org_id INTEGER (추가)
 ```
 
 ### 테스트 계정
@@ -264,7 +266,12 @@ eval_period_modes: id, period_id, manager_id, eval_mode, locked, created_at
     - 운영 주체 시간대 기준으로 모든 로그/기록 저장
     - 관리자 설정 - 평가정책 탭에서 변경 가능 (master 전용)
     - 기본값: Asia/Seoul (KST)
-24. **평가방식 3차원 매핑**: 조직(manager) × 시기(period) × 방식(MBO/OKR/KPI)
+24. **조직 구조**: `organizations` 테이블 (계층구조)
+    - `leader_id = null` 허용 (미지정 시 parent 조직장에게 자동 위임)
+    - `users.org_id` → 소속 조직 지정
+    - 평가방식 조회: `org_id` 기반 조직장 체인 탐색 (`getMyOrgLeaderChain`)
+    - 관리: 관리자 설정 → 조직 관리 탭 (`adm-orgtable`)
+25. **평가방식 3차원 매핑**: 조직(org_id) × 시기(period) × 방식(MBO/OKR/KPI)
     - 결정 우선순위:
       1. `eval_period_modes` (조직장+기간 조합)
       2. `eval_periods.eval_mode` (기간 전사 기본값)
@@ -351,6 +358,12 @@ GET    /api/settings/second-final       2차 최종평가 허용 설정
 POST   /api/settings/second-final       2차 최종평가 허용 설정 변경 (admin+)
 GET    /api/settings/timezone           시간대 조회
 POST   /api/settings/timezone           시간대 변경 (master)
+GET    /api/organizations                조직 목록 (계층 포함)
+POST   /api/organizations                조직 추가 (admin+)
+PUT    /api/organizations/:id            조직 수정 (admin+)
+DELETE /api/organizations/:id            조직 삭제 (master)
+GET    /api/organizations/:id/members    조직 멤버 조회
+PATCH  /api/users/:id/org               사용자 조직 변경 (admin+)
 GET    /api/eval-periods/my-modes        활성 기간별 내 평가방식 목록
 GET    /api/eval-periods/:id/eval-mode  기간 전사 기본방식 조회 (admin+)
 POST   /api/eval-periods/:id/eval-mode  기간 전사 기본방식 설정 (admin+)
@@ -414,6 +427,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | organizations 테이블 추가 (계층구조, 조직장, 멤버), org_id 기반 평가방식 조회 | Claude Code |
 | 2026-05-12 | _currentPeriodLabel 중복 선언 제거 (SyntaxError 수정) | Claude Code |
 | 2026-05-12 | okr-eval.js API 경로 확인 (/okr 유지, api.js base='/api'로 자동 prefix됨 — 수정 불필요) | Claude Code |
 | 2026-05-12 | okr-eval.js 스크립트 로딩 순서 수정 (app.js를 api.js 직후로 이동, Pages 객체 먼저 정의) | Claude Code |
