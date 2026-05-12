@@ -252,6 +252,9 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .pc-only     { display: block; }
 .mobile-only { display: none;  }
 
+/* nav 드롭다운 기본 표시 */
+.nav-tabs-wrap { display: flex; align-items: center; }
+
 /* ── PC 드롭다운 메뉴 ─────────────────────── */
 .nav-tab {
   background: none;
@@ -324,7 +327,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
     max-width: calc(100vw - 140px);
   }
   .nav-tabs-wrap {
-    display: none;
+    display: none !important;
   }
   .nav-tabs-wrap.mobile-open {
     display: flex !important;

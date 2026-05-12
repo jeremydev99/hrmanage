@@ -1,4 +1,5 @@
 Pages.myEval = async function() {
+  if (!App.user) { App.renderLogin(); return; }
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
