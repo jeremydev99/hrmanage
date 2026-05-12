@@ -473,6 +473,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-12 | perfHome/okrDashboard navigate 미등록 수정 (var Pages 초기화, navigate 직접 처리 추가) | Claude Code |
 | 2026-05-12 | perfHome/okrDashboard 빈 캔버스 수정 (이미 등록됨 확인, 추가 불필요) | Claude Code |
 | 2026-05-12 | PC 메뉴 미표시 + 모바일 첫화면 공백 수정 | Claude Code |
 | 2026-05-12 | 30-31 디버깅: 메뉴 탭, 빈캔버스, 햄버거 홈 항목 수정 | Claude Code |

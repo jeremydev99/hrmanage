@@ -1,3 +1,6 @@
+/* ── Pages 객체 초기화 (app.js가 login.js보다 먼저 로드되므로 여기서 먼저 생성) ── */
+var Pages = window.Pages || {};
+
 /* ── 앱 메인 라우터 ── */
 const App = {
   user: null,
@@ -140,6 +143,9 @@ const App = {
     const area = document.getElementById('main-area');
     area.innerHTML = '<div class="spinner">로딩 중...</div>';
     console.log('[navigate]', page, 'Pages:', Object.keys(Pages));
+    // 직접 처리 (P map에 등록되기 전에 navigate가 호출될 경우 대비)
+    if (page === 'perfHome')     { if (Pages.perfHome)     Pages.perfHome();     else area.innerHTML = ''; return; }
+    if (page === 'okrDashboard') { if (Pages.okrDashboard) Pages.okrDashboard(); else area.innerHTML = ''; return; }
     const P = {
       'my-eval':        Pages.myEval,
       'myEval':         Pages.myEval,
