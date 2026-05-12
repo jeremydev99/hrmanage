@@ -77,53 +77,55 @@ const App = {
             style="color:white;border-color:rgba(255,255,255,.4);white-space:nowrap;font-size:13px"
             onclick="App.logout()">로그아웃</button>
         </div>
+
+        <!-- PC 중앙 메뉴 (topbar 내부에서 position:absolute 중앙 정렬) -->
+        <nav class="nav-tabs-wrap pc-only" style="gap:2px">
+
+          <!-- 내 평가 -->
+          <div class="nav-dropdown" style="position:relative">
+            <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-myeval',event)"
+              style="display:flex;align-items:center;gap:4px">
+              내 평가 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+            </button>
+            <div id="dd-myeval" class="nav-dd-menu">
+              <div class="dd-item" onclick="closeNavDD();App.navigate('myEval')">📋 내 평가 홈</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('approvals')">승인 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('finalEval')">최종 평가</div>
+            </div>
+          </div>
+
+          <!-- 성과관리 -->
+          <div class="nav-dropdown" style="position:relative">
+            <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-perf',event)"
+              style="display:flex;align-items:center;gap:4px">
+              성과관리 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+            </button>
+            <div id="dd-perf" class="nav-dd-menu">
+              <div class="dd-item" onclick="closeNavDD();App.navigate('perfHome')">📊 성과관리 홈</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('progressReport')">중간 보고</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('feedback')">중간 피드백</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
+            </div>
+          </div>
+
+          <!-- 관리자 설정 (admin+만) -->
+          <div class="nav-dropdown admin-only" style="position:relative;display:none">
+            <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-admin',event)"
+              style="display:flex;align-items:center;gap:4px">
+              관리자 설정 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+            </button>
+            <div id="dd-admin" class="nav-dd-menu" style="right:0;left:auto">
+              <div class="dd-section-label">관리자 메뉴</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)">계정 승인 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)">전직원 평가 현황</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-periods'),300)">평가 기간 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-policy'),300)">평가 정책</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin')">관리자 설정 전체</div>
+            </div>
+          </div>
+
+        </nav>
       </div>
-      <nav class="nav-tabs-wrap" style="display:flex;align-items:center;gap:2px;padding:0 8px">
-
-        <!-- 내 평가 -->
-        <div class="nav-dropdown" style="position:relative">
-          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-myeval',event)"
-            style="display:flex;align-items:center;gap:4px">
-            내 평가 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
-          </button>
-          <div id="dd-myeval" class="nav-dd-menu">
-            <div class="dd-item" onclick="closeNavDD();App.navigate('myEval')">📋 내 평가 홈</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('approvals')">승인 관리</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('finalEval')">최종 평가</div>
-          </div>
-        </div>
-
-        <!-- 성과관리 -->
-        <div class="nav-dropdown" style="position:relative">
-          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-perf',event)"
-            style="display:flex;align-items:center;gap:4px">
-            성과관리 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
-          </button>
-          <div id="dd-perf" class="nav-dd-menu">
-            <div class="dd-item" onclick="closeNavDD();App.navigate('perfHome')">📊 성과관리 홈</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('progressReport')">중간 보고</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('feedback')">중간 피드백</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
-          </div>
-        </div>
-
-        <!-- 관리자 설정 (admin+만) -->
-        <div class="nav-dropdown admin-only" style="position:relative;display:none">
-          <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-admin',event)"
-            style="display:flex;align-items:center;gap:4px">
-            관리자 설정 <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
-          </button>
-          <div id="dd-admin" class="nav-dd-menu" style="right:0;left:auto">
-            <div class="dd-section-label">관리자 메뉴</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-accounts'),300)">계정 승인 관리</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)">전직원 평가 현황</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-periods'),300)">평가 기간 관리</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-policy'),300)">평가 정책</div>
-            <div class="dd-item" onclick="closeNavDD();App.navigate('admin')">관리자 설정 전체</div>
-          </div>
-        </div>
-
-      </nav>
       <div id="main-alert" style="padding:0 20px;max-width:900px;margin:0 auto"></div>
       <div class="main" id="main-area"></div>
     `;
