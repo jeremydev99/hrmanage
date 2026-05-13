@@ -137,9 +137,69 @@ let _okrObjCount = 0, _okrKRCount = {};
 let _currentPeriodLabel = null, _currentEvalYear = null;
 
 function startNewOKR(periodLabel, evalYear) {
+  // 기간이 전달된 경우 바로 폼 표시
+  if (periodLabel && evalYear) {
+    _currentPeriodLabel = periodLabel;
+    _currentEvalYear = evalYear;
+    renderOKRForm(periodLabel, evalYear);
+    return;
+  }
+
+  // 기간이 없으면 활성 기간 선택 화면 표시
+  API.get('/eval-periods/active').then(periods => {
+    if (!periods || !periods.length) {
+      showAlert('활성화된 평가 기간이 없습니다.', 'red');
+      return;
+    }
+    // 활성 기간이 1개면 바로 폼으로
+    if (periods.length === 1) {
+      _currentPeriodLabel = periods[0].period_label;
+      _currentEvalYear = periods[0].eval_year;
+      renderOKRForm(periods[0].period_label, periods[0].eval_year);
+      return;
+    }
+    // 여러 개면 선택 화면 표시
+    const area = document.getElementById('main-area');
+    area.innerHTML = '';
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="card-header">
+        <div>
+          <div class="card-header-t">🎯 OKR 작성 기간 선택</div>
+          <div class="card-header-s">작성할 평가 기간을 선택하세요</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${periods.map(p => {
+          const typeLabel = p.period_type === 'half' ? '반기'
+            : p.period_type === 'quarter' ? '분기'
+            : p.period_type === 'h' ? '반기'
+            : p.period_type === 'q' ? '분기'
+            : (p.period_type || '');
+          return `
+          <button class="btn btn-ghost"
+            style="text-align:left;padding:14px 16px;border:1px solid var(--border);
+                   border-radius:8px;font-size:14px"
+            onclick="startNewOKR('${p.period_label}','${p.eval_year}')">
+            <div style="font-weight:600;color:var(--o800)">${p.period_label}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">
+              ${p.eval_year} · ${typeLabel}
+              ${p.eval_mode && p.eval_mode !== 'MBO'
+                ? `<span class="bd bd-teal" style="font-size:10px;margin-left:4px">${p.eval_mode}</span>`
+                : ''}
+            </div>
+          </button>`;}).join('')}
+      </div>
+      <div class="abar" style="margin-top:12px">
+        <button class="btn btn-ghost" onclick="Pages.okrDashboard()">취소</button>
+      </div>`;
+    area.appendChild(card);
+  }).catch(() => showAlert('평가 기간을 불러올 수 없습니다.', 'red'));
+}
+
+function renderOKRForm(periodLabel, evalYear) {
   _okrObjCount = 0; _okrKRCount = {};
-  _currentPeriodLabel = periodLabel || null;
-  _currentEvalYear = evalYear || null;
   const area = document.getElementById('main-area');
   area.innerHTML = '';
   const card = document.createElement('div');
@@ -147,7 +207,7 @@ function startNewOKR(periodLabel, evalYear) {
   card.innerHTML = `
     <div class="card-header">
       <div>
-        <div class="card-header-t">🎯 OKR 작성${periodLabel ? ` — ${periodLabel}` : ''}</div>
+        <div class="card-header-t">🎯 OKR 작성 — ${periodLabel}</div>
         <div class="card-header-s">Objective(목표)와 Key Results(핵심 결과)를 설정하세요</div>
       </div>
     </div>
@@ -159,7 +219,8 @@ function startNewOKR(periodLabel, evalYear) {
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;border:1px dashed var(--o300)"
       onclick="addOKRObjective()">+ Objective 추가</button>
     <div class="abar" style="margin-top:16px">
-      <button class="btn btn-ghost" onclick="Pages.okrEval('${periodLabel||''}','${evalYear||''}')">취소</button>
+      <button class="btn btn-ghost"
+        onclick="Pages.okrEval('${periodLabel}','${evalYear}')">취소</button>
       <button class="btn btn-primary" onclick="submitOKR()">OKR 저장</button>
     </div>`;
   area.appendChild(card);

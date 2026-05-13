@@ -228,7 +228,58 @@ async function toggleActive(uid) {
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
+// ── 변경사항 추적 ─────────────────────────────────────────
+let _adminDirty = false;
+
+// ── 평가 정책 임시 상태 ──────────────────────────────────
+let _policyState = {};
+let _policyDirty = false;
+
+function setPolicyState(key, value, btn) {
+  _policyState[key] = value;
+  _policyDirty = true;
+  if (btn) {
+    const group = btn.closest('[data-policy-group]');
+    if (group) {
+      group.querySelectorAll('button').forEach(b => {
+        b.classList.remove('btn-primary'); b.classList.add('btn-ghost');
+      });
+      btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary');
+    }
+  }
+  document.querySelectorAll('.policy-save-btn').forEach(b => {
+    b.classList.remove('btn-ghost'); b.classList.add('btn-primary');
+    b.innerHTML = '💾 저장하기 <span style="font-size:11px">(변경사항 있음)</span>';
+  });
+}
+
+function markDirty() {
+  _adminDirty = true;
+  document.querySelectorAll('.adm-save-btn').forEach(btn => {
+    btn.classList.remove('btn-ghost');
+    btn.classList.add('btn-primary');
+    btn.textContent = '💾 저장하기 (변경사항 있음)';
+  });
+}
+
+function clearDirty() {
+  _adminDirty = false;
+  document.querySelectorAll('.adm-save-btn').forEach(btn => {
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-ghost');
+    btn.textContent = '저장하기';
+  });
+}
+
 function switchAdmTab(id) {
+  if (_policyDirty) {
+    if (!confirm('저장하지 않은 정책 변경사항이 있습니다.\n탭을 이동하면 변경사항이 사라집니다. 계속하시겠습니까?')) return;
+    _policyState = {}; _policyDirty = false;
+  }
+  if (_adminDirty) {
+    if (!confirm('저장하지 않은 변경사항이 있습니다. 계속하시겠습니까?')) return;
+    clearDirty();
+  }
   document.querySelectorAll('.stb').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.sp').forEach(s=>s.classList.remove('active'));
   document.getElementById('stb-'+id)?.classList.add('active');
@@ -289,6 +340,7 @@ function rebuildCatUI() {
 }
 
 function updEditCat(i, field, val) {
+  markDirty();
   _editCats[i][field] = field==='weight' ? Math.max(0,Math.min(100,parseInt(val)||0)) : val;
   const totalW = _editCats.reduce((a,c)=>a+Number(c.weight),0);
   const alertEl = document.querySelector('#adm-cat .alert');
@@ -309,6 +361,7 @@ async function saveCats() {
       else await API.post('/categories', cat);
     }
     App.categories = await API.get('/categories');
+    clearDirty();
     showAlert('카테고리가 저장되었습니다!','green');
     renderAdmCat();
   } catch(e) { showAlert(e.message,'red'); }
@@ -564,18 +617,18 @@ function _renderOrgChart(users, el) {
   if (users.some(u => !positions[String(u.id)])) positions = _orgAutoLayout(users);
 
   el.innerHTML = `
-    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-ghost btn-sm" onclick="_orgAutoArrange()">⚡ 자동 정렬</button>
       <button class="btn btn-ghost btn-sm" onclick="_orgSaveLayout()">💾 배치 저장</button>
       <button class="btn btn-ghost btn-sm" onclick="_orgFullscreen()">⛶ 전체화면</button>
-      <span style="font-size:11px;color:var(--muted);margin-left:4px">
+      <span style="font-size:12px;color:var(--muted);align-self:center">
         노드 드래그=이동 · 하단 점 드래그=상위 연결 · 연결선 클릭=해제
       </span>
     </div>`;
 
   const wrap = document.createElement('div');
   wrap.id = 'org-chart-wrap';
-  wrap.style.cssText = 'position:relative;width:100%;height:620px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
+  wrap.style.cssText = 'position:relative;width:100%;height:calc(100vh - 280px);max-height:600px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
 
   // 연결선 SVG — pointer-events:none은 SVG 전체가 아닌 가시선에만 적용
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -1382,16 +1435,18 @@ async function renderAdmPolicy() {
       <div class="card-header"><div>
         <div class="card-header-t">평가 정책 설정</div>
         <div class="card-header-s">전사 평가 운영 정책을 관리합니다</div>
-      </div></div>
+      </div>
+      <button class="btn btn-ghost policy-save-btn" style="white-space:nowrap"
+        onclick="saveAllPolicy()">저장하기</button></div>
 
       <!-- 공지사항 편집 -->
       <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid var(--o100)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
           <div>
             <div style="font-size:14px;font-weight:600">📢 로그인 화면 공지사항</div>
             ${notice.author_name
-              ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">최근 수정: ${notice.author_name} ${notice.author_title||''} · ${(notice.updated_at||'').slice(0,16)}</div>`
-              : '<div style="font-size:11px;color:var(--muted)">작성된 공지가 없습니다</div>'}
+              ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">최근 수정: ${notice.author_name} · ${(notice.updated_at||'').slice(0,16)}</div>`
+              : ''}
           </div>
           <button class="btn btn-primary btn-sm" onclick="saveNotice()">저장하기</button>
         </div>
@@ -1404,7 +1459,10 @@ async function renderAdmPolicy() {
 
       <!-- 세션 보안 정책 -->
       <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid var(--o100)">
-        <div style="font-size:14px;font-weight:600;margin-bottom:12px">🔐 세션 보안 정책</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="font-size:14px;font-weight:600">🔐 세션 보안 정책</div>
+          <button class="btn btn-primary btn-sm" onclick="saveSessionPolicy()">세션 정책 저장</button>
+        </div>
 
         <div class="srow">
           <div>
@@ -1443,8 +1501,6 @@ async function renderAdmPolicy() {
               : sessionPolicy.timeout_minutes+'분'}
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" style="margin-top:12px"
-          onclick="saveSessionPolicy()">세션 정책 저장</button>
       </div>
 
       <div class="srow">
@@ -1453,11 +1509,13 @@ async function renderAdmPolicy() {
           <div style="font-size:12px;color:var(--muted)">성과관리 홈에서 조직 성과를 몇 단계까지 표시할지 설정 (4단계 이상 미지원)</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
+          <div data-policy-group="dashboard_depth" style="display:flex;gap:6px">
           ${[1,2,3].map(d => `
             <button class="btn btn-sm ${dashDepth.depth===d?'btn-primary':'btn-ghost'}"
-              onclick="saveDashDepth(${d})" style="font-size:12px">
+              onclick="setPolicyState('dashboard_depth',${d},this)" style="font-size:12px">
               ${d}단계${d===2?' (기본)':d===3?' (옵션)':''}
             </button>`).join('')}
+          </div>
           <span style="font-size:11px;color:var(--muted)">4단계 이상 미지원</span>
         </div>
       </div>
@@ -1475,13 +1533,11 @@ async function renderAdmPolicy() {
           <div style="font-size:14px;font-weight:500">중간 피드백 횟수 제한</div>
           <div style="font-size:12px;color:var(--muted)">승인자별 피드백 제출 가능 횟수</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <select id="fb-limit-sel" style="height:32px;font-size:13px">
-            ${limitOptions.map(o =>
-              `<option value="${o.value}" ${fbLimit.limit===o.value?'selected':''}>${o.label}</option>`
-            ).join('')}
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="saveFbLimit()">저장</button>
+        <div data-policy-group="fb_limit" style="display:flex;gap:6px;flex-wrap:wrap">
+          ${limitOptions.map(o =>
+            `<button class="btn btn-sm ${fbLimit.limit===o.value?'btn-primary':'btn-ghost'}"
+              onclick="setPolicyState('fb_limit',${o.value},this)">${o.label}</button>`
+          ).join('')}
         </div>
       </div>
 
@@ -1498,9 +1554,11 @@ async function renderAdmPolicy() {
           <div style="font-size:14px;font-weight:500">승인자 승인 수정/취소 허용</div>
           <div style="font-size:12px;color:var(--muted)">켜짐: 승인자가 본인의 승인을 수정·취소 가능</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="bd ${apprEdit.enabled?'bd-approved':'bd-rejected'}">${apprEdit.enabled?'켜짐':'꺼짐'}</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleApprEdit()">${apprEdit.enabled?'끄기':'켜기'}</button>
+        <div data-policy-group="approver_edit" style="display:flex;gap:6px">
+          <button class="btn btn-sm ${apprEdit.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('approver_edit',true,this)">켜짐</button>
+          <button class="btn btn-sm ${!apprEdit.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('approver_edit',false,this)">꺼짐</button>
         </div>
       </div>
 
@@ -1509,9 +1567,11 @@ async function renderAdmPolicy() {
           <div style="font-size:14px;font-weight:500">2차 최종평가 허용</div>
           <div style="font-size:12px;color:var(--muted)">켜짐: 1차 평가자 위 상위 승인자도 최종평가 가능 · 꺼짐: 1차(직속 상사)만 평가</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="bd ${secondFinal.enabled?'bd-approved':'bd-rejected'}">${secondFinal.enabled?'켜짐':'꺼짐'}</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleSecondFinal()">${secondFinal.enabled?'끄기':'켜기'}</button>
+        <div data-policy-group="second_final" style="display:flex;gap:6px">
+          <button class="btn btn-sm ${secondFinal.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('second_final',true,this)">켜짐</button>
+          <button class="btn btn-sm ${!secondFinal.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('second_final',false,this)">꺼짐</button>
         </div>
       </div>
 
@@ -1520,9 +1580,11 @@ async function renderAdmPolicy() {
           <div style="font-size:14px;font-weight:500">직원 목표승인 이력 공개</div>
           <div style="font-size:12px;color:var(--muted)">직원이 본인의 과거 승인/반려 이력 열람 허용</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="bd ${histVis.enabled?'bd-approved':'bd-rejected'}">${histVis.enabled?'켜짐':'꺼짐'}</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleHistoryVisibility()">${histVis.enabled?'끄기':'켜기'}</button>
+        <div data-policy-group="history_visibility" style="display:flex;gap:6px">
+          <button class="btn btn-sm ${histVis.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('history_visibility',true,this)">켜짐</button>
+          <button class="btn btn-sm ${!histVis.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('history_visibility',false,this)">꺼짐</button>
         </div>
       </div>
 
@@ -1531,9 +1593,11 @@ async function renderAdmPolicy() {
           <div style="font-size:13px;font-weight:500">↳ 비활성 기간 이력도 공개</div>
           <div style="font-size:12px;color:var(--muted)">켜짐: 활성/비활성 기간 모두 · 꺼짐: 활성 기간만</div>
         </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <span class="bd ${histInactive.enabled?'bd-approved':'bd-rejected'}">${histInactive.enabled?'켜짐 (전체)':'꺼짐 (활성만)'}</span>
-          <button class="btn btn-ghost btn-sm" onclick="toggleHistoryInactive()">${histInactive.enabled?'끄기':'켜기'}</button>
+        <div data-policy-group="history_inactive" style="display:flex;gap:6px">
+          <button class="btn btn-sm ${histInactive.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('history_inactive',true,this)">켜짐 (전체)</button>
+          <button class="btn btn-sm ${!histInactive.enabled?'btn-primary':'btn-ghost'}"
+            onclick="setPolicyState('history_inactive',false,this)">꺼짐 (활성만)</button>
         </div>
       </div>
 
@@ -1555,7 +1619,7 @@ async function renderAdmPolicy() {
           <div style="font-size:12px;color:var(--muted)">로그 및 기록 시간의 기준 시간대 (운영 주체 기준)</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <select id="tz-select" style="height:34px;font-size:13px" onchange="saveTimezone()">
+          <select id="tz-select" style="height:34px;font-size:13px" onchange="setPolicyState('timezone',this.value,null)">
             <optgroup label="아시아">
               <option value="Asia/Seoul"     ${timezone.timezone==='Asia/Seoul'    ?'selected':''}>한국 (KST, UTC+9)</option>
               <option value="Asia/Tokyo"     ${timezone.timezone==='Asia/Tokyo'    ?'selected':''}>일본 (JST, UTC+9)</option>
@@ -1584,10 +1648,47 @@ async function renderAdmPolicy() {
           </select>
         </div>
       </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:2px solid var(--o100)">
+        <button class="btn btn-ghost policy-save-btn" style="min-width:160px"
+          onclick="saveAllPolicy()">저장하기</button>
+      </div>
     </div>`;
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
+}
+
+async function saveAllPolicy() {
+  // 공지사항은 항상 저장 (textarea)
+  const noticeText = document.getElementById('notice-textarea')?.value;
+  const hasNotice = noticeText !== undefined;
+
+  if (!_policyDirty && Object.keys(_policyState).length === 0 && !hasNotice) {
+    showAlert('변경된 설정이 없습니다.', 'orange'); return;
+  }
+  try {
+    const promises = [];
+    if ('fb_limit'            in _policyState) promises.push(API.post('/settings/feedback-limit',     { limit:   _policyState.fb_limit }));
+    if ('history_visibility'  in _policyState) promises.push(API.post('/settings/history-visibility', { enabled: _policyState.history_visibility }));
+    if ('history_inactive'    in _policyState) promises.push(API.post('/settings/history-inactive',   { enabled: _policyState.history_inactive }));
+    if ('approver_edit'       in _policyState) promises.push(API.post('/settings/approval-edit',      { enabled: _policyState.approver_edit }));
+    if ('second_final'        in _policyState) promises.push(API.post('/settings/second-final',       { enabled: _policyState.second_final }));
+    if ('timezone'            in _policyState) promises.push(API.post('/settings/timezone',            { timezone: _policyState.timezone }));
+    if ('session_policy'      in _policyState) promises.push(API.post('/settings/session-policy',     _policyState.session_policy));
+    if ('dashboard_depth'     in _policyState) promises.push(API.post('/settings/dashboard-depth',    { depth: _policyState.dashboard_depth }));
+    if ('eval_mode'           in _policyState) promises.push(API.post('/settings/eval-mode',           { mode: _policyState.eval_mode }));
+    await Promise.all(promises);
+    if (hasNotice) await API.post('/notice', { content: noticeText });
+
+    const cnt = Object.keys(_policyState).length + (hasNotice ? 1 : 0);
+    showAlert(`${cnt}개 설정이 저장되었습니다.`, 'green');
+    _policyState = {}; _policyDirty = false;
+    document.querySelectorAll('.policy-save-btn').forEach(b => {
+      b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); b.innerHTML = '저장하기';
+    });
+    renderAdmPolicy();
+  } catch(e) { showAlert(e.message, 'red'); }
 }
 
 async function saveFbLimit() {
@@ -1732,10 +1833,10 @@ async function renderAdmGrades() {
               <input id="gc-sort-${g.id}" type="number" min="1" value="${g.sort_order||idx+1}"
                 style="width:48px;text-align:center;font-size:12px;height:28px">
             </td>
-            <td><input id="gc-code-${g.id}" value="${g.grade_code||''}" style="width:100%;font-size:12px;height:28px"></td>
-            <td><input id="gc-name-${g.id}" value="${g.grade_name||''}" style="width:100%;font-size:12px;height:28px"></td>
-            <td><textarea id="gc-desc-${g.id}" style="width:100%;font-size:12px;min-height:60px;resize:vertical;padding:4px 6px" placeholder="등급 설명">${g.description||''}</textarea></td>
-            <td><input id="gc-note-${g.id}" value="${(g.note||'').replace(/"/g,'&quot;')}" style="width:100%;font-size:12px;height:28px" placeholder="비고"></td>
+            <td><input id="gc-code-${g.id}" value="${g.grade_code||''}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px"></td>
+            <td><input id="gc-name-${g.id}" value="${g.grade_name||''}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px"></td>
+            <td><textarea id="gc-desc-${g.id}" oninput="markDirty()" style="width:100%;font-size:12px;min-height:60px;resize:vertical;padding:4px 6px" placeholder="등급 설명">${g.description||''}</textarea></td>
+            <td><input id="gc-note-${g.id}" value="${(g.note||'').replace(/"/g,'&quot;')}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px" placeholder="비고"></td>
             <td>
               <div style="display:flex;gap:4px">
                 <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="saveGrade(${g.id})">저장</button>
@@ -1773,6 +1874,9 @@ async function renderAdmGrades() {
           <button class="btn btn-primary" style="height:34px" onclick="addGrade()">+ 추가</button>
         </div>
       </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--o100)">
+        <button class="btn btn-ghost adm-save-btn" onclick="saveAllGrades()">저장하기</button>
+      </div>
     </div>`;
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
@@ -1789,6 +1893,26 @@ async function saveGrade(id) {
       sort_order:  parseInt(document.getElementById('gc-sort-'+id)?.value||'0'),
     });
     showAlert('저장되었습니다.', 'green');
+    renderAdmGrades();
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function saveAllGrades() {
+  const rows = document.querySelectorAll('[id^="gc-code-"]');
+  if (!rows.length) { showAlert('저장할 등급이 없습니다.', 'orange'); return; }
+  try {
+    for (const el of rows) {
+      const id = el.id.replace('gc-code-', '');
+      await API.put('/grade-criteria/' + id, {
+        grade_code:  document.getElementById('gc-code-'+id)?.value.trim(),
+        grade_name:  document.getElementById('gc-name-'+id)?.value.trim(),
+        description: document.getElementById('gc-desc-'+id)?.value.trim(),
+        note:        document.getElementById('gc-note-'+id)?.value.trim(),
+        sort_order:  parseInt(document.getElementById('gc-sort-'+id)?.value||'0'),
+      });
+    }
+    clearDirty();
+    showAlert('모든 등급이 저장되었습니다.', 'green');
     renderAdmGrades();
   } catch(e) { showAlert(e.message, 'red'); }
 }
