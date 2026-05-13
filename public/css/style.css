@@ -181,6 +181,54 @@ textarea:focus{outline:none;border-color:var(--o400)}
 }
 .fb-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted)}
 
+/* ── 관리자 탭 (언더라인 방식) ── */
+.adm-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1.5px solid var(--border);
+  overflow-x: auto;
+  overflow-y: visible;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: var(--o300) transparent;
+  padding: 4px 0 0 0;
+  margin-bottom: 16px;
+  min-height: 44px;
+}
+.adm-tabs::-webkit-scrollbar { height: 4px; }
+.adm-tabs::-webkit-scrollbar-track { background: transparent; }
+.adm-tabs::-webkit-scrollbar-thumb { background: var(--o300); border-radius: 4px; }
+.adm-tab {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color .15s, border-color .15s;
+  line-height: 1.4;
+}
+.adm-tab:hover { color: var(--o500); }
+.adm-tab.active {
+  color: var(--o500);
+  border-bottom: 2.5px solid var(--o500);
+  font-weight: 500;
+  background: none;
+}
+.adm-tab .cnt {
+  background: var(--o100);
+  color: var(--o600);
+  border-radius: 10px;
+  padding: 0 5px;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
 /* ── Subtabs (언더라인 방식) ── */
 .stabs {
   display: flex;
