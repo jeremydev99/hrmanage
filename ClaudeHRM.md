@@ -286,7 +286,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
-| 2026-05-13 | 사내 LLM(Synap) 연동, .env 분리, JWT/ENC_SECRET/LLM_API_KEY 환경변수화 | Claude Code |
+| 2026-05-13 | CLAUDE.md Git 자동 커밋 규칙 추가, AI 요약 UI 줄바꿈 수정, 디버깅 로그 제거 (PROMPT_35) | Claude Code |
+| 2026-05-13 | 사내 LLM(Synap) 연동, .env 분리, JWT/ENC_SECRET/LLM_API_KEY 환경변수화 (PROMPT_34) | Claude Code |
 | 2026-05-13 | 실행.bat 완전 정리 (한글깨짐/ngrok 잔여코드 제거, UTF-8 BOM 없이 저장) | Claude Code |
 | 2026-05-13 | 실행.bat ngrok 변경사항 롤백 (서버만 실행, ngrok는 별도 수동 실행) | Claude Code |
 | 2026-05-13 | 실행.bat ngrok 자동 실행 수정 (백그라운드 실행 + 주소 자동 조회) | Claude Code |

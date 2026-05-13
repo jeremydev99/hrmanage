@@ -649,9 +649,17 @@ async function loadAISummary(type) {
       ? { type, data: { name: d.user?.name, periods: d.mySummary } }
       : { type, data: d.teamSummary };
     const r = await API.post('/perf/ai-summary', payload);
-    content.innerHTML = `
-      <div style="white-space:pre-wrap;line-height:1.8;color:var(--o800)">${r.summary}</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px">AI 분석 결과는 참고용입니다. 실제 평가와 다를 수 있습니다.</div>`;
+    const summaryEl = document.createElement('div');
+    summaryEl.style.cssText = 'white-space:pre-wrap;line-height:1.8;color:var(--o800)';
+    summaryEl.textContent = r.summary;
+
+    const noticeEl = document.createElement('div');
+    noticeEl.style.cssText = 'font-size:11px;color:var(--muted);margin-top:8px';
+    noticeEl.textContent = 'AI 분석 결과는 참고용입니다. 실제 평가와 다를 수 있습니다.';
+
+    content.innerHTML = '';
+    content.appendChild(summaryEl);
+    content.appendChild(noticeEl);
   } catch(e) {
     content.innerHTML = `<div style="color:#E53935;font-size:13px">AI 요약 생성 실패: ${e.message}</div>`;
   }

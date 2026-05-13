@@ -1682,8 +1682,6 @@ app.post('/api/perf/ai-summary', auth, async (req, res) => {
       return res.status(500).json({ error: `LLM 호출 실패 (${response.status})` });
     }
     const llmData = await response.json();
-    // 디버깅용 로그 (정상 동작 확인 후 제거 예정)
-    console.log('[ai-summary] LLM 응답 구조:', JSON.stringify(llmData).substring(0, 500));
     const summary = llmData.choices?.[0]?.message?.content || 'AI 요약 생성 실패 (응답 구조 확인 필요)';
     res.json({ summary });
   } catch(err) { res.status(500).json({ error: err.message }); }
