@@ -55,6 +55,23 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 
 ---
 
+## 환경변수 (.env)
+
+| 변수 | 용도 | 기본값 (fallback) |
+|------|------|------|
+| LLM_API_BASE | 사내 LLM 엔드포인트 | https://chat.synap.co.kr/api/chat/completions |
+| LLM_API_KEY | 사내 LLM API 키 | (없음 — 호출 실패) |
+| LLM_MODEL | 사용 모델명 | SynapAssistant-MoE-30B |
+| JWT_SECRET | JWT 토큰 서명 키 | synap-hr-local-dev-secret-2025 |
+| ENC_SECRET | AES-256-CBC 암호화 키 | synap-local-enc-secret-32bytes!! |
+| PORT | 서버 포트 | 3000 |
+
+- 사용 가능 모델: SynapAssistant-MoE-30B, SynapAssistant-27B
+- 응답 포맷: OpenAI 호환 (`data.choices[0].message.content`)
+- 요청 시 `stream: false` 명시 필수
+
+---
+
 ## DB 스키마
 
 ```sql
@@ -257,11 +274,11 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - [ ] 성과관리 전체 조직 뷰 (admin용)
 
 ### 🟢 운영 서버 전환 시 필수
-- [ ] ENC_SECRET, JWT_SECRET → .env 분리
+- [x] ENC_SECRET, JWT_SECRET → .env 분리 ✅ 2026-05-13
+- [x] LLM_API_KEY → .env 분리 ✅ 2026-05-13 (사내 Synap LLM으로 전환)
 - [ ] AES-256-CBC → AES-256-GCM
 - [ ] SQLite → PostgreSQL
 - [ ] HTTPS 적용
-- [ ] ANTHROPIC_API_KEY → .env 분리
 
 ---
 
@@ -269,6 +286,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-13 | 사내 LLM(Synap) 연동, .env 분리, JWT/ENC_SECRET/LLM_API_KEY 환경변수화 | Claude Code |
 | 2026-05-13 | 실행.bat 완전 정리 (한글깨짐/ngrok 잔여코드 제거, UTF-8 BOM 없이 저장) | Claude Code |
 | 2026-05-13 | 실행.bat ngrok 변경사항 롤백 (서버만 실행, ngrok는 별도 수동 실행) | Claude Code |
 | 2026-05-13 | 실행.bat ngrok 자동 실행 수정 (백그라운드 실행 + 주소 자동 조회) | Claude Code |

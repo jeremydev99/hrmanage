@@ -3,6 +3,7 @@
  * 로컬 테스트 서버 — Node.js + SQLite (설치 불필요)
  * 실행: node server/index.js
  */
+require('dotenv').config();
 const express  = require('express');
 const path     = require('path');
 const crypto   = require('crypto');
@@ -14,8 +15,8 @@ const Database = require('better-sqlite3');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET     = 'synap-hr-local-dev-secret-2025';
-const ENC_SECRET     = 'synap-local-enc-secret-32bytes!!';
+const JWT_SECRET     = process.env.JWT_SECRET || 'synap-hr-local-dev-secret-2025';
+const ENC_SECRET     = process.env.ENC_SECRET || 'synap-local-enc-secret-32bytes!!';
 const DB_PATH        = path.join(__dirname, '..', 'data', 'hrmanage.db');
 
 // ── DB 초기화 ──────────────────────────────────────────────
@@ -1655,23 +1656,36 @@ app.post('/api/perf/ai-summary', auth, async (req, res) => {
       prompt = `다음은 ${data.name}님의 성과 데이터입니다. 3줄로 성과를 요약하고 개선 포인트 1가지를 제안해주세요.\n\n평가 데이터:\n${JSON.stringify(data.periods, null, 2)}\n\n형식:\n📊 성과 요약: (2줄)\n💡 개선 제안: (1줄)`;
     } else if (type === 'team') {
       prompt = `다음은 ${data.org_name} 팀의 성과 데이터입니다. 팀 전체 성과를 3줄로 요약하고 리더를 위한 액션 제안 1가지를 해주세요.\n\n팀 데이터:\n${JSON.stringify(data.teams, null, 2)}\n\n형식:\n📊 팀 성과 요약: (2줄)\n💡 리더 액션 제안: (1줄)`;
+    } else if (type === 'org') {
+      // 전체 조직 뷰는 아직 미구현 (ClaudeHRM.md 미완성 기능 참조)
+      return res.json({ summary: '🚧 전체 조직 AI 요약은 준비 중입니다.\n관리자 페이지에서 전직원 평가 현황 탭을 이용해주세요.' });
     }
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY || '',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const result = await response.json();
-    const text = result.content?.[0]?.text || '요약을 생성할 수 없습니다.';
-    res.json({ summary: text });
+    const response = await fetch(
+      process.env.LLM_API_BASE || 'https://chat.synap.co.kr/api/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.LLM_API_KEY || ''}`,
+        },
+        body: JSON.stringify({
+          model: process.env.LLM_MODEL || 'SynapAssistant-MoE-30B',
+          stream: false,                 // 사내 LLM은 stream 명시 필수
+          max_tokens: 500,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      }
+    );
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error('[ai-summary] LLM 응답 오류:', response.status, errText);
+      return res.status(500).json({ error: `LLM 호출 실패 (${response.status})` });
+    }
+    const llmData = await response.json();
+    // 디버깅용 로그 (정상 동작 확인 후 제거 예정)
+    console.log('[ai-summary] LLM 응답 구조:', JSON.stringify(llmData).substring(0, 500));
+    const summary = llmData.choices?.[0]?.message?.content || 'AI 요약 생성 실패 (응답 구조 확인 필요)';
+    res.json({ summary });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
