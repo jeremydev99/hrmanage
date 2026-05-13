@@ -182,19 +182,26 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .fb-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted)}
 
 /* ── 관리자 탭 (언더라인 방식) ── */
+.adm-tabs-wrap {
+  margin-bottom: 16px;
+}
+.adm-tabs-wrap .adm-tabs {
+  border-bottom: none;
+}
+.adm-tabs-wrap .adm-tabs:last-child {
+  border-bottom: 1.5px solid var(--border);
+}
 .adm-tabs {
   display: flex;
   gap: 0;
   border-bottom: 1.5px solid var(--border);
-  overflow-x: auto;
+  overflow-x: visible;
   overflow-y: visible;
   white-space: nowrap;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  flex-wrap: nowrap;
   padding: 4px 0 0 0;
-  margin-bottom: 16px;
-  min-height: 44px;
-  position: relative;
+  margin-bottom: 0;
+  min-height: 40px;
 }
 .adm-tabs::-webkit-scrollbar { display: none; }
 .adm-tab {

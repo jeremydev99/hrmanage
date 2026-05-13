@@ -13,24 +13,23 @@ Pages.admin = async function() {
 
   const area = document.getElementById('main-area');
   area.innerHTML = `
-    <div style="position:relative">
+    <div class="adm-tabs-wrap">
+      <!-- 1줄: 평가 관리 -->
       <div class="adm-tabs">
-        <button class="adm-tab active" id="stb-adm-accounts" onclick="switchAdmTab('adm-accounts')">계정 승인 관리${pendingCount > 0 ? ` <span class="cnt">${pendingCount}</span>` : ''}</button>
-        <button class="adm-tab"        id="stb-adm-status"   onclick="switchAdmTab('adm-status')">전직원 평가 현황</button>
-        <button class="adm-tab"        id="stb-adm-cat"      onclick="switchAdmTab('adm-cat')">목표 카테고리</button>
-        <button class="adm-tab"        id="stb-adm-periods"  onclick="switchAdmTab('adm-periods')">평가 기간 관리</button>
-        <button class="adm-tab"        id="stb-adm-grades"   onclick="switchAdmTab('adm-grades')">평가 등급</button>
-        <button class="adm-tab"        id="stb-adm-policy"   onclick="switchAdmTab('adm-policy')">평가 정책</button>
-        <span style="display:inline-block;width:1px;background:var(--border);margin:8px 4px;height:16px;flex-shrink:0"></span>
-        <button class="adm-tab"        id="stb-adm-org"      onclick="switchAdmTab('adm-org')">조직도 관리</button>
-        <button class="adm-tab"        id="stb-adm-orgtable" onclick="switchAdmTab('adm-orgtable')">조직 관리</button>
-        <button class="adm-tab"        id="stb-adm-roles"    onclick="switchAdmTab('adm-roles')">권한 관리</button>
-        <span style="display:inline-block;width:1px;background:var(--border);margin:8px 4px;height:16px;flex-shrink:0"></span>
-        <button class="adm-tab"        id="stb-adm-audit"    onclick="switchAdmTab('adm-audit')">감사 로그</button>
+        <button class="adm-tab active" data-tab="adm-accounts" id="stb-adm-accounts" onclick="switchAdmTab('adm-accounts')">계정 승인 관리${pendingCount > 0 ? ` <span class="cnt">${pendingCount}</span>` : ''}</button>
+        <button class="adm-tab" data-tab="adm-status"   id="stb-adm-status"   onclick="switchAdmTab('adm-status')">전직원 평가 현황</button>
+        <button class="adm-tab" data-tab="adm-cat"      id="stb-adm-cat"      onclick="switchAdmTab('adm-cat')">목표 카테고리</button>
+        <button class="adm-tab" data-tab="adm-periods"  id="stb-adm-periods"  onclick="switchAdmTab('adm-periods')">평가 기간 관리</button>
+        <button class="adm-tab" data-tab="adm-grades"   id="stb-adm-grades"   onclick="switchAdmTab('adm-grades')">평가 등급</button>
+        <button class="adm-tab" data-tab="adm-policy"   id="stb-adm-policy"   onclick="switchAdmTab('adm-policy')">평가 정책</button>
       </div>
-      <div style="position:absolute;right:0;top:0;bottom:4px;width:40px;
-                  background:linear-gradient(to right, transparent, white);
-                  pointer-events:none;z-index:1"></div>
+      <!-- 2줄: 조직/권한/로그 -->
+      <div class="adm-tabs">
+        <button class="adm-tab" data-tab="adm-org"      id="stb-adm-org"      onclick="switchAdmTab('adm-org')">조직도 관리</button>
+        <button class="adm-tab" data-tab="adm-orgtable" id="stb-adm-orgtable" onclick="switchAdmTab('adm-orgtable')">조직 관리</button>
+        <button class="adm-tab" data-tab="adm-roles"    id="stb-adm-roles"    onclick="switchAdmTab('adm-roles')">권한 관리</button>
+        <button class="adm-tab" data-tab="adm-audit"    id="stb-adm-audit"    onclick="switchAdmTab('adm-audit')">감사 로그</button>
+      </div>
     </div>
     <div class="sp active" id="adm-accounts"></div>
     <div class="sp"        id="adm-status"></div>
@@ -287,9 +286,10 @@ function switchAdmTab(id) {
     if (!confirm('저장하지 않은 변경사항이 있습니다. 계속하시겠습니까?')) return;
     clearDirty();
   }
-  document.querySelectorAll('.adm-tab,.stb').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.adm-tab,.stb').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === id || t.id === 'stb-'+id);
+  });
   document.querySelectorAll('.sp').forEach(s=>s.classList.remove('active'));
-  document.getElementById('stb-'+id)?.classList.add('active');
   document.getElementById(id)?.classList.add('active');
   if (id==='adm-accounts') renderAdmAccounts();
   if (id==='adm-status')   renderAdmStatus();
