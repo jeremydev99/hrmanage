@@ -190,15 +190,13 @@ textarea:focus{outline:none;border-color:var(--o400)}
   overflow-y: visible;
   white-space: nowrap;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: var(--o300) transparent;
+  scrollbar-width: none;
   padding: 4px 0 0 0;
   margin-bottom: 16px;
   min-height: 44px;
+  position: relative;
 }
-.adm-tabs::-webkit-scrollbar { height: 4px; }
-.adm-tabs::-webkit-scrollbar-track { background: transparent; }
-.adm-tabs::-webkit-scrollbar-thumb { background: var(--o300); border-radius: 4px; }
+.adm-tabs::-webkit-scrollbar { display: none; }
 .adm-tab {
   padding: 10px 14px;
   font-size: 12px;
