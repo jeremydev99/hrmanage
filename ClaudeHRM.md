@@ -269,6 +269,9 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-13 | 실행.bat 완전 정리 (한글깨짐/ngrok 잔여코드 제거, UTF-8 BOM 없이 저장) | Claude Code |
+| 2026-05-13 | 실행.bat ngrok 변경사항 롤백 (서버만 실행, ngrok는 별도 수동 실행) | Claude Code |
+| 2026-05-13 | 실행.bat ngrok 자동 실행 수정 (백그라운드 실행 + 주소 자동 조회) | Claude Code |
 | 2026-05-13 | 관리자 탭 2줄 표시 (평가관리 / 조직권한로그), data-tab 기반 active 처리 | Claude Code |
 | 2026-05-13 | 관리자 탭 스크롤바 숨김 + 우측 페이드아웃 효과 추가 | Claude Code |
 | 2026-05-13 | 관리자 탭 스크롤바 표시, 상하폭 조정, 잘림 현상 수정 (.adm-tabs/.adm-tab 신규 적용) | Claude Code |
