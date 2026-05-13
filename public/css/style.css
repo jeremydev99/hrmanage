@@ -181,11 +181,47 @@ textarea:focus{outline:none;border-color:var(--o400)}
 }
 .fb-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:12px;color:var(--muted)}
 
-/* ── Subtabs ── */
-.stabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
-.stb{background:none;border:1px solid var(--border);padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;color:var(--muted);transition:all .14s}
-.stb.active{background:var(--o400);color:#fff;border-color:var(--o400);font-weight:500}
-.stb .cnt{background:rgba(255,255,255,.3);border-radius:10px;padding:0 5px;font-size:11px;margin-left:4px}
+/* ── Subtabs (언더라인 방식) ── */
+.stabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1.5px solid var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding: 0;
+  margin-bottom: 16px;
+}
+.stabs::-webkit-scrollbar { display: none; }
+.stb {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: color .15s, border-color .15s;
+}
+.stb:hover { color: var(--o500); }
+.stb.active {
+  color: var(--o500);
+  border-bottom: 2.5px solid var(--o500);
+  font-weight: 500;
+  background: none;
+}
+.stb .cnt {
+  background: var(--o100);
+  color: var(--o600);
+  border-radius: 10px;
+  padding: 0 5px;
+  font-size: 11px;
+  margin-left: 4px;
+}
 .sp{display:none}.sp.active{display:block}
 
 /* ── Spinner ── */
@@ -448,8 +484,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
     white-space: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
-    gap: 4px;
-    padding: 8px 0;
+    padding: 0;
   }
   .stabs::-webkit-scrollbar { display: none; }
   .stb {

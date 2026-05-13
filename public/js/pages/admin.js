@@ -18,12 +18,14 @@ Pages.admin = async function() {
       <button class="stb"        id="stb-adm-status"   onclick="switchAdmTab('adm-status')">전직원 평가 현황</button>
       <button class="stb"        id="stb-adm-cat"      onclick="switchAdmTab('adm-cat')">목표 카테고리</button>
       <button class="stb"        id="stb-adm-periods"  onclick="switchAdmTab('adm-periods')">평가 기간 관리</button>
+      <button class="stb"        id="stb-adm-grades"   onclick="switchAdmTab('adm-grades')">평가 등급</button>
+      <button class="stb"        id="stb-adm-policy"   onclick="switchAdmTab('adm-policy')">평가 정책</button>
+      <span style="display:inline-block;width:1px;background:var(--border);margin:8px 4px;height:16px;flex-shrink:0"></span>
       <button class="stb"        id="stb-adm-org"      onclick="switchAdmTab('adm-org')">조직도 관리</button>
       <button class="stb"        id="stb-adm-orgtable" onclick="switchAdmTab('adm-orgtable')">조직 관리</button>
       <button class="stb"        id="stb-adm-roles"    onclick="switchAdmTab('adm-roles')">권한 관리</button>
-      <button class="stb"        id="stb-adm-policy"  onclick="switchAdmTab('adm-policy')">평가 정책</button>
-      <button class="stb"        id="stb-adm-grades"  onclick="switchAdmTab('adm-grades')">평가 등급</button>
-      <button class="stb"        id="stb-adm-audit"   onclick="switchAdmTab('adm-audit')">감사 로그</button>
+      <span style="display:inline-block;width:1px;background:var(--border);margin:8px 4px;height:16px;flex-shrink:0"></span>
+      <button class="stb"        id="stb-adm-audit"    onclick="switchAdmTab('adm-audit')">감사 로그</button>
     </div>
     <div class="sp active" id="adm-accounts"></div>
     <div class="sp"        id="adm-status"></div>
@@ -1436,7 +1438,8 @@ async function renderAdmPolicy() {
         <div class="card-header-t">평가 정책 설정</div>
         <div class="card-header-s">전사 평가 운영 정책을 관리합니다</div>
       </div>
-      <button class="btn btn-ghost policy-save-btn" style="white-space:nowrap"
+      <button class="btn btn-sm policy-save-btn"
+        style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.4);font-size:13px;white-space:nowrap"
         onclick="saveAllPolicy()">저장하기</button></div>
 
       <!-- 공지사항 편집 -->
