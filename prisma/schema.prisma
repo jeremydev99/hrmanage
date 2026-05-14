@@ -17,7 +17,7 @@ model User {
   title         String?
   managerId     Int?    @map("manager_id")
   isActive      Int?    @default(1) @map("is_active")
-  created_at    String? @default("datetime('now')")
+  created_at    String?
   accountStatus String? @default("approved") @map("account_status")
   signupNote    String? @map("signup_note")
   grade         String? @default("")
@@ -35,7 +35,7 @@ model Organization {
   description String?
   sortOrder   Int?    @default(0) @map("sort_order")
   isActive    Int?    @default(1) @map("is_active")
-  created_at  String? @default("datetime('now')")
+  created_at  String?
 
   @@map("organizations")
 }
@@ -51,8 +51,8 @@ model EvalCycle {
   submitted_at String?
   approved_at  String?
   locked       Int?    @default(0)
-  created_at   String? @default("datetime('now')")
-  updated_at   String? @default("datetime('now')")
+  created_at   String?
+  updated_at   String?
   rejectReason String? @map("reject_reason")
   phase2       String?
 
@@ -68,7 +68,7 @@ model Goal {
   weight     Int?    @default(0)
   sortOrder  Int?    @default(0) @map("sort_order")
   status     String? @default("draft")
-  created_at String? @default("datetime('now')")
+  created_at String?
 
   @@map("goals")
 }
@@ -83,7 +83,7 @@ model GoalCategory {
   sortOrder   Int?    @default(0) @map("sort_order")
   isActive    Int?    @default(1) @map("is_active")
   created_by  Int?
-  created_at  String? @default("datetime('now')")
+  created_at  String?
 
   @@map("goal_categories")
 }
@@ -95,7 +95,7 @@ model GoalApproval {
   level      Int?
   action     String?
   note       String?
-  created_at String? @default("datetime('now')")
+  created_at String?
 
   @@map("goal_approvals")
 }
@@ -105,7 +105,7 @@ model Feedback {
   evalId      Int     @map("eval_id")
   authorId    Int     @map("author_id")
   overallNote String? @map("overall_note")
-  created_at  String? @default("datetime('now')")
+  created_at  String?
 
   @@map("feedbacks")
 }
@@ -116,7 +116,7 @@ model FeedbackItem {
   goalId     Int     @map("goal_id")
   score      Int?
   note       String?
-  created_at String? @default("datetime('now')")
+  created_at String?
 
   @@map("feedback_items")
 }
@@ -135,8 +135,8 @@ model FinalEvaluation {
   finalGrade            String? @map("final_grade")
   locked                Int?    @default(0)
   locked_at             String?
-  created_at            String? @default("datetime('now')")
-  updated_at            String? @default("datetime('now')")
+  created_at            String?
+  updated_at            String?
   secondMgrDone         Int?    @default(0) @map("second_mgr_done")
   secondMgrNote         String? @map("second_mgr_note")
   secondMgrId           Int?    @map("second_mgr_id")
@@ -153,7 +153,7 @@ model FinalEvalScore {
   goalId         Int     @map("goal_id")
   selfScore      Int?    @map("self_score")
   mgrScore       Int?    @map("mgr_score")
-  created_at     String? @default("datetime('now')")
+  created_at     String?
   secondMgrScore Int?    @map("second_mgr_score")
 
   @@map("final_eval_scores")
@@ -164,8 +164,8 @@ model ProgressReport {
   evalId     Int     @map("eval_id")
   authorId   Int     @map("author_id")
   content    String?
-  created_at String? @default("datetime('now')")
-  updated_at String? @default("datetime('now')")
+  created_at String?
+  updated_at String?
 
   @@map("progress_reports")
 }
@@ -179,7 +179,7 @@ model ReportFile {
   fileData    String? @map("file_data")
   file_type   String?
   file_size   Int?
-  created_at  String? @default("datetime('now')")
+  created_at  String?
 
   @@map("report_files")
 }
@@ -200,7 +200,7 @@ model EvalPeriod {
   evalYear    String  @map("eval_year")
   isActive    Int?    @default(1) @map("is_active")
   created_by  Int?
-  created_at  String? @default("datetime('now')")
+  created_at  String?
   evalMode    String? @default("MBO") @map("eval_mode")
   locked      Int?    @default(0)
 
@@ -213,7 +213,7 @@ model EvalPeriodMode {
   managerId  Int     @map("manager_id")
   evalMode   String  @default("MBO") @map("eval_mode")
   locked     Int?    @default(0)
-  created_at String? @default("datetime('now')")
+  created_at String?
 
   @@unique([periodId, managerId], map: "sqlite_autoindex_eval_period_modes_1")
   @@map("eval_period_modes")
@@ -224,7 +224,7 @@ model AuditLog {
   userId     Int?    @map("user_id")
   action     String?
   ip         String?
-  created_at String? @default("datetime('now')")
+  created_at String?
   targetId   Int?    @map("target_id")
   targetName String? @map("target_name")
   detail     String?
@@ -240,7 +240,7 @@ model GradeCriteria {
   note        String?
   sortOrder   Int?    @default(0) @map("sort_order")
   isActive    Int?    @default(1) @map("is_active")
-  created_at  String? @default("datetime('now')")
+  created_at  String?
 
   @@map("grade_criteria")
 }
@@ -251,8 +251,8 @@ model OkrCycle {
   periodLabel String  @map("period_label")
   evalYear    String  @map("eval_year")
   phase       String? @default("draft")
-  created_at  String? @default("datetime('now')")
-  updated_at  String? @default("datetime('now')")
+  created_at  String?
+  updated_at  String?
 
   @@map("okr_cycles")
 }

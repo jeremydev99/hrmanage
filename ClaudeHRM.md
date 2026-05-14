@@ -306,7 +306,12 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 15. **관리자 평가정책 저장 방식**: `_policyState`(임시 저장) + `setPolicyState(key, val, btn)` — 버튼 강조, `saveAllPolicy()`로 일괄 API 호출, `_policyDirty` 로 탭 이동 경고
 15. **목표 작성 기간**: `renderGoalSetForm`에서 수동 기간 선택 UI 제거, `_currentPeriodLabel`/`_currentEvalYear` 전역변수로 고정
 16. **반응형**: 768px(탭 스크롤), 480px(햄버거), `.pc-only`/`.mobile-only` 유틸 클래스
-17. **Repository Pattern 적용** (2026-05-14, PROMPT_36-4):
+17. **datetime 기본값 처리** (2026-05-14, PROMPT_36-7):
+    - schema.prisma에서 `@default("datetime('now')")` 사용 금지
+    - 이유: Prisma는 이를 문자열 기본값으로 인식 (SQL 함수 호출 아님)
+    - 해결: 해당 어노테이션 제거 → SQLite의 컬럼 DEFAULT가 자동 처리
+    - PostgreSQL 전환 시 `DateTime? @default(now())` 형태로 재정의 예정
+18. **Repository Pattern 적용** (2026-05-14, PROMPT_36-4):
     - DB 호출은 `server/repositories/`의 인터페이스를 통해
     - 실제 구현은 `server/adapters/{어댑터}/`에 위치
     - 환경변수 `DATA_ADAPTER`로 어댑터 선택 (기본: prisma)
@@ -317,6 +322,12 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 ---
 
 ## 알려진 버그 및 미완성
+
+### 🟡 알려진 클라이언트 UI 버그 (별도 처리 예정)
+- 관리자 페이지 > 카테고리 관리: 삭제 버튼이 DELETE API를 호출하지 않음
+  - 화면에서는 즉시 제거되지만 DB는 그대로
+  - 저장 버튼은 PUT만 호출하여 삭제 명령 누락
+  - PROMPT 36-9 이후 admin.js 수정 예정
 
 ### 🟡 미완성 기능
 - [ ] 비밀번호 변경 기능
@@ -339,6 +350,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | schema.prisma의 datetime default 정리 + GoalCategory id=4 정리 (PROMPT_36-7) | Claude Code |
 | 2026-05-14 | GoalCategory 어댑터 + /api/categories 4개 라우터 전환 (PROMPT_36-6) | Claude Code |
 | 2026-05-14 | Prisma 7→5 다운그레이드 반영, 문서 정합성 정리 (PROMPT_36-5) | Claude Code |
 | 2026-05-14 | Repository Pattern 골격 + User 어댑터 + /api/auth/me 라우터 전환 (PROMPT_36-4) | Claude Code |
