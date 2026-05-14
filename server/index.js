@@ -16,10 +16,12 @@ const Database = require('better-sqlite3');
 // Repository Pattern
 const {
   getUserRepository,
-  getGoalCategoryRepository
+  getGoalCategoryRepository,
+  getGradeCriteriaRepository
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
+const gradeCriteriaRepo = getGradeCriteriaRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -1958,47 +1960,56 @@ app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
 });
 
 // ── 등급 기준 API ─────────────────────────────────────────
-app.get('/api/grade-criteria', auth, (req, res) => {
+// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.get('/api/grade-criteria', auth, (req, res) => {
+//   const grades = db.prepare('SELECT * FROM grade_criteria ORDER BY sort_order, id').all();
+//   res.json(grades);
+// });
+
+// [PROMPT_36-8] Repository Pattern 적용
+app.get('/api/grade-criteria', auth, async (req, res) => {
   try {
-    const grades = db.prepare(
-      'SELECT * FROM grade_criteria ORDER BY sort_order, id'
-    ).all();
-    res.json(grades);
+    const list = await gradeCriteriaRepo.findAll();
+    res.json(list);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/grade-criteria', auth, adminOnly, (req, res) => {
+// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.post('/api/grade-criteria', auth, adminOnly, (req, res) => { ... });
+
+// [PROMPT_36-8] Repository Pattern 적용
+app.post('/api/grade-criteria', auth, adminOnly, async (req, res) => {
   try {
     const { grade_code, grade_name, description, note, sort_order } = req.body;
     if (!grade_code || !grade_name) return res.status(400).json({ error: '등급 코드와 명칭은 필수입니다.' });
-    const finalSort = sort_order || ((db.prepare('SELECT MAX(sort_order) as m FROM grade_criteria').get()?.m||0) + 1);
-    const r = db.prepare(
-      'INSERT INTO grade_criteria(grade_code,grade_name,description,note,sort_order) VALUES(?,?,?,?,?)'
-    ).run(grade_code, grade_name, description||'', note||'', finalSort);
-    res.json({ id: r.lastInsertRowid });
+    const finalSort = sort_order || ((await gradeCriteriaRepo.getMaxSortOrder()) + 1);
+    const id = await gradeCriteriaRepo.create({ grade_code, grade_name, description, note, sort_order: finalSort });
+    res.json({ id });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.put('/api/grade-criteria/:id', auth, adminOnly, (req, res) => {
+// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.put('/api/grade-criteria/:id', auth, adminOnly, (req, res) => { ... });
+
+// [PROMPT_36-8] Repository Pattern 적용
+app.put('/api/grade-criteria/:id', auth, adminOnly, async (req, res) => {
   try {
     const { grade_code, grade_name, description, note, sort_order } = req.body;
-    db.prepare(
-      'UPDATE grade_criteria SET grade_code=?,grade_name=?,description=?,note=?,sort_order=COALESCE(?,sort_order) WHERE id=?'
-    ).run(grade_code, grade_name, description||'', note||'', sort_order||null, req.params.id);
+    await gradeCriteriaRepo.update(req.params.id, { grade_code, grade_name, description, note, sort_order });
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.delete('/api/grade-criteria/:id', auth, adminOnly, (req, res) => {
+// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.delete('/api/grade-criteria/:id', auth, adminOnly, (req, res) => { ... });
+
+// [PROMPT_36-8] Repository Pattern 적용
+app.delete('/api/grade-criteria/:id', auth, adminOnly, async (req, res) => {
   try {
-    const total = db.prepare('SELECT COUNT(*) as c FROM grade_criteria').get()?.c || 0;
+    const total = await gradeCriteriaRepo.count();
     if (total <= 2) return res.status(400).json({ error: '최소 2개 이상의 등급이 필요합니다.' });
-    db.prepare('DELETE FROM grade_criteria WHERE id=?').run(req.params.id);
-    // sort_order 재정렬
-    const remaining = db.prepare('SELECT id FROM grade_criteria ORDER BY sort_order').all();
-    remaining.forEach((r, i) => {
-      db.prepare('UPDATE grade_criteria SET sort_order=? WHERE id=?').run(i+1, r.id);
-    });
+    await gradeCriteriaRepo.delete(req.params.id);
+    await gradeCriteriaRepo.resequenceSortOrder();
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });

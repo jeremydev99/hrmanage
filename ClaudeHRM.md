@@ -20,12 +20,14 @@ C:\claudeprojects\hrmanage\
 │   ├── repositories/           ← DB 추상화 인터페이스
 │   │   ├── README.md
 │   │   ├── UserRepository.js
-│   │   └── GoalCategoryRepository.js
+│   │   ├── GoalCategoryRepository.js
+│   │   └── GradeCriteriaRepository.js
 │   ├── adapters/               ← DB 어댑터 구현
 │   │   └── prisma/
 │   │       ├── README.md
 │   │       ├── PrismaUserRepository.js
-│   │       └── PrismaGoalCategoryRepository.js
+│   │       ├── PrismaGoalCategoryRepository.js
+│   │       └── PrismaGradeCriteriaRepository.js
 │   └── config/                 ← 어댑터 선택 로직
 │       └── repository-factory.js
 ├── public/
@@ -350,6 +352,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | GradeCriteria Repository 어댑터 + /api/grade-criteria 라우터 4개 전환 (PROMPT_36-8) | Claude Code |
 | 2026-05-14 | schema.prisma의 datetime default 정리 + GoalCategory id=4 정리 (PROMPT_36-7) | Claude Code |
 | 2026-05-14 | GoalCategory 어댑터 + /api/categories 4개 라우터 전환 (PROMPT_36-6) | Claude Code |
 | 2026-05-14 | Prisma 7→5 다운그레이드 반영, 문서 정합성 정리 (PROMPT_36-5) | Claude Code |
