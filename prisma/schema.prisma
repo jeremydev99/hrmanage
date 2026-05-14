@@ -184,15 +184,13 @@ model ReportFile {
   @@map("report_files")
 }
 
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
 model AppSetting {
-  key       String? @id
+  key       String  @id
   value     String?
   updatedBy Int?    @map("updated_by")
   updatedAt String? @map("updated_at")
 
   @@map("app_settings")
-  @@ignore
 }
 
 model EvalPeriod {

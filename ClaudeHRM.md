@@ -83,33 +83,58 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 
 ## DB 스키마
 
+> 실제 DB 기반 (2026-05-14 prisma db pull 검증). 총 20개 사용 테이블 + 1개 시스템(sqlite_sequence).
+> Prisma 모델명은 PascalCase, DB 테이블명은 snake_case (`@@map`으로 매핑).
+
 ```sql
-users              id, name, email, password_hash, role, dept, grade, title,
-                   manager_id, is_active, account_status, signup_note, org_id, eval_mode
-eval_cycles        id, user_id, period_type, period_label, eval_year, phase,
-                   self_reason(암호화), reject_reason, locked
-goals              id, eval_id, category_id, name(암호화), kpi(암호화), weight, sort_order, status
-goal_categories    id, name, description, weight, color, text_color, sort_order, is_active
-goal_approvals     id, eval_id, approver_id, level, action, note(암호화)
-eval_approval_history  id, eval_id, user_id, period_label, eval_year, action, reason
-feedbacks          id, eval_id, author_id, overall_note(암호화)
-feedback_items     id, feedback_id, goal_id, score, note(암호화)
-final_evaluations  id, eval_id, self_note(암호화), self_done, mgr_note(암호화), mgr_done,
-                   mgr_approver_id, final_score, final_grade, selected_grade,
-                   second_mgr_done, second_mgr_note(암호화), second_mgr_id, locked
-final_eval_scores  id, final_id, goal_id, self_score, mgr_score, second_mgr_score
-progress_reports   id, eval_id, author_id, content(암호화)
-report_files       id, report_id, feedback_id, final_eval_id, file_name, file_data
-app_settings       key, value, updated_by, updated_at
-eval_periods       id, period_type, period_label, eval_year, is_active, eval_mode, locked
-eval_period_modes  id, period_id, manager_id, eval_mode, locked  UNIQUE(period_id,manager_id)
-audit_logs         id, user_id, action, target_id, target_name, detail, ip
-grade_criteria     id, grade_code, grade_name, description, note, sort_order, is_active
-organizations      id, name, leader_id, parent_id, description, sort_order, is_active
-okr_cycles         id, user_id, period_label, eval_year, phase
+users              id, name, email, password_hash, role, dept, title,
+                   manager_id, is_active, account_status, signup_note,
+                   grade, eval_mode, org_id, created_at
+organizations      id, name, leader_id, parent_id, description,
+                   sort_order, is_active, created_at
+eval_cycles        id, user_id, period_type, period_label, eval_year(TEXT),
+                   phase, self_reason(암호화), submitted_at, approved_at,
+                   locked, created_at, updated_at, reject_reason, phase2
+goals              id, eval_id, category_id, name(암호화), kpi(암호화),
+                   weight, sort_order, status, created_at
+goal_categories    id, name, description, weight, color, text_color,
+                   sort_order, is_active, created_by, created_at
+goal_approvals     id, eval_id, approver_id, level, action, note(암호화),
+                   created_at
+feedbacks          id, eval_id, author_id, overall_note(암호화), created_at
+feedback_items     id, feedback_id, goal_id, score, note(암호화), created_at
+final_evaluations  id, eval_id, self_note(암호화), self_done, self_done_at,
+                   mgr_note(암호화), mgr_done, mgr_done_at, mgr_approver_id,
+                   final_score, final_grade, locked, locked_at,
+                   created_at, updated_at, second_mgr_done,
+                   second_mgr_note(암호화), second_mgr_id, second_mgr_done_at,
+                   selected_grade, second_selected_grade
+final_eval_scores  id, final_id, goal_id, self_score, mgr_score,
+                   second_mgr_score, created_at
+progress_reports   id, eval_id, author_id, content(암호화),
+                   created_at, updated_at
+report_files       id, report_id, feedback_id, final_eval_id,
+                   file_name, file_data, file_type, file_size, created_at
+app_settings       key(PK), value, updated_by, updated_at
+eval_periods       id, period_type, period_label, eval_year(TEXT),
+                   is_active, created_by, created_at, eval_mode, locked
+eval_period_modes  id, period_id, manager_id, eval_mode, locked, created_at
+                   UNIQUE(period_id, manager_id)
+audit_logs         id, user_id, action, ip, created_at,
+                   target_id, target_name, detail
+grade_criteria     id, grade_code, grade_name, description, note,
+                   sort_order, is_active, created_at
+okr_cycles         id, user_id, period_label, eval_year(TEXT), phase,
+                   created_at, updated_at
 okr_objectives     id, cycle_id, title, description, sort_order
-okr_key_results    id, objective_id, title, target_value, current_value, unit, weight, sort_order
+okr_key_results    id, objective_id, title, target_value, current_value,
+                   unit, weight, sort_order
 ```
+
+### 참고 사항
+- `eval_year`는 TEXT 타입 — 정수 비교 시 주의 (`'2026' === 2026`은 false)
+- `(암호화)` 표시된 필드는 AES-256-CBC로 자동 암호화/복호화
+- `created_at`, `updated_at`, `*_at` 컬럼은 SQLite의 `datetime('now')`로 자동 설정
 
 ---
 
@@ -295,6 +320,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | DB 스키마 정합성 정리 (eval_approval_history 제거, 컬럼 정정, AppSetting Prisma 사용 가능) (PROMPT_36-2) | Claude Code |
 | 2026-05-14 | Prisma ORM 도입 (schema.prisma 정의, DB 연결 확인, 20개 테이블) (PROMPT_36-1) | Claude Code |
 | 2026-05-14 | "제품화 마케팅 포인트" 섹션 신규 추가 (PROMPT_36-3) | Claude Code |
 | 2026-05-13 | CLAUDE.md Git 자동 커밋 규칙 추가, AI 요약 UI 줄바꿈 수정, 디버깅 로그 제거 (PROMPT_35) | Claude Code |
