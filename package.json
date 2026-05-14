@@ -13,7 +13,6 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^7.8.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.1.2",
     "cors": "^2.8.5",
@@ -26,6 +25,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
-    "prisma": "^7.8.0"
+    "@prisma/client": "^5.22.0",
+    "prisma": "^5.22.0"
   }
 }

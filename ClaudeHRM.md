@@ -16,7 +16,16 @@ C:\claudeprojects\hrmanage\
 ├── package.json
 ├── 실행.bat
 ├── server/
-│   └── index.js               ← 메인 서버 전체 (API + DB + 암호화 + 시드, ~2000줄)
+│   ├── index.js               ← 메인 서버 전체 (API + DB + 암호화 + 시드, ~2000줄)
+│   ├── repositories/           ← NEW: DB 추상화 인터페이스
+│   │   ├── README.md
+│   │   └── UserRepository.js
+│   ├── adapters/               ← NEW: DB 어댑터 구현
+│   │   └── prisma/
+│   │       ├── README.md
+│   │       └── PrismaUserRepository.js
+│   └── config/                 ← NEW: 어댑터 선택 로직
+│       └── repository-factory.js
 ├── public/
 │   ├── index.html             ← SPA 진입점
 │   ├── css/style.css
@@ -73,7 +82,8 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 | JWT_SECRET | JWT 토큰 서명 키 | synap-hr-local-dev-secret-2025 |
 | ENC_SECRET | AES-256-CBC 암호화 키 | synap-local-enc-secret-32bytes!! |
 | PORT | 서버 포트 | 3000 |
-| DATABASE_URL | DB 연결 문자열 (Prisma) | file:./data/hrmanage.db |
+| DATABASE_URL | DB 연결 문자열 (Prisma) | file:../data/hrmanage.db |
+| DATA_ADAPTER | DB 어댑터 선택 | prisma |
 
 - 사용 가능 모델: SynapAssistant-MoE-30B, SynapAssistant-27B
 - 응답 포맷: OpenAI 호환 (`data.choices[0].message.content`)
@@ -294,6 +304,13 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 15. **관리자 평가정책 저장 방식**: `_policyState`(임시 저장) + `setPolicyState(key, val, btn)` — 버튼 강조, `saveAllPolicy()`로 일괄 API 호출, `_policyDirty` 로 탭 이동 경고
 15. **목표 작성 기간**: `renderGoalSetForm`에서 수동 기간 선택 UI 제거, `_currentPeriodLabel`/`_currentEvalYear` 전역변수로 고정
 16. **반응형**: 768px(탭 스크롤), 480px(햄버거), `.pc-only`/`.mobile-only` 유틸 클래스
+17. **Repository Pattern 적용** (2026-05-14, PROMPT_36-4):
+    - DB 호출은 `server/repositories/`의 인터페이스를 통해
+    - 실제 구현은 `server/adapters/{어댑터}/`에 위치
+    - 환경변수 `DATA_ADAPTER`로 어댑터 선택 (기본: prisma)
+    - 새 DB 지원 시 어댑터 추가만 하면 됨 (인터페이스/라우터 변경 불필요)
+    - 향후 멀티테넌시 도입 시 메서드 시그니처에 `tenantId` 추가
+    - Prisma의 camelCase 응답을 기존 snake_case로 자동 변환 (toSnakeCase 헬퍼)
 
 ---
 
@@ -320,6 +337,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | Repository Pattern 골격 + User 어댑터 + /api/auth/me 라우터 전환 (PROMPT_36-4) | Claude Code |
 | 2026-05-14 | DB 스키마 정합성 정리 (eval_approval_history 제거, 컬럼 정정, AppSetting Prisma 사용 가능) (PROMPT_36-2) | Claude Code |
 | 2026-05-14 | Prisma ORM 도입 (schema.prisma 정의, DB 연결 확인, 20개 테이블) (PROMPT_36-1) | Claude Code |
 | 2026-05-14 | "제품화 마케팅 포인트" 섹션 신규 추가 (PROMPT_36-3) | Claude Code |
@@ -354,10 +372,9 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### 🏗️ 기술 스택 차별화
 
-- [x] **멀티 DB 지원 아키텍처** — Prisma ORM + Repository Pattern 기반
-  - SQLite, PostgreSQL, MySQL, MSSQL, Oracle 등 다양한 DB로 확장 가능
-  - 기본: SQLite(개발), PostgreSQL(운영)
-  - 환경변수 한 줄 변경으로 DB 전환 가능
+- [x] **멀티 DB 지원 아키텍처** — Prisma ORM + Repository Pattern 골격 구축 완료 (User 어댑터 기준)
+  - 추가 어댑터(PostgreSQL/MySQL/MSSQL/Oracle 등) 확장 가능
+  - 환경변수 한 줄(DATA_ADAPTER)로 어댑터 전환
 - [ ] **배포 유연성** — 클라우드 SaaS / 전용 인스턴스 / 온프레미스 모두 지원
   - Docker 컨테이너 기반 배포 (예정)
   - 고객사 자체 서버 설치 옵션 지원 (예정)

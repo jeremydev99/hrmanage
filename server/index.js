@@ -13,6 +13,10 @@ const cors     = require('cors');
 const helmet   = require('helmet');
 const Database = require('better-sqlite3');
 
+// Repository Pattern (PROMPT 36-4 도입)
+const { getUserRepository } = require('./config/repository-factory');
+const userRepo = getUserRepository();
+
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET     = process.env.JWT_SECRET || 'synap-hr-local-dev-secret-2025';
@@ -207,9 +211,23 @@ app.post('/api/auth/signup', (req, res) => {
   res.json({ success: true, message: '가입 신청이 완료되었습니다. 관리자 승인 후 로그인 가능합니다.' });
 });
 
-app.get('/api/auth/me', auth, (req, res) => {
-  const u = db.prepare('SELECT id,name,email,role,dept,title,manager_id FROM users WHERE id=?').get(req.user.sub);
-  res.json(u || {});
+// [PROMPT_36-4] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.get('/api/auth/me', auth, (req, res) => {
+//   const u = db.prepare('SELECT id,name,email,role,dept,title,manager_id FROM users WHERE id=?').get(req.user.sub);
+//   res.json(u || {});
+// });
+
+// [PROMPT_36-4] Repository Pattern 적용
+app.get('/api/auth/me', auth, async (req, res) => {
+  try {
+    const user = await userRepo.findById(req.user.sub);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    delete user.password_hash;
+    res.json(user);
+  } catch (e) {
+    console.error('[/api/auth/me]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ════════════════════════════════════════════════════════════

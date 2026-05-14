@@ -1,0 +1,40 @@
+/**
+ * Repository Factory — 환경변수에 따라 적절한 어댑터를 선택
+ *
+ * 환경변수:
+ *   DATA_ADAPTER=prisma (기본값)
+ *   향후 추가 예정: direct-sql, mongo, external-api 등
+ */
+
+const PrismaUserRepository = require('../adapters/prisma/PrismaUserRepository');
+// 향후 추가:
+// const DirectSqlUserRepository = require('../adapters/direct-sql/DirectSqlUserRepository');
+
+const ADAPTER = process.env.DATA_ADAPTER || 'prisma';
+
+// PrismaClient 인스턴스 공유 (싱글톤)
+let sharedPrismaClient = null;
+function getSharedPrismaClient() {
+  if (!sharedPrismaClient) {
+    const { PrismaClient } = require('@prisma/client');
+    sharedPrismaClient = new PrismaClient();
+  }
+  return sharedPrismaClient;
+}
+
+function getUserRepository() {
+  switch (ADAPTER) {
+    case 'prisma':
+      return new PrismaUserRepository(getSharedPrismaClient());
+    default:
+      throw new Error(`Unknown DATA_ADAPTER: ${ADAPTER}`);
+  }
+}
+
+module.exports = {
+  getUserRepository,
+  getSharedPrismaClient,
+  // 향후 추가:
+  // getGoalRepository,
+  // getEvalRepository,
+};
