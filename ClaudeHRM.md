@@ -33,6 +33,11 @@ C:\claudeprojects\hrmanage\
 │           ├── final-eval.js
 │           ├── okr-eval.js    ← OKR 작성/진행률/기간선택
 │           └── admin.js       ← 관리자 설정 전체
+├── prisma/
+│   ├── schema.prisma          ← Prisma 스키마 정의 (20개 테이블)
+│   └── migrations/            ← 추후 마이그레이션 파일들
+├── prisma.config.ts           ← Prisma 7 설정 (DB URL 연결)
+├── generated/prisma/          ← Prisma Client 자동 생성 코드 (gitignore)
 └── data/hrmanage.db
 ```
 
@@ -43,7 +48,10 @@ C:\claudeprojects\hrmanage\
 ```
 런타임:     Node.js 18+
 프레임워크: Express 4
-DB:         better-sqlite3 (SQLite)
+DB:         better-sqlite3 (SQLite) — 기존 쿼리 유지
+ORM:        Prisma 7 (스키마 기반, 멀티 DB 지원)
+            - 개발: SQLite (file:./data/hrmanage.db)
+            - 운영: PostgreSQL (추후 전환)
 인증:       JWT 8h, AES-256-CBC 암호화
 보안:       helmet, cors, bcryptjs
 ```
@@ -65,6 +73,7 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 | JWT_SECRET | JWT 토큰 서명 키 | synap-hr-local-dev-secret-2025 |
 | ENC_SECRET | AES-256-CBC 암호화 키 | synap-local-enc-secret-32bytes!! |
 | PORT | 서버 포트 | 3000 |
+| DATABASE_URL | DB 연결 문자열 (Prisma) | file:./data/hrmanage.db |
 
 - 사용 가능 모델: SynapAssistant-MoE-30B, SynapAssistant-27B
 - 응답 포맷: OpenAI 호환 (`data.choices[0].message.content`)
@@ -286,6 +295,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | Prisma ORM 도입 (schema.prisma 정의, DB 연결 확인, 20개 테이블) (PROMPT_36-1) | Claude Code |
 | 2026-05-14 | "제품화 마케팅 포인트" 섹션 신규 추가 (PROMPT_36-3) | Claude Code |
 | 2026-05-13 | CLAUDE.md Git 자동 커밋 규칙 추가, AI 요약 UI 줄바꿈 수정, 디버깅 로그 제거 (PROMPT_35) | Claude Code |
 | 2026-05-13 | 사내 LLM(Synap) 연동, .env 분리, JWT/ENC_SECRET/LLM_API_KEY 환경변수화 (PROMPT_34) | Claude Code |

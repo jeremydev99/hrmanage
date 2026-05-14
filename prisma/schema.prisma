@@ -1,0 +1,283 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            Int     @id @default(autoincrement())
+  name          String
+  email         String  @unique(map: "sqlite_autoindex_users_1")
+  passwordHash  String  @map("password_hash")
+  role          String? @default("user")
+  dept          String?
+  title         String?
+  managerId     Int?    @map("manager_id")
+  isActive      Int?    @default(1) @map("is_active")
+  created_at    String? @default("datetime('now')")
+  accountStatus String? @default("approved") @map("account_status")
+  signupNote    String? @map("signup_note")
+  grade         String? @default("")
+  evalMode      String? @default("MBO") @map("eval_mode")
+  orgId         Int?    @map("org_id")
+
+  @@map("users")
+}
+
+model Organization {
+  id          Int     @id @default(autoincrement())
+  name        String
+  leaderId    Int?    @map("leader_id")
+  parentId    Int?    @map("parent_id")
+  description String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+  isActive    Int?    @default(1) @map("is_active")
+  created_at  String? @default("datetime('now')")
+
+  @@map("organizations")
+}
+
+model EvalCycle {
+  id           Int     @id @default(autoincrement())
+  userId       Int     @map("user_id")
+  periodType   String? @map("period_type")
+  periodLabel  String? @map("period_label")
+  evalYear     String? @map("eval_year")
+  phase        String? @default("draft")
+  selfReason   String? @map("self_reason")
+  submitted_at String?
+  approved_at  String?
+  locked       Int?    @default(0)
+  created_at   String? @default("datetime('now')")
+  updated_at   String? @default("datetime('now')")
+  rejectReason String? @map("reject_reason")
+  phase2       String?
+
+  @@map("eval_cycles")
+}
+
+model Goal {
+  id         Int     @id @default(autoincrement())
+  evalId     Int     @map("eval_id")
+  categoryId Int     @map("category_id")
+  name       String?
+  kpi        String?
+  weight     Int?    @default(0)
+  sortOrder  Int?    @default(0) @map("sort_order")
+  status     String? @default("draft")
+  created_at String? @default("datetime('now')")
+
+  @@map("goals")
+}
+
+model GoalCategory {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+  weight      Int?    @default(0)
+  color       String?
+  textColor   String? @map("text_color")
+  sortOrder   Int?    @default(0) @map("sort_order")
+  isActive    Int?    @default(1) @map("is_active")
+  created_by  Int?
+  created_at  String? @default("datetime('now')")
+
+  @@map("goal_categories")
+}
+
+model GoalApproval {
+  id         Int     @id @default(autoincrement())
+  evalId     Int     @map("eval_id")
+  approverId Int     @map("approver_id")
+  level      Int?
+  action     String?
+  note       String?
+  created_at String? @default("datetime('now')")
+
+  @@map("goal_approvals")
+}
+
+model Feedback {
+  id          Int     @id @default(autoincrement())
+  evalId      Int     @map("eval_id")
+  authorId    Int     @map("author_id")
+  overallNote String? @map("overall_note")
+  created_at  String? @default("datetime('now')")
+
+  @@map("feedbacks")
+}
+
+model FeedbackItem {
+  id         Int     @id @default(autoincrement())
+  feedbackId Int     @map("feedback_id")
+  goalId     Int     @map("goal_id")
+  score      Int?
+  note       String?
+  created_at String? @default("datetime('now')")
+
+  @@map("feedback_items")
+}
+
+model FinalEvaluation {
+  id                    Int     @id @default(autoincrement())
+  evalId                Int     @unique(map: "sqlite_autoindex_final_evaluations_1") @map("eval_id")
+  selfNote              String? @map("self_note")
+  selfDone              Int?    @default(0) @map("self_done")
+  self_done_at          String?
+  mgrNote               String? @map("mgr_note")
+  mgrDone               Int?    @default(0) @map("mgr_done")
+  mgr_done_at           String?
+  mgrApproverId         Int?    @map("mgr_approver_id")
+  finalScore            Float?  @map("final_score")
+  finalGrade            String? @map("final_grade")
+  locked                Int?    @default(0)
+  locked_at             String?
+  created_at            String? @default("datetime('now')")
+  updated_at            String? @default("datetime('now')")
+  secondMgrDone         Int?    @default(0) @map("second_mgr_done")
+  secondMgrNote         String? @map("second_mgr_note")
+  secondMgrId           Int?    @map("second_mgr_id")
+  second_mgr_done_at    String?
+  selectedGrade         String? @map("selected_grade")
+  second_selected_grade String?
+
+  @@map("final_evaluations")
+}
+
+model FinalEvalScore {
+  id             Int     @id @default(autoincrement())
+  finalId        Int     @map("final_id")
+  goalId         Int     @map("goal_id")
+  selfScore      Int?    @map("self_score")
+  mgrScore       Int?    @map("mgr_score")
+  created_at     String? @default("datetime('now')")
+  secondMgrScore Int?    @map("second_mgr_score")
+
+  @@map("final_eval_scores")
+}
+
+model ProgressReport {
+  id         Int     @id @default(autoincrement())
+  evalId     Int     @map("eval_id")
+  authorId   Int     @map("author_id")
+  content    String?
+  created_at String? @default("datetime('now')")
+  updated_at String? @default("datetime('now')")
+
+  @@map("progress_reports")
+}
+
+model ReportFile {
+  id          Int     @id @default(autoincrement())
+  reportId    Int?    @map("report_id")
+  feedbackId  Int?    @map("feedback_id")
+  finalEvalId Int?    @map("final_eval_id")
+  fileName    String? @map("file_name")
+  fileData    String? @map("file_data")
+  file_type   String?
+  file_size   Int?
+  created_at  String? @default("datetime('now')")
+
+  @@map("report_files")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model AppSetting {
+  key       String? @id
+  value     String?
+  updatedBy Int?    @map("updated_by")
+  updatedAt String? @map("updated_at")
+
+  @@map("app_settings")
+  @@ignore
+}
+
+model EvalPeriod {
+  id          Int     @id @default(autoincrement())
+  periodType  String  @map("period_type")
+  periodLabel String  @map("period_label")
+  evalYear    String  @map("eval_year")
+  isActive    Int?    @default(1) @map("is_active")
+  created_by  Int?
+  created_at  String? @default("datetime('now')")
+  evalMode    String? @default("MBO") @map("eval_mode")
+  locked      Int?    @default(0)
+
+  @@map("eval_periods")
+}
+
+model EvalPeriodMode {
+  id         Int     @id @default(autoincrement())
+  periodId   Int     @map("period_id")
+  managerId  Int     @map("manager_id")
+  evalMode   String  @default("MBO") @map("eval_mode")
+  locked     Int?    @default(0)
+  created_at String? @default("datetime('now')")
+
+  @@unique([periodId, managerId], map: "sqlite_autoindex_eval_period_modes_1")
+  @@map("eval_period_modes")
+}
+
+model AuditLog {
+  id         Int     @id @default(autoincrement())
+  userId     Int?    @map("user_id")
+  action     String?
+  ip         String?
+  created_at String? @default("datetime('now')")
+  targetId   Int?    @map("target_id")
+  targetName String? @map("target_name")
+  detail     String?
+
+  @@map("audit_logs")
+}
+
+model GradeCriteria {
+  id          Int     @id @default(autoincrement())
+  gradeCode   String  @map("grade_code")
+  gradeName   String  @map("grade_name")
+  description String?
+  note        String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+  isActive    Int?    @default(1) @map("is_active")
+  created_at  String? @default("datetime('now')")
+
+  @@map("grade_criteria")
+}
+
+model OkrCycle {
+  id          Int     @id @default(autoincrement())
+  userId      Int     @map("user_id")
+  periodLabel String  @map("period_label")
+  evalYear    String  @map("eval_year")
+  phase       String? @default("draft")
+  created_at  String? @default("datetime('now')")
+  updated_at  String? @default("datetime('now')")
+
+  @@map("okr_cycles")
+}
+
+model OkrObjective {
+  id          Int     @id @default(autoincrement())
+  cycleId     Int     @map("cycle_id")
+  title       String
+  description String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+
+  @@map("okr_objectives")
+}
+
+model OkrKeyResult {
+  id           Int     @id @default(autoincrement())
+  objectiveId  Int     @map("objective_id")
+  title        String
+  targetValue  Float?  @default(100) @map("target_value")
+  currentValue Float?  @default(0) @map("current_value")
+  unit         String? @default("%")
+  weight       Int?    @default(33)
+  sortOrder    Int?    @default(0) @map("sort_order")
+
+  @@map("okr_key_results")
+}

@@ -38,6 +38,7 @@ public/js/app.js         라우터, Pages 초기화, 세션관리, 드롭다운
 public/js/pages/         각 페이지 JS (my-eval, admin, okr-eval 등)
 public/css/style.css     전체 스타일
 data/hrmanage.db         SQLite DB (자동 생성)
+prisma/schema.prisma     Prisma 스키마 (DB 종류 추상화)
 ```
 
 ---
