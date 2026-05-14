@@ -305,9 +305,11 @@ function switchAdmTab(id) {
 
 /* ── 카테고리 관리 ── */
 let _editCats = [];
+let _deletedCatIds = [];   // 삭제 대상 카테고리 ID 추적
 async function renderAdmCat() {
   const el = document.getElementById('adm-cat'); if(!el)return;
   _editCats = JSON.parse(JSON.stringify(App.categories));
+  _deletedCatIds = [];
   rebuildCatUI();
 }
 
@@ -357,16 +359,30 @@ function updEditCat(i, field, val) {
   }
 }
 function addEditCat() { _editCats.push({name:'새 카테고리',description:'',weight:0,color:'#F1EFE8',text_color:'#444441'}); rebuildCatUI(); }
-function delEditCat(i) { if(_editCats.length<=1){showAlert('최소 1개 이상 필요합니다.','orange');return;} _editCats.splice(i,1); rebuildCatUI(); }
+function delEditCat(i) {
+  if (_editCats.length <= 1) { showAlert('최소 1개 이상 필요합니다.','orange'); return; }
+  const removed = _editCats[i];
+  if (removed && removed.id) { _deletedCatIds.push(removed.id); }
+  _editCats.splice(i, 1);
+  markDirty();
+  rebuildCatUI();
+}
 
 async function saveCats() {
   const totalW = _editCats.reduce((a,c)=>a+Number(c.weight),0);
   if (totalW !== 100) { showAlert('가중치 합계가 100%여야 합니다. 현재: '+totalW+'%','orange'); return; }
   try {
+    // 1. 추가/수정 처리
     for (const cat of _editCats) {
       if (cat.id) await API.put(`/categories/${cat.id}`, cat);
       else await API.post('/categories', cat);
     }
+    // 2. 삭제 처리
+    for (const id of _deletedCatIds) {
+      await API.del(`/categories/${id}`);
+    }
+    _deletedCatIds = [];
+    // 3. 목록 갱신
     App.categories = await API.get('/categories');
     clearDirty();
     showAlert('카테고리가 저장되었습니다!','green');
