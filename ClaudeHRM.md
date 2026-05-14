@@ -45,8 +45,6 @@ C:\claudeprojects\hrmanage\
 ├── prisma/
 │   ├── schema.prisma          ← Prisma 스키마 정의 (20개 테이블)
 │   └── migrations/            ← 추후 마이그레이션 파일들
-├── prisma.config.ts           ← Prisma 7 설정 (DB URL 연결)
-├── generated/prisma/          ← Prisma Client 자동 생성 코드 (gitignore)
 └── data/hrmanage.db
 ```
 
@@ -58,9 +56,11 @@ C:\claudeprojects\hrmanage\
 런타임:     Node.js 18+
 프레임워크: Express 4
 DB:         better-sqlite3 (SQLite) — 기존 쿼리 유지
-ORM:        Prisma 7 (스키마 기반, 멀티 DB 지원)
-            - 개발: SQLite (file:./data/hrmanage.db)
+ORM:        Prisma 5.22.0 (스키마 기반, 멀티 DB 지원)
+            - 개발: SQLite (file:../data/hrmanage.db, schema.prisma 기준)
             - 운영: PostgreSQL (추후 전환)
+            - 향후 어댑터: MySQL, MSSQL, Oracle (Repository Pattern으로 확장)
+            ※ Prisma 7은 CommonJS 호환 복잡으로 5.x 사용 결정 (2026-05-14)
 인증:       JWT 8h, AES-256-CBC 암호화
 보안:       helmet, cors, bcryptjs
 ```
@@ -337,6 +337,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | Prisma 7→5 다운그레이드 반영, 문서 정합성 정리 (PROMPT_36-5) | Claude Code |
 | 2026-05-14 | Repository Pattern 골격 + User 어댑터 + /api/auth/me 라우터 전환 (PROMPT_36-4) | Claude Code |
 | 2026-05-14 | DB 스키마 정합성 정리 (eval_approval_history 제거, 컬럼 정정, AppSetting Prisma 사용 가능) (PROMPT_36-2) | Claude Code |
 | 2026-05-14 | Prisma ORM 도입 (schema.prisma 정의, DB 연결 확인, 20개 테이블) (PROMPT_36-1) | Claude Code |
@@ -372,7 +373,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### 🏗️ 기술 스택 차별화
 
-- [x] **멀티 DB 지원 아키텍처** — Prisma ORM + Repository Pattern 골격 구축 완료 (User 어댑터 기준)
+- [x] **멀티 DB 지원 아키텍처** — Prisma ORM 5.x + Repository Pattern 골격 구축 완료 (User 어댑터 기준)
   - 추가 어댑터(PostgreSQL/MySQL/MSSQL/Oracle 등) 확장 가능
   - 환경변수 한 줄(DATA_ADAPTER)로 어댑터 전환
 - [ ] **배포 유연성** — 클라우드 SaaS / 전용 인스턴스 / 온프레미스 모두 지원
