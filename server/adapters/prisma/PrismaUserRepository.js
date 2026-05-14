@@ -61,6 +61,13 @@ class PrismaUserRepository extends UserRepository {
     });
     return users.map(toSnakeCase);
   }
+
+  async findByOrgId(orgId) {
+    return await this.prisma.user.findMany({
+      where: { orgId: Number(orgId), isActive: 1 },
+      select: { id: true, name: true, title: true, grade: true, dept: true, role: true }
+    });
+  }
 }
 
 module.exports = PrismaUserRepository;

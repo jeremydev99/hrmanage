@@ -9,6 +9,7 @@
 const PrismaUserRepository = require('../adapters/prisma/PrismaUserRepository');
 const PrismaGoalCategoryRepository = require('../adapters/prisma/PrismaGoalCategoryRepository');
 const PrismaGradeCriteriaRepository = require('../adapters/prisma/PrismaGradeCriteriaRepository');
+const PrismaOrganizationRepository = require('../adapters/prisma/PrismaOrganizationRepository');
 // 향후 추가:
 // const DirectSqlUserRepository = require('../adapters/direct-sql/DirectSqlUserRepository');
 
@@ -51,9 +52,19 @@ function getGradeCriteriaRepository() {
   }
 }
 
+function getOrganizationRepository() {
+  switch (ADAPTER) {
+    case 'prisma':
+      return new PrismaOrganizationRepository(getSharedPrismaClient());
+    default:
+      throw new Error(`Unknown DATA_ADAPTER: ${ADAPTER}`);
+  }
+}
+
 module.exports = {
   getUserRepository,
   getGoalCategoryRepository,
   getGradeCriteriaRepository,
+  getOrganizationRepository,
   getSharedPrismaClient,
 };

@@ -17,11 +17,13 @@ const Database = require('better-sqlite3');
 const {
   getUserRepository,
   getGoalCategoryRepository,
-  getGradeCriteriaRepository
+  getGradeCriteriaRepository,
+  getOrganizationRepository
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
 const gradeCriteriaRepo = getGradeCriteriaRepository();
+const organizationRepo = getOrganizationRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -1765,59 +1767,61 @@ app.post('/api/perf/ai-summary', auth, async (req, res) => {
 
 // ── 조직 관리 API ─────────────────────────────────────────
 
-app.get('/api/organizations', auth, (req, res) => {
+// [PROMPT_38] Repository Pattern 적용
+app.get('/api/organizations', auth, async (req, res) => {
   try {
-    const orgs = db.prepare(`
-      SELECT o.*, u.name as leader_name, u.title as leader_title, p.name as parent_name
-      FROM organizations o
-      LEFT JOIN users u ON o.leader_id = u.id
-      LEFT JOIN organizations p ON o.parent_id = p.id
-      WHERE o.is_active = 1
-      ORDER BY o.sort_order, o.id
-    `).all();
+    const orgs = await organizationRepo.findAllActiveWithRelations();
     res.json(orgs);
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  } catch(err) {
+    console.error('[GET /api/organizations]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/organizations', auth, adminOnly, (req, res) => {
+app.post('/api/organizations', auth, adminOnly, async (req, res) => {
   try {
     const { name, leader_id, parent_id, description, sort_order } = req.body;
     if (!name) return res.status(400).json({ error: '조직명은 필수입니다.' });
-    const r = db.prepare(
-      "INSERT INTO organizations(name,leader_id,parent_id,description,sort_order) VALUES(?,?,?,?,?)"
-    ).run(name, leader_id||null, parent_id||null, description||'', sort_order||0);
-    auditLog(req.user.sub, 'ORG_CREATED', r.lastInsertRowid, name, `조직 생성: ${name}`, req.ip);
-    res.json({ id: r.lastInsertRowid });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+    const newId = await organizationRepo.create({ name, leader_id, parent_id, description, sort_order });
+    auditLog(req.user.sub, 'ORG_CREATED', newId, name, `조직 생성: ${name}`, req.ip);
+    res.json({ id: newId });
+  } catch(err) {
+    console.error('[POST /api/organizations]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.put('/api/organizations/:id', auth, adminOnly, (req, res) => {
+app.put('/api/organizations/:id', auth, adminOnly, async (req, res) => {
   try {
     const { name, leader_id, parent_id, description, sort_order } = req.body;
-    db.prepare(
-      "UPDATE organizations SET name=?,leader_id=?,parent_id=?,description=?,sort_order=? WHERE id=?"
-    ).run(name, leader_id||null, parent_id||null, description||'', sort_order||0, req.params.id);
+    await organizationRepo.update(req.params.id, { name, leader_id, parent_id, description, sort_order });
     auditLog(req.user.sub, 'ORG_UPDATED', req.params.id, name, `조직 수정: ${name}`, req.ip);
     res.json({ success: true });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  } catch(err) {
+    console.error('[PUT /api/organizations/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.delete('/api/organizations/:id', auth, masterOnly, (req, res) => {
+app.delete('/api/organizations/:id', auth, masterOnly, async (req, res) => {
   try {
-    const org = db.prepare('SELECT name FROM organizations WHERE id=?').get(req.params.id);
-    db.prepare('UPDATE organizations SET is_active=0 WHERE id=?').run(req.params.id);
+    const org = await organizationRepo.deactivate(req.params.id);
     auditLog(req.user.sub, 'ORG_DELETED', req.params.id, org?.name, '조직 비활성화', req.ip);
     res.json({ success: true });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  } catch(err) {
+    console.error('[DELETE /api/organizations/:id]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.get('/api/organizations/:id/members', auth, (req, res) => {
+app.get('/api/organizations/:id/members', auth, async (req, res) => {
   try {
-    const members = db.prepare(
-      'SELECT id, name, title, grade, dept, role FROM users WHERE org_id=? AND is_active=1'
-    ).all(req.params.id);
+    const members = await userRepo.findByOrgId(req.params.id);
     res.json(members);
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  } catch(err) {
+    console.error('[GET /api/organizations/:id/members]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.patch('/api/users/:id/org', auth, adminOnly, (req, res) => {

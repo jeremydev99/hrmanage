@@ -35,6 +35,15 @@ class UserRepository {
   async findAllActive() {
     throw new Error('UserRepository.findAllActive is not implemented');
   }
+
+  /**
+   * 특정 조직의 활성 멤버 목록 조회
+   * @param {number} orgId - 조직 ID
+   * @returns {Promise<Array>} 멤버 객체 배열 { id, name, title, grade, dept, role }
+   */
+  async findByOrgId(orgId) {
+    throw new Error('UserRepository.findByOrgId is not implemented');
+  }
 }
 
 module.exports = UserRepository;
