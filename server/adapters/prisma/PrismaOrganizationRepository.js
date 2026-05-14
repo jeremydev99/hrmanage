@@ -29,10 +29,10 @@ class PrismaOrganizationRepository extends OrganizationRepository {
     const created = await this.prisma.organization.create({
       data: {
         name: data.name,
-        leaderId: data.leader_id || null,
-        parentId: data.parent_id || null,
+        leaderId: data.leader_id != null ? Number(data.leader_id) : null,
+        parentId: data.parent_id != null ? Number(data.parent_id) : null,
         description: data.description || '',
-        sortOrder: data.sort_order || 0,
+        sortOrder: data.sort_order != null ? Number(data.sort_order) : 0,
       }
     });
     return created.id;
@@ -43,10 +43,10 @@ class PrismaOrganizationRepository extends OrganizationRepository {
       where: { id: Number(id) },
       data: {
         name: data.name,
-        leaderId: data.leader_id || null,
-        parentId: data.parent_id || null,
+        leaderId: data.leader_id != null ? Number(data.leader_id) : null,
+        parentId: data.parent_id != null ? Number(data.parent_id) : null,
         description: data.description || '',
-        sortOrder: data.sort_order || 0,
+        sortOrder: data.sort_order != null ? Number(data.sort_order) : 0,
       }
     });
   }
