@@ -13,9 +13,13 @@ const cors     = require('cors');
 const helmet   = require('helmet');
 const Database = require('better-sqlite3');
 
-// Repository Pattern (PROMPT 36-4 도입)
-const { getUserRepository } = require('./config/repository-factory');
+// Repository Pattern
+const {
+  getUserRepository,
+  getGoalCategoryRepository
+} = require('./config/repository-factory');
 const userRepo = getUserRepository();
+const goalCategoryRepo = getGoalCategoryRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -307,28 +311,80 @@ app.get('/api/users/:id/approvers', auth, (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  GOAL CATEGORIES
 // ════════════════════════════════════════════════════════════
-app.get('/api/categories', auth, (req, res) => {
-  res.json(db.prepare('SELECT * FROM goal_categories WHERE is_active=1 ORDER BY sort_order').all());
+// [PROMPT_36-6] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.get('/api/categories', auth, (req, res) => {
+//   res.json(db.prepare('SELECT * FROM goal_categories WHERE is_active=1 ORDER BY sort_order').all());
+// });
+
+// [PROMPT_36-6] Repository Pattern 적용
+app.get('/api/categories', auth, async (req, res) => {
+  try {
+    const categories = await goalCategoryRepo.findAllActive();
+    res.json(categories);
+  } catch (e) {
+    console.error('[GET /api/categories]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.post('/api/categories', auth, adminOnly, (req, res) => {
-  const { name, description, weight, color, text_color, sort_order } = req.body;
-  const r = db.prepare(
-    'INSERT INTO goal_categories(name,description,weight,color,text_color,sort_order,created_by) VALUES(?,?,?,?,?,?,?)'
-  ).run(name, description||'', weight||0, color||'#E6F1FB', text_color||'#0C447C', sort_order||0, req.user.sub);
-  res.json({ id: r.lastInsertRowid });
+// [PROMPT_36-6] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.post('/api/categories', auth, adminOnly, (req, res) => {
+//   const { name, description, weight, color, text_color, sort_order } = req.body;
+//   const r = db.prepare(
+//     'INSERT INTO goal_categories(name,description,weight,color,text_color,sort_order,created_by) VALUES(?,?,?,?,?,?,?)'
+//   ).run(name, description||'', weight||0, color||'#E6F1FB', text_color||'#0C447C', sort_order||0, req.user.sub);
+//   res.json({ id: r.lastInsertRowid });
+// });
+
+// [PROMPT_36-6] Repository Pattern 적용
+app.post('/api/categories', auth, adminOnly, async (req, res) => {
+  try {
+    const { name, description, weight, color, text_color, sort_order } = req.body;
+    const id = await goalCategoryRepo.create({
+      name, description, weight, color, text_color, sort_order,
+      created_by: req.user.sub,
+    });
+    res.json({ id });
+  } catch (e) {
+    console.error('[POST /api/categories]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.put('/api/categories/:id', auth, adminOnly, (req, res) => {
-  const { name, description, weight, color, text_color, sort_order, is_active } = req.body;
-  db.prepare('UPDATE goal_categories SET name=?,description=?,weight=?,color=?,text_color=?,sort_order=?,is_active=? WHERE id=?')
-    .run(name, description, weight, color, text_color, sort_order, is_active??1, req.params.id);
-  res.json({ success: true });
+// [PROMPT_36-6] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.put('/api/categories/:id', auth, adminOnly, (req, res) => {
+//   const { name, description, weight, color, text_color, sort_order, is_active } = req.body;
+//   db.prepare('UPDATE goal_categories SET name=?,description=?,weight=?,color=?,text_color=?,sort_order=?,is_active=? WHERE id=?')
+//     .run(name, description, weight, color, text_color, sort_order, is_active??1, req.params.id);
+//   res.json({ success: true });
+// });
+
+// [PROMPT_36-6] Repository Pattern 적용
+app.put('/api/categories/:id', auth, adminOnly, async (req, res) => {
+  try {
+    await goalCategoryRepo.update(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[PUT /api/categories/:id]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
-app.delete('/api/categories/:id', auth, masterOnly, (req, res) => {
-  db.prepare('UPDATE goal_categories SET is_active=0 WHERE id=?').run(req.params.id);
-  res.json({ success: true });
+// [PROMPT_36-6] Repository Pattern 전환 — 기존 코드 주석 처리
+// app.delete('/api/categories/:id', auth, masterOnly, (req, res) => {
+//   db.prepare('UPDATE goal_categories SET is_active=0 WHERE id=?').run(req.params.id);
+//   res.json({ success: true });
+// });
+
+// [PROMPT_36-6] Repository Pattern 적용
+app.delete('/api/categories/:id', auth, masterOnly, async (req, res) => {
+  try {
+    await goalCategoryRepo.deactivate(req.params.id);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[DELETE /api/categories/:id]', e);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ════════════════════════════════════════════════════════════

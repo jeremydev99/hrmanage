@@ -7,6 +7,7 @@
  */
 
 const PrismaUserRepository = require('../adapters/prisma/PrismaUserRepository');
+const PrismaGoalCategoryRepository = require('../adapters/prisma/PrismaGoalCategoryRepository');
 // 향후 추가:
 // const DirectSqlUserRepository = require('../adapters/direct-sql/DirectSqlUserRepository');
 
@@ -31,10 +32,17 @@ function getUserRepository() {
   }
 }
 
+function getGoalCategoryRepository() {
+  switch (ADAPTER) {
+    case 'prisma':
+      return new PrismaGoalCategoryRepository(getSharedPrismaClient());
+    default:
+      throw new Error(`Unknown DATA_ADAPTER: ${ADAPTER}`);
+  }
+}
+
 module.exports = {
   getUserRepository,
+  getGoalCategoryRepository,
   getSharedPrismaClient,
-  // 향후 추가:
-  // getGoalRepository,
-  // getEvalRepository,
 };

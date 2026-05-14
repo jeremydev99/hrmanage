@@ -17,14 +17,16 @@ C:\claudeprojects\hrmanage\
 ├── 실행.bat
 ├── server/
 │   ├── index.js               ← 메인 서버 전체 (API + DB + 암호화 + 시드, ~2000줄)
-│   ├── repositories/           ← NEW: DB 추상화 인터페이스
+│   ├── repositories/           ← DB 추상화 인터페이스
 │   │   ├── README.md
-│   │   └── UserRepository.js
-│   ├── adapters/               ← NEW: DB 어댑터 구현
+│   │   ├── UserRepository.js
+│   │   └── GoalCategoryRepository.js
+│   ├── adapters/               ← DB 어댑터 구현
 │   │   └── prisma/
 │   │       ├── README.md
-│   │       └── PrismaUserRepository.js
-│   └── config/                 ← NEW: 어댑터 선택 로직
+│   │       ├── PrismaUserRepository.js
+│   │       └── PrismaGoalCategoryRepository.js
+│   └── config/                 ← 어댑터 선택 로직
 │       └── repository-factory.js
 ├── public/
 │   ├── index.html             ← SPA 진입점
@@ -337,6 +339,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-14 | GoalCategory 어댑터 + /api/categories 4개 라우터 전환 (PROMPT_36-6) | Claude Code |
 | 2026-05-14 | Prisma 7→5 다운그레이드 반영, 문서 정합성 정리 (PROMPT_36-5) | Claude Code |
 | 2026-05-14 | Repository Pattern 골격 + User 어댑터 + /api/auth/me 라우터 전환 (PROMPT_36-4) | Claude Code |
 | 2026-05-14 | DB 스키마 정합성 정리 (eval_approval_history 제거, 컬럼 정정, AppSetting Prisma 사용 가능) (PROMPT_36-2) | Claude Code |
@@ -373,9 +376,10 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### 🏗️ 기술 스택 차별화
 
-- [x] **멀티 DB 지원 아키텍처** — Prisma ORM 5.x + Repository Pattern 골격 구축 완료 (User 어댑터 기준)
+- [x] **멀티 DB 지원 아키텍처** — Prisma ORM 5.x + Repository Pattern 적용 (User, GoalCategory 어댑터 완료)
   - 추가 어댑터(PostgreSQL/MySQL/MSSQL/Oracle 등) 확장 가능
   - 환경변수 한 줄(DATA_ADAPTER)로 어댑터 전환
+  - CRUD 패턴 검증 완료 (조회/생성/수정/비활성화)
 - [ ] **배포 유연성** — 클라우드 SaaS / 전용 인스턴스 / 온프레미스 모두 지원
   - Docker 컨테이너 기반 배포 (예정)
   - 고객사 자체 서버 설치 옵션 지원 (예정)
