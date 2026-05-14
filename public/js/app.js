@@ -498,6 +498,20 @@ Pages.perfHome = async function() {
       </div>`;
     area.appendChild(header);
 
+    const aiSection = document.createElement('div');
+    aiSection.id = 'ai-summary-section';
+    aiSection.className = 'card';
+    aiSection.style.marginBottom = '12px';
+    aiSection.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:600">🤖 AI 성과 요약</div>
+        <button class="btn btn-ghost btn-sm" onclick="loadAISummary('personal')">요약 생성</button>
+      </div>
+      <div id="ai-summary-content" style="font-size:13px;color:var(--muted);line-height:1.8">
+        '요약 생성' 버튼을 클릭하면 AI가 성과를 분석합니다.
+      </div>`;
+    area.appendChild(aiSection);
+
     const myView = document.createElement('div');
     myView.id = 'perf-view-my';
     myView.innerHTML = renderMyPerfView(mySummary, user);
@@ -518,20 +532,6 @@ Pages.perfHome = async function() {
       orgView.innerHTML = '<div class="card"><div class="alert alert-teal">🚧 전체 조직 뷰는 준비 중입니다.</div></div>';
       area.appendChild(orgView);
     }
-
-    const aiSection = document.createElement('div');
-    aiSection.id = 'ai-summary-section';
-    aiSection.className = 'card';
-    aiSection.style.marginTop = '12px';
-    aiSection.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <div style="font-size:14px;font-weight:600">🤖 AI 성과 요약</div>
-        <button class="btn btn-ghost btn-sm" onclick="loadAISummary('personal')">요약 생성</button>
-      </div>
-      <div id="ai-summary-content" style="font-size:13px;color:var(--muted);line-height:1.8">
-        '요약 생성' 버튼을 클릭하면 AI가 성과를 분석합니다.
-      </div>`;
-    area.appendChild(aiSection);
 
     window._perfData = { mySummary, teamSummary, user };
   } catch(err) {
