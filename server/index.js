@@ -31,7 +31,7 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET     = process.env.JWT_SECRET || 'synap-hr-local-dev-secret-2025';
 const ENC_SECRET     = process.env.ENC_SECRET || 'synap-local-enc-secret-32bytes!!';
-const DB_PATH        = path.join(__dirname, '..', 'data', 'hrmanage.db');
+const DB_PATH        = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'hrmanage.db');
 
 // ── DB 초기화 ──────────────────────────────────────────────
 const db = new Database(DB_PATH);

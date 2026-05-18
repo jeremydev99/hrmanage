@@ -20,3 +20,10 @@ data/
 
 # 백업 파일
 *.backup
+
+# Docker
+.docker/
+*.log
+
+# 컨테이너 빌드 캐시
+.docker-cache/

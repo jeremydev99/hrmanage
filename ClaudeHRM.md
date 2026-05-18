@@ -15,6 +15,9 @@ C:\claudeprojects\hrmanage\
 ├── README.md                  ← 사용자용 설치 가이드
 ├── package.json
 ├── 실행.bat
+├── Dockerfile                 ← 컨테이너 이미지 정의 (node:20-alpine)
+├── docker-compose.yml         ← 오케스트레이션 (volumes, env, healthcheck)
+├── .dockerignore              ← 빌드 제외 파일
 ├── server/
 │   ├── index.js               ← 메인 서버 전체 (API + DB + 암호화 + 시드, ~2000줄)
 │   ├── repositories/           ← DB 추상화 인터페이스
@@ -356,6 +359,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-18 | Docker 환경 도입 (Dockerfile, docker-compose.yml, .dockerignore, DB_PATH 환경변수화) (PROMPT_INFRA-1) | Claude Code |
 | 2026-05-18 | EvalCycle Repository 어댑터 + 라우터 4개 전환 (암호화 자동 처리, isInApproverChain 도입) (PROMPT_40-A) | Claude Code |
 | 2026-05-18 | Prisma explicit relation 추가 + $queryRaw → include 전환 (PROMPT_38-followup) | Claude Code |
 | 2026-05-14 | Organization Repository 어댑터 + 라우터 5개 전환 (자기참조 관계 도입) (PROMPT_38) | Claude Code |

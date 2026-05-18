@@ -15,7 +15,7 @@
 |------|------|
 | 프로젝트명 | ㈜사이냅소프트 인사평가 시스템 |
 | 위치 | `C:\claudeprojects\hrmanage\` |
-| 실행 | `실행.bat` 또는 `node server/index.js` → http://localhost:3000 |
+| 실행 | `docker-compose up` → http://localhost:3000 (또는 기존 `node server/index.js` 도 가능) |
 | GitHub | https://github.com/jeremydev99/hrmanage |
 | Node.js | v18 이상 (v24: VS Build Tools 필요) |
 

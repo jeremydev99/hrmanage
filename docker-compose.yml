@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: hrmanage_app
+    ports:
+      - "3000:3000"
+    volumes:
+      # DB 영속화 (호스트와 공유)
+      - ./data:/app/data
+      # 코드 hot-reload (호스트 변경 시 컨테이너 즉시 반영)
+      - ./server:/app/server
+      - ./public:/app/public
+      - ./prisma:/app/prisma
+    environment:
+      - PORT=3000
+      - DATABASE_URL=file:./data/hrmanage.db
+      - DB_PATH=/app/data/hrmanage.db
+      - JWT_SECRET=synap-hr-local-dev-secret-2025
+      - ENC_SECRET=synap-local-enc-secret-32bytes!!
+      - TZ=Asia/Seoul
+      - NODE_ENV=development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/notice"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
