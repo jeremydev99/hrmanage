@@ -27,6 +27,8 @@ model User {
   // === explicit relations (38-followup 추가) ===
   organization     Organization?  @relation("OrgMembers", fields: [orgId], references: [id])
   ledOrganizations Organization[] @relation("OrgLeader")
+  // === explicit relations (PROMPT 40-A 추가) ===
+  evalCycles       EvalCycle[]    @relation("UserEvalCycles")
 
   @@map("users")
 }
@@ -65,6 +67,9 @@ model EvalCycle {
   updated_at   String?
   rejectReason String? @map("reject_reason")
   phase2       String?
+
+  // === explicit relations (PROMPT 40-A 추가) ===
+  user         User    @relation("UserEvalCycles", fields: [userId], references: [id])
 
   @@map("eval_cycles")
 }

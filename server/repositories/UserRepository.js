@@ -44,6 +44,16 @@ class UserRepository {
   async findByOrgId(orgId) {
     throw new Error('UserRepository.findByOrgId is not implemented');
   }
+
+  /**
+   * approverId가 targetUserId의 승인자 체인에 포함되는지 확인
+   * @param {number} approverId
+   * @param {number} targetUserId
+   * @returns {Promise<boolean>}
+   */
+  async isInApproverChain(approverId, targetUserId) {
+    throw new Error('UserRepository.isInApproverChain is not implemented');
+  }
 }
 
 module.exports = UserRepository;

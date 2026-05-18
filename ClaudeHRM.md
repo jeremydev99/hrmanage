@@ -22,14 +22,16 @@ C:\claudeprojects\hrmanage\
 │   │   ├── UserRepository.js
 │   │   ├── GoalCategoryRepository.js
 │   │   ├── GradeCriteriaRepository.js
-│   │   └── OrganizationRepository.js
+│   │   ├── OrganizationRepository.js
+│   │   └── EvalCycleRepository.js
 │   ├── adapters/               ← DB 어댑터 구현
 │   │   └── prisma/
 │   │       ├── README.md
 │   │       ├── PrismaUserRepository.js
 │   │       ├── PrismaGoalCategoryRepository.js
 │   │       ├── PrismaGradeCriteriaRepository.js
-│   │       └── PrismaOrganizationRepository.js
+│   │       ├── PrismaOrganizationRepository.js
+│   │       └── PrismaEvalCycleRepository.js
 │   └── config/                 ← 어댑터 선택 로직
 │       └── repository-factory.js
 ├── public/
@@ -354,6 +356,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-18 | EvalCycle Repository 어댑터 + 라우터 4개 전환 (암호화 자동 처리, isInApproverChain 도입) (PROMPT_40-A) | Claude Code |
 | 2026-05-18 | Prisma explicit relation 추가 + $queryRaw → include 전환 (PROMPT_38-followup) | Claude Code |
 | 2026-05-14 | Organization Repository 어댑터 + 라우터 5개 전환 (자기참조 관계 도입) (PROMPT_38) | Claude Code |
 | 2026-05-14 | 목표 카테고리 삭제 UI 버그 수정 (일괄 저장 방식, _deletedCatIds 추적) (PROMPT_37) | Claude Code |

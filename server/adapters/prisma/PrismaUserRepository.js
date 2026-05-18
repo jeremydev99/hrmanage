@@ -68,6 +68,23 @@ class PrismaUserRepository extends UserRepository {
       select: { id: true, name: true, title: true, grade: true, dept: true, role: true }
     });
   }
+
+  async isInApproverChain(approverId, targetUserId) {
+    // manager_id 체인을 최대 10단계까지 재귀 탐색
+    const approverIdStr = String(approverId);
+    let currentUserId = Number(targetUserId);
+
+    for (let depth = 0; depth < 10; depth++) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: currentUserId },
+        select: { managerId: true }
+      });
+      if (!user || !user.managerId) return false;
+      if (String(user.managerId) === approverIdStr) return true;
+      currentUserId = user.managerId;
+    }
+    return false;
+  }
 }
 
 module.exports = PrismaUserRepository;

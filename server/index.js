@@ -18,12 +18,14 @@ const {
   getUserRepository,
   getGoalCategoryRepository,
   getGradeCriteriaRepository,
-  getOrganizationRepository
+  getOrganizationRepository,
+  getEvalCycleRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
 const gradeCriteriaRepo = getGradeCriteriaRepository();
 const organizationRepo = getOrganizationRepository();
+const evalCycleRepo = getEvalCycleRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -394,48 +396,45 @@ app.delete('/api/categories/:id', auth, masterOnly, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  EVAL CYCLES & GOALS
 // ════════════════════════════════════════════════════════════
-app.get('/api/evals', auth, (req, res) => {
-  const isAdmin = ['master','admin'].includes(req.user.role);
-  const rows = isAdmin
-    ? db.prepare('SELECT e.*,u.name as user_name,u.dept FROM eval_cycles e JOIN users u ON e.user_id=u.id ORDER BY e.created_at DESC').all()
-    : db.prepare('SELECT e.*,u.name as user_name,u.dept FROM eval_cycles e JOIN users u ON e.user_id=u.id WHERE e.user_id=? OR e.user_id IN (SELECT id FROM users WHERE manager_id=?) ORDER BY e.created_at DESC').all(req.user.sub, req.user.sub);
-  // 복호화: 관리자, 본인, 승인자(상위관리자) 모두 가능
-  rows.forEach(r => {
-    const isOwner    = String(r.user_id) === String(req.user.sub);
-    const isApprover = !!db.prepare(
-      `WITH RECURSIVE chain(id,manager_id) AS (
-         SELECT id,manager_id FROM users WHERE id=?
-         UNION ALL SELECT u.id,u.manager_id FROM users u JOIN chain c ON u.id=c.manager_id
-       ) SELECT 1 FROM chain WHERE id=? LIMIT 1`
-    ).get(r.user_id, req.user.sub);
+// [PROMPT_40-A] Repository Pattern 적용
+app.get('/api/evals', auth, async (req, res) => {
+  try {
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const scope = isAdmin ? 'all' : 'mine';
+    const rows = await evalCycleRepo.findList({ userId: req.user.sub, scope });
 
-    if (isAdmin || isOwner || isApprover) {
-      r.self_reason   = r.self_reason   ? decrypt(r.self_reason)   : '';
-      r.reject_reason = r.reject_reason ? decrypt(r.reject_reason) : '';
-    } else {
-      r.self_reason   = null;
-      r.reject_reason = null;
+    // 권한별 마스킹: 관리자/본인/승인자 체인이 아닌 경우 암호화 필드 null 처리
+    for (const r of rows) {
+      const isOwner    = String(r.user_id) === String(req.user.sub);
+      const isApprover = isOwner ? false : await userRepo.isInApproverChain(req.user.sub, r.user_id);
+      if (!isAdmin && !isOwner && !isApprover) {
+        r.self_reason   = null;
+        r.reject_reason = null;
+      }
     }
-  });
-  res.json(rows);
+    res.json(rows);
+  } catch(err) {
+    console.error('[GET /api/evals]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/evals', auth, (req, res) => {
+// [PROMPT_40-A] Repository Pattern 적용
+app.post('/api/evals', auth, async (req, res) => {
   try {
     const { period_type, period_label, eval_year } = req.body;
-    // 방어: 값 누락 시 기본값 적용
     const safePeriodType  = period_type  || 'q';
     const safePeriodLabel = period_label || (eval_year || '2025년') + ' 1분기';
     const safeYear        = eval_year    || '2025년';
-    // 이미 draft 상태인 eval이 있으면 그것을 반환 (중복 생성 방지)
-    const existing = db.prepare(
-      "SELECT id FROM eval_cycles WHERE user_id=? AND phase='draft' ORDER BY created_at DESC LIMIT 1"
-    ).get(req.user.sub);
+
+    const existing = await evalCycleRepo.findDraftByUserId(req.user.sub);
     if (existing) return res.json({ id: existing.id });
-    const r = db.prepare(
-      'INSERT INTO eval_cycles(user_id,period_type,period_label,eval_year) VALUES(?,?,?,?)'
-    ).run(req.user.sub, safePeriodType, safePeriodLabel, safeYear);
-    res.json({ id: r.lastInsertRowid });
+
+    const newId = await evalCycleRepo.create({
+      user_id: req.user.sub, period_type: safePeriodType,
+      period_label: safePeriodLabel, eval_year: safeYear,
+    });
+    res.json({ id: newId });
   } catch(err) {
     console.error('[POST /api/evals]', err);
     res.status(500).json({ error: err.message });
@@ -491,15 +490,17 @@ app.post('/api/evals/:id/goals', auth, (req, res) => {
   }
 });
 
-// 반려된 평가를 draft로 되돌려 재제출 가능하게 함
-app.patch('/api/evals/:id/reopen', auth, (req, res) => {
+// [PROMPT_40-A] Repository Pattern 적용
+app.patch('/api/evals/:id/reopen', auth, async (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.id);
+    const ev = await evalCycleRepo.findById(req.params.id);
     if (!ev || String(ev.user_id) !== String(req.user.sub))
       return res.status(403).json({ error: '권한 없음' });
     if (ev.phase !== 'rejected')
-      return res.json({ success: true }); // 이미 draft면 그냥 통과
-    db.prepare("UPDATE eval_cycles SET phase='draft',reject_reason=NULL,updated_at=datetime('now') WHERE id=?").run(ev.id);
+      return res.json({ success: true });
+
+    await evalCycleRepo.reopen(ev.id);
+    // goals 테이블은 Goal Repository 도입 후 이관 예정 (PROMPT 41)
     db.prepare("UPDATE goals SET status='draft' WHERE eval_id=?").run(ev.id);
     res.json({ success: true });
   } catch(err) {
@@ -508,17 +509,32 @@ app.patch('/api/evals/:id/reopen', auth, (req, res) => {
   }
 });
 
-app.post('/api/evals/:id/submit', auth, (req, res) => {
-  const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.id);
-  if (!ev || String(ev.user_id) !== String(req.user.sub)) return res.status(403).json({ error: '권한 없음' });
-  if (!['draft'].includes(ev.phase)) return res.status(409).json({ error: '제출 불가 상태: ' + ev.phase });
-  const { self_reason } = req.body;
-  db.prepare("UPDATE eval_cycles SET phase='pending',self_reason=?,submitted_at=datetime('now'),updated_at=datetime('now') WHERE id=?")
-    .run(encrypt(self_reason||''), req.params.id);
-  db.prepare("UPDATE goals SET status='pending' WHERE eval_id=?").run(req.params.id);
-  const targetUser = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
-  auditLog(req.user.sub, 'GOAL_SUBMITTED', ev.id, targetUser?.name, `목표 승인 요청 제출 (${ev.period_label||''})`, req.ip);
-  res.json({ success: true });
+// [PROMPT_40-A] Repository Pattern 적용
+app.post('/api/evals/:id/submit', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.id);
+    if (!ev || String(ev.user_id) !== String(req.user.sub))
+      return res.status(403).json({ error: '권한 없음' });
+    if (!['draft'].includes(ev.phase))
+      return res.status(409).json({ error: '제출 불가 상태: ' + ev.phase });
+
+    const { self_reason } = req.body;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    await evalCycleRepo.updatePhaseAndReason(req.params.id, {
+      phase: 'pending', self_reason: self_reason || '', submitted_at: now,
+    });
+    // goals 테이블은 Goal Repository 도입 후 이관 예정 (PROMPT 41)
+    db.prepare("UPDATE goals SET status='pending' WHERE eval_id=?").run(req.params.id);
+
+    const targetUser = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
+    auditLog(req.user.sub, 'GOAL_SUBMITTED', ev.id, targetUser?.name,
+      `목표 승인 요청 제출 (${ev.period_label||''})`, req.ip);
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[submit]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════
