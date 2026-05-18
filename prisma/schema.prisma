@@ -24,6 +24,10 @@ model User {
   evalMode      String? @default("MBO") @map("eval_mode")
   orgId         Int?    @map("org_id")
 
+  // === explicit relations (38-followup 추가) ===
+  organization     Organization?  @relation("OrgMembers", fields: [orgId], references: [id])
+  ledOrganizations Organization[] @relation("OrgLeader")
+
   @@map("users")
 }
 
@@ -36,6 +40,12 @@ model Organization {
   sortOrder   Int?    @default(0) @map("sort_order")
   isActive    Int?    @default(1) @map("is_active")
   created_at  String?
+
+  // === explicit relations (38-followup 추가) ===
+  leader      User?          @relation("OrgLeader", fields: [leaderId], references: [id])
+  parent      Organization?  @relation("OrgHierarchy", fields: [parentId], references: [id])
+  children    Organization[] @relation("OrgHierarchy")
+  members     User[]         @relation("OrgMembers")
 
   @@map("organizations")
 }

@@ -2,7 +2,7 @@ const OrganizationRepository = require('../../repositories/OrganizationRepositor
 
 /**
  * Prisma 기반 OrganizationRepository 구현체
- * schema.prisma에 명시적 relation이 없으므로 $queryRaw로 JOIN 처리.
+ * explicit relation(OrgLeader, OrgHierarchy, OrgMembers) 기반 include 사용.
  * 응답 형태는 기존 SQL 결과와 동일 (leader_name, leader_title, parent_name 평탄화).
  */
 class PrismaOrganizationRepository extends OrganizationRepository {
@@ -14,15 +14,38 @@ class PrismaOrganizationRepository extends OrganizationRepository {
     this.prisma = prismaClient;
   }
 
+  /**
+   * Prisma 응답을 기존 SQL 결과 형태로 평탄화
+   * 클라이언트가 기대하는 snake_case 필드명 유지
+   */
+  _flatten(org) {
+    if (!org) return null;
+    const { leader, parent, leaderId, parentId, sortOrder, isActive, ...rest } = org;
+    return {
+      ...rest,
+      leader_id: leaderId,
+      parent_id: parentId,
+      sort_order: sortOrder,
+      is_active: isActive,
+      leader_name: leader?.name || null,
+      leader_title: leader?.title || null,
+      parent_name: parent?.name || null,
+    };
+  }
+
   async findAllActiveWithRelations() {
-    return await this.prisma.$queryRaw`
-      SELECT o.*, u.name as leader_name, u.title as leader_title, p.name as parent_name
-      FROM organizations o
-      LEFT JOIN users u ON o.leader_id = u.id
-      LEFT JOIN organizations p ON o.parent_id = p.id
-      WHERE o.is_active = 1
-      ORDER BY o.sort_order, o.id
-    `;
+    const orgs = await this.prisma.organization.findMany({
+      where: { isActive: 1 },
+      include: {
+        leader: { select: { name: true, title: true } },
+        parent: { select: { name: true } },
+      },
+      orderBy: [
+        { sortOrder: 'asc' },
+        { id: 'asc' },
+      ],
+    });
+    return orgs.map(o => this._flatten(o));
   }
 
   async create(data) {
