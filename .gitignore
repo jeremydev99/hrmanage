@@ -13,7 +13,7 @@ data/
 .claude/
 
 # Claude Code 프롬프트 파일
-CLAUDE_CODE_PROMPT_*.md
+/CLAUDE_CODE_PROMPT_*.md
 
 # Prisma 생성 파일
 /generated/prisma
