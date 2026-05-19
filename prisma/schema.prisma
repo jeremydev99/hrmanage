@@ -71,6 +71,8 @@ model EvalCycle {
 
   // === explicit relations (PROMPT 40-A 추가) ===
   user         User    @relation("UserEvalCycles", fields: [userId], references: [id])
+  // === PROMPT 41 추가 ===
+  goals        Goal[]  @relation("EvalCycleGoals")
 
   @@map("eval_cycles")
 }
@@ -86,6 +88,10 @@ model Goal {
   status     String? @default("draft")
   created_at String?
 
+  // === explicit relations (PROMPT 41 추가) ===
+  evalCycle  EvalCycle    @relation("EvalCycleGoals", fields: [evalId], references: [id])
+  category   GoalCategory @relation("GoalCategoryGoals", fields: [categoryId], references: [id])
+
   @@map("goals")
 }
 
@@ -100,6 +106,9 @@ model GoalCategory {
   isActive    Int?    @default(1) @map("is_active")
   created_by  Int?
   created_at  String?
+
+  // === PROMPT 41 추가 ===
+  goals       Goal[]  @relation("GoalCategoryGoals")
 
   @@map("goal_categories")
 }

@@ -26,7 +26,8 @@ C:\claudeprojects\hrmanage\
 │   │   ├── GoalCategoryRepository.js
 │   │   ├── GradeCriteriaRepository.js
 │   │   ├── OrganizationRepository.js
-│   │   └── EvalCycleRepository.js
+│   │   ├── EvalCycleRepository.js
+│   │   └── GoalRepository.js
 │   ├── adapters/               ← DB 어댑터 구현
 │   │   └── prisma/
 │   │       ├── README.md
@@ -34,7 +35,8 @@ C:\claudeprojects\hrmanage\
 │   │       ├── PrismaGoalCategoryRepository.js
 │   │       ├── PrismaGradeCriteriaRepository.js
 │   │       ├── PrismaOrganizationRepository.js
-│   │       └── PrismaEvalCycleRepository.js
+│   │       ├── PrismaEvalCycleRepository.js
+│   │       └── PrismaGoalRepository.js
 │   └── config/                 ← 어댑터 선택 로직
 │       └── repository-factory.js
 ├── public/
@@ -327,6 +329,10 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - 새 DB 지원 시 어댑터 추가만 하면 됨 (인터페이스/라우터 변경 불필요)
     - 향후 멀티테넌시 도입 시 메서드 시그니처에 `tenantId` 추가
     - Prisma의 camelCase 응답을 기존 snake_case로 자동 변환 (toSnakeCase 헬퍼)
+19. **Goal 트랜잭션 일괄 교체** (2026-05-18, PROMPT_41):
+    - `goalRepo.replaceByEvalId(evalId, goals)` — Prisma `$transaction` 내 DELETE + 순차 create
+    - `goalRepo.updateStatusByEvalId(evalId, status)` — reopen/submit 시 goals 상태 일괄 변경
+    - category 관계 `include`로 `cat_name`, `color`, `text_color` 평탄화 (`_flatten()`)
 
 ---
 
@@ -359,6 +365,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-18 | Goal Repository Pattern 적용 (암호화 2개 필드, 트랜잭션 일괄 저장, reopen/submit 이관) (PROMPT_41) | Claude Code |
 | 2026-05-18 | Docker 환경 도입 (Dockerfile, docker-compose.yml, .dockerignore, DB_PATH 환경변수화) (PROMPT_INFRA-1) | Claude Code |
 | 2026-05-18 | EvalCycle Repository 어댑터 + 라우터 4개 전환 (암호화 자동 처리, isInApproverChain 도입) (PROMPT_40-A) | Claude Code |
 | 2026-05-18 | Prisma explicit relation 추가 + $queryRaw → include 전환 (PROMPT_38-followup) | Claude Code |
