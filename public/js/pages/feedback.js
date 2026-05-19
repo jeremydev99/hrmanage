@@ -128,19 +128,19 @@ async function renderGiveFeedback(reporteeEvs, allEvs) {
     body.id = cardId;
     body.style.cssText = 'display:none;margin-top:14px;border-top:1px solid var(--o100);padding-top:14px';
 
-    // 중간 보고 표시
+    // 중간 보고 표시 (PROMPT 42: 80자 제한 제거, 줄바꿈 보존, 전체 펼쳐서 표시)
     try {
       const reports = await API.get('/reports/' + ev.id).catch(() => []);
       if (reports && reports.length) {
         const rptDiv = document.createElement('div');
         rptDiv.style.cssText = 'background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:10px;margin-bottom:12px';
-        rptDiv.innerHTML = `<div style="font-size:12px;font-weight:600;color:var(--o700);margin-bottom:6px">📋 중간 보고 (${reports.length}건)</div>
-          ${reports.slice(0,2).map(r => `
-            <div style="font-size:12px;color:var(--o800);padding:4px 0;border-bottom:1px solid var(--o100)">
-              <span style="color:var(--muted);margin-right:6px">${(r.created_at||'').slice(0,10)}</span>
-              ${r.content ? r.content.slice(0,80) + (r.content.length > 80 ? '...' : '') : ''}
-            </div>`).join('')}
-          ${reports.length > 2 ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">외 ${reports.length-2}건</div>` : ''}`;
+        const esc = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        rptDiv.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--o700);margin-bottom:8px">📋 중간 보고 (${reports.length}건)</div>
+          ${reports.map((r, idx) => `
+            <div style="font-size:13px;color:var(--o800);padding:8px 0;${idx < reports.length-1 ? 'border-bottom:1px solid var(--o100);margin-bottom:4px' : ''}">
+              <div style="color:var(--muted);font-size:11px;margin-bottom:4px">보고 #${idx+1} · ${(r.created_at||'').slice(0,10)}</div>
+              <div style="white-space:pre-wrap;line-height:1.6">${esc(r.content || '')}</div>
+            </div>`).join('')}`;
         body.appendChild(rptDiv);
       }
     } catch(e) {}

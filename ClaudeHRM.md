@@ -365,6 +365,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | 피드백 화면 중간 보고 전체 표시 UI 버그 수정 (80자 제한 해제, 줄바꿈 보존, XSS 방지) (PROMPT_42) | Claude Code |
 | 2026-05-18 | Goal Repository Pattern 적용 (암호화 2개 필드, 트랜잭션 일괄 저장, reopen/submit 이관) (PROMPT_41) | Claude Code |
 | 2026-05-18 | Docker 환경 도입 (Dockerfile, docker-compose.yml, .dockerignore, DB_PATH 환경변수화) (PROMPT_INFRA-1) | Claude Code |
 | 2026-05-18 | EvalCycle Repository 어댑터 + 라우터 4개 전환 (암호화 자동 처리, isInApproverChain 도입) (PROMPT_40-A) | Claude Code |
