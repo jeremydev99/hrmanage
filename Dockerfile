@@ -9,7 +9,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # 시스템 의존성 (better-sqlite3 빌드용)
-RUN apk add --no-cache python3 make g++ gcc
+RUN apk add --no-cache python3 make g++ gcc openssl3 openssl3-dev
 
 # package.json + package-lock.json 먼저 복사 (Docker 캐시 최적화)
 COPY package*.json ./
