@@ -22,6 +22,7 @@ const {
   getEvalCycleRepository,
   getGoalRepository,
   getFeedbackRepository,
+  getFinalEvaluationRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -30,6 +31,7 @@ const organizationRepo = getOrganizationRepository();
 const evalCycleRepo = getEvalCycleRepository();
 const goalRepo = getGoalRepository();
 const feedbackRepo = getFeedbackRepository();
+const finalEvalRepo = getFinalEvaluationRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -876,63 +878,70 @@ app.post('/api/feedback/:evalId', auth, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  FINAL EVALUATION (최종 평가)
 // ════════════════════════════════════════════════════════════
-app.get('/api/final/:evalId', auth, (req, res) => {
-  const fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(req.params.evalId);
-  if (!fe) return res.json(null);
-  const isAdmin = ['master','admin'].includes(req.user.role);
-  const ev2 = db.prepare('SELECT user_id FROM eval_cycles WHERE id=?').get(req.params.evalId);
-  const isOwner = ev2 && String(ev2.user_id) === String(req.user.sub);
-  // 승인자 체인 전체 열람 허용
-  const finalChain = [];
-  let finalCur = ev2 ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(ev2.user_id)) : null;
-  while (finalCur?.manager_id && finalChain.length < 5) {
-    finalChain.push(String(finalCur.manager_id));
-    finalCur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(finalCur.manager_id));
-  }
-  const isChainApprover = finalChain.includes(String(req.user.sub));
-  const canRead = isAdmin || isOwner || isChainApprover;
-  if (canRead) {
-    fe.self_note       = fe.self_note       ? decrypt(fe.self_note)       : '';
-    fe.mgr_note        = fe.mgr_note        ? decrypt(fe.mgr_note)        : '';
-    fe.second_mgr_note = fe.second_mgr_note ? decrypt(fe.second_mgr_note) : '';
-  } else {
-    fe.self_note = null; fe.mgr_note = null; fe.second_mgr_note = null;
-  }
-  fe.scores = db.prepare('SELECT * FROM final_eval_scores WHERE final_id=?').all(fe.id);
-  res.json(fe);
-});
-
-app.post('/api/final/:evalId/self', auth, (req, res) => {
-  const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
-  if (!ev || String(ev.user_id) !== String(req.user.sub)) return res.status(403).json({ error: '권한 없음' });
-  if (!['approved','final_self'].includes(ev.phase)) return res.status(400).json({ error: '자기평가 불가 상태' });
-
-  // 이미 제출 완료된 경우 재제출 차단
-  const existFe = db.prepare('SELECT self_done FROM final_evaluations WHERE eval_id=?').get(ev.id);
-  if (existFe?.self_done === 1) return res.status(400).json({ error: '이미 제출된 자기평가는 수정할 수 없습니다.' });
-
-  const { self_note, scores } = req.body;
-  let fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(ev.id);
-  if (!fe) {
-    // INSERT 시 self_done=1 함께 저장
-    const r = db.prepare("INSERT INTO final_evaluations(eval_id,self_note,self_done,self_done_at) VALUES(?,?,1,datetime('now'))").run(ev.id, encrypt(self_note||''));
-    fe = { id: r.lastInsertRowid };
-  } else {
-    db.prepare("UPDATE final_evaluations SET self_note=?,self_done=1,self_done_at=datetime('now') WHERE id=?").run(encrypt(self_note||''), fe.id);
-  }
-  db.prepare('DELETE FROM final_eval_scores WHERE final_id=? AND self_score IS NOT NULL').run(fe.id);
-  (scores||[]).forEach(s => {
-    const ex = db.prepare('SELECT id FROM final_eval_scores WHERE final_id=? AND goal_id=?').get(fe.id, s.goal_id);
-    if (ex) db.prepare('UPDATE final_eval_scores SET self_score=? WHERE id=?').run(s.score, ex.id);
-    else db.prepare('INSERT INTO final_eval_scores(final_id,goal_id,self_score) VALUES(?,?,?)').run(fe.id, s.goal_id, s.score);
-  });
-  db.prepare("UPDATE eval_cycles SET phase='final_mgr_pending',updated_at=datetime('now') WHERE id=?").run(ev.id);
-  res.json({ success: true });
-});
-
-app.post('/api/final/:evalId/mgr', auth, (req, res) => {
+// [PROMPT 44] Repository Pattern 적용
+app.get('/api/final/:evalId', auth, async (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const fe = await finalEvalRepo.findByEvalId(req.params.evalId);
+    if (!fe) return res.json(null);
+
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const ev2 = await evalCycleRepo.findById(req.params.evalId);
+    const isOwner = ev2 && String(ev2.user_id) === String(req.user.sub);
+    const isChainApprover = ev2 ? await userRepo.isInApproverChain(req.user.sub, ev2.user_id) : false;
+    const canRead = isAdmin || isOwner || isChainApprover;
+
+    if (!canRead) {
+      fe.self_note = null;
+      fe.mgr_note = null;
+      fe.second_mgr_note = null;
+    }
+
+    res.json(fe);
+  } catch(err) {
+    console.error('[GET /api/final/:evalId]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// [PROMPT 44] Repository Pattern 적용
+app.post('/api/final/:evalId/self', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.evalId);
+    if (!ev || String(ev.user_id) !== String(req.user.sub))
+      return res.status(403).json({ error: '권한 없음' });
+    if (!['approved','final_self'].includes(ev.phase))
+      return res.status(400).json({ error: '자기평가 불가 상태' });
+
+    const existFe = await finalEvalRepo.findByEvalId(ev.id);
+    if (existFe?.self_done === 1)
+      return res.status(400).json({ error: '이미 제출된 자기평가는 수정할 수 없습니다.' });
+
+    const { self_note, scores } = req.body;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+    const feId = await finalEvalRepo.upsert(ev.id, {
+      self_note: self_note || '',
+      self_done: 1,
+      self_done_at: now
+    });
+
+    if (scores && scores.length) {
+      await finalEvalRepo.upsertScores(feId, scores, 'selfScore');
+    }
+
+    db.prepare("UPDATE eval_cycles SET phase='final_mgr_pending',updated_at=datetime('now') WHERE id=?").run(ev.id);
+
+    res.json({ success: true });
+  } catch(err) {
+    console.error('[final self]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// [PROMPT 44] Repository Pattern 적용
+app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.evalId);
     if (!ev || !['final_mgr_pending','final_mgr2_pending'].includes(ev.phase))
       return res.status(400).json({ error: '상사 평가 불가 상태' });
 
@@ -940,7 +949,6 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
     const isAdmin    = ['master','admin'].includes(req.user.role);
     const isDirect   = String(targetUser?.manager_id) === String(req.user.sub);
 
-    // 2차 평가 여부 판단 — 조직도 기반 (isAdmin 여부와 무관하게 먼저 확인)
     const secondEnabled = getSetting('second_final', '0') === '1';
     let isSecond = false;
     if (secondEnabled) {
@@ -950,7 +958,6 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       isSecond = String(directMgr?.manager_id) === String(req.user.sub);
     }
 
-    // 권한 체크: 직속 상사도, 2차 평가자도, 관리자도 아니면 403
     if (!isDirect && !isSecond && !isAdmin) {
       return res.status(403).json({ error: '평가 권한 없음' });
     }
@@ -960,37 +967,33 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
       isDirect, isSecond, isAdmin, phase: ev.phase
     });
 
-    let fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(ev.id);
+    let fe = await finalEvalRepo.findByEvalId(ev.id);
     if (!fe) {
-      const r = db.prepare('INSERT INTO final_evaluations(eval_id) VALUES(?)').run(ev.id);
-      fe = { id: r.lastInsertRowid };
+      const newId = await finalEvalRepo.upsert(ev.id, {});
+      fe = { id: newId, mgr_done: 0 };
     }
 
     const { mgr_note, scores, selected_grade } = req.body;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     if (isSecond) {
       // ── 2차 평가자 제출 ──────────────────────────────────
-      // 1차가 완료됐는지 확인
       if (!fe.mgr_done) return res.status(400).json({ error: '1차 평가자가 먼저 평가를 완료해야 합니다.' });
 
-      // 2차 별점 저장
-      (scores||[]).forEach(s => {
-        const ex = db.prepare('SELECT id FROM final_eval_scores WHERE final_id=? AND goal_id=?').get(fe.id, s.goal_id);
-        if (ex) {
-          db.prepare('UPDATE final_eval_scores SET second_mgr_score=? WHERE id=?').run(s.score, ex.id);
-        } else {
-          db.prepare('INSERT INTO final_eval_scores(final_id,goal_id,second_mgr_score) VALUES(?,?,?)').run(fe.id, s.goal_id, s.score);
-        }
+      await finalEvalRepo.upsertScores(fe.id, scores, 'secondMgrScore');
+
+      await finalEvalRepo.upsert(ev.id, {
+        second_mgr_note: mgr_note || '',
+        second_mgr_done: 1,
+        second_mgr_done_at: now,
+        second_mgr_id: req.user.sub,
+        selected_grade: selected_grade || fe.selected_grade,
+        second_selected_grade: selected_grade || '',
+        locked: 1,
+        locked_at: now
       });
 
-      db.prepare(`UPDATE final_evaluations
-        SET second_mgr_note=?, second_mgr_done=1,
-            second_mgr_done_at=datetime('now'), second_mgr_id=?,
-            selected_grade=COALESCE(?,selected_grade), second_selected_grade=?
-        WHERE id=?`)
-        .run(encrypt(mgr_note||''), req.user.sub, selected_grade||null, selected_grade||'', fe.id);
       db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
-      db.prepare("UPDATE final_evaluations SET locked=1, locked_at=datetime('now') WHERE id=?").run(fe.id);
 
       const t2 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
       auditLog(req.user.sub, 'FINAL_EVAL_2ND', ev.user_id, t2?.name,
@@ -999,41 +1002,44 @@ app.post('/api/final/:evalId/mgr', auth, (req, res) => {
 
     } else {
       // ── 1차 평가자 제출 ──────────────────────────────────
-      (scores||[]).forEach(s => {
-        const ex = db.prepare('SELECT id FROM final_eval_scores WHERE final_id=? AND goal_id=?').get(fe.id, s.goal_id);
-        if (ex) db.prepare('UPDATE final_eval_scores SET mgr_score=? WHERE id=?').run(s.score, ex.id);
-        else db.prepare('INSERT INTO final_eval_scores(final_id,goal_id,mgr_score) VALUES(?,?,?)').run(fe.id, s.goal_id, s.score);
-      });
+      await finalEvalRepo.upsertScores(fe.id, scores, 'mgrScore');
 
-      // 최종 점수 계산
-      const goals = db.prepare('SELECT g.weight,fes.mgr_score FROM goals g JOIN final_eval_scores fes ON fes.goal_id=g.id WHERE g.eval_id=? AND fes.mgr_score IS NOT NULL').all(ev.id);
+      // 최종 점수 계산 (가중치 기반, goals raw SQL 임시 유지)
+      const goals = db.prepare(
+        `SELECT g.weight, fes.mgr_score
+         FROM goals g
+         JOIN final_eval_scores fes ON fes.goal_id=g.id
+         WHERE g.eval_id=? AND fes.mgr_score IS NOT NULL`
+      ).all(ev.id);
       const totalW     = goals.reduce((a, g) => a + g.weight, 0) || 1;
       const score      = goals.reduce((a, g) => a + (g.mgr_score / 5 * 100) * (g.weight / totalW), 0);
       const finalScore = Math.round(score * 10) / 10;
       const grade      = finalScore >= 90 ? 'S' : finalScore >= 80 ? 'A' : finalScore >= 70 ? 'B' : finalScore >= 60 ? 'C' : 'D';
-
       const finalGradeCode = selected_grade || grade;
-      db.prepare("UPDATE final_evaluations SET mgr_note=?,mgr_done=1,mgr_done_at=datetime('now'),mgr_approver_id=?,final_score=?,final_grade=?,selected_grade=? WHERE id=?")
-        .run(encrypt(mgr_note||''), req.user.sub, finalScore, finalGradeCode, selected_grade||grade, fe.id);
 
-      // 2차 평가 설정 여부에 따라 phase 결정
+      await finalEvalRepo.upsert(ev.id, {
+        mgr_note: mgr_note || '',
+        mgr_done: 1,
+        mgr_done_at: now,
+        mgr_approver_id: req.user.sub,
+        final_score: finalScore,
+        final_grade: finalGradeCode,
+        selected_grade: selected_grade || grade
+      });
+
       if (secondEnabled) {
-        // 2차 평가자가 존재하는지 확인 (직속 상사의 상사)
         const directMgrUser = targetUser?.manager_id
           ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUser.manager_id))
           : null;
         if (directMgrUser?.manager_id) {
-          // 2차 평가자 있음 → final_mgr2_pending
           db.prepare("UPDATE eval_cycles SET phase='final_mgr2_pending',updated_at=datetime('now') WHERE id=?").run(ev.id);
         } else {
-          // 2차 평가자 없음 → 바로 final_done
           db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
-          db.prepare("UPDATE final_evaluations SET locked=1,locked_at=datetime('now') WHERE id=?").run(fe.id);
+          await finalEvalRepo.upsert(ev.id, { locked: 1, locked_at: now });
         }
       } else {
-        // 2차 평가 꺼짐 → 바로 final_done
         db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
-        db.prepare("UPDATE final_evaluations SET locked=1,locked_at=datetime('now') WHERE id=?").run(fe.id);
+        await finalEvalRepo.upsert(ev.id, { locked: 1, locked_at: now });
       }
 
       const t1 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);

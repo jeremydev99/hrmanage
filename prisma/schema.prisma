@@ -76,7 +76,9 @@ model EvalCycle {
   // === PROMPT 41 추가 ===
   goals        Goal[]  @relation("EvalCycleGoals")
   // === PROMPT 43 추가 ===
-  feedbacks    Feedback[] @relation("EvalCycleFeedbacks")
+  feedbacks       Feedback[]       @relation("EvalCycleFeedbacks")
+  // === PROMPT 44 추가 ===
+  finalEvaluation FinalEvaluation? @relation("EvalCycleFinalEvaluation")
 
   @@map("eval_cycles")
 }
@@ -184,6 +186,10 @@ model FinalEvaluation {
   selectedGrade         String? @map("selected_grade")
   second_selected_grade String?
 
+  // === PROMPT 44 추가 ===
+  evalCycle   EvalCycle        @relation("EvalCycleFinalEvaluation", fields: [evalId], references: [id])
+  scores      FinalEvalScore[] @relation("FinalEvaluationScores")
+
   @@map("final_evaluations")
 }
 
@@ -195,6 +201,9 @@ model FinalEvalScore {
   mgrScore       Int?    @map("mgr_score")
   created_at     String?
   secondMgrScore Int?    @map("second_mgr_score")
+
+  // === PROMPT 44 추가 ===
+  finalEvaluation FinalEvaluation @relation("FinalEvaluationScores", fields: [finalId], references: [id])
 
   @@map("final_eval_scores")
 }
