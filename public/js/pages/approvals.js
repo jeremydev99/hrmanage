@@ -181,6 +181,30 @@ async function renderMyApprovalHistory() {
             onclick="cancelApproval(${h.id},'${h.target_name}',${h.level})">승인 취소</button>
           <button class="btn btn-ghost btn-sm" onclick="editApproval(${h.id})">의견 수정</button>
         </div>` : ''}
+        <!-- 승인한 목표 (final_eval 유무와 무관하게 항상 표시) -->
+        ${(h.goals||[]).length ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--o100)">
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">
+            승인한 목표${(h.final_eval?.scores||[]).length ? ' 및 평가' : ''}
+          </div>
+          ${(h.goals||[]).map(g => {
+            const sc  = (h.final_eval?.scores||[]).find(s=>String(s.goal_id)===String(g.id));
+            const ss  = sc?.self_score        || 0;
+            const ms  = sc?.mgr_score         || 0;
+            const ms2 = sc?.second_mgr_score  || 0;
+            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap">
+              <span style="flex:1;font-size:12px;font-weight:500">${g.name||''}
+                <span style="font-size:11px;color:var(--muted);margin-left:4px">${g.weight||0}%</span>
+                ${g.kpi ? `<span style="font-size:11px;color:var(--muted);margin-left:6px">KPI: ${g.kpi}</span>` : ''}
+              </span>
+              ${ss  ? `<span style="font-size:12px;color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)} ${ss}점</span>`  : ''}
+              ${ms  ? `<span style="font-size:12px;color:var(--o500)">1차 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>`   : ''}
+              ${ms2 ? `<span style="font-size:12px;color:var(--o700)">2차 ${'★'.repeat(ms2)}${'☆'.repeat(5-ms2)} ${ms2}점</span>` : ''}
+            </div>`;
+          }).join('')}
+        </div>` : ''}
+
+        <!-- 최종평가 결과 (final_eval 있을 때만) -->
         ${h.final_eval ? `
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--o100)">
           <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">최종평가 결과</div>
@@ -202,25 +226,6 @@ async function renderMyApprovalHistory() {
                  <span class="bd bd-locked" style="font-size:13px">${h.final_eval.selected_grade||h.final_eval.final_grade||''}</span>`
               : ''}
           </div>
-
-          <!-- 목표별 자기/상사 별점 -->
-          ${(h.goals||[]).length && (h.final_eval.scores||[]).length ? `
-          <div style="margin-bottom:10px">
-            <div style="font-size:11px;color:var(--muted);margin-bottom:5px">목표별 평가</div>
-            ${(h.goals||[]).map(g => {
-              const sc  = (h.final_eval.scores||[]).find(s=>String(s.goal_id)===String(g.id));
-              const ss  = sc?.self_score        || 0;
-              const ms  = sc?.mgr_score         || 0;
-              const ms2 = sc?.second_mgr_score  || 0;
-              if (!ss && !ms && !ms2) return '';
-              return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap">
-                <span style="flex:1;font-size:12px;font-weight:500">${g.name||''}</span>
-                ${ss  ? `<span style="font-size:12px;color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)} ${ss}점</span>`  : ''}
-                ${ms  ? `<span style="font-size:12px;color:var(--o500)">1차 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>`   : ''}
-                ${ms2 ? `<span style="font-size:12px;color:var(--o700)">2차 ${'★'.repeat(ms2)}${'☆'.repeat(5-ms2)} ${ms2}점</span>` : ''}
-              </div>`;
-            }).join('')}
-          </div>` : ''}
 
           <!-- 1차 평가자 종합의견 -->
           ${h.final_eval.mgr_note ? `
