@@ -369,6 +369,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | "내 승인 이력" 자기평가 완료 배지 표시 버그 수정 (score 기반 판정) (BUG-2) | Claude Code |
 | 2026-05-20 | 자기 최종평가 사이클 선택 드롭다운 표시 버그 수정 (picker를 외부로 이동) (BUG-1-FIX) | Claude Code |
 | 2026-05-20 | 자기 최종평가 화면 다중 사이클 지원 (find→filter+드롭다운) (BUG-1) | Claude Code |
 | 2026-05-20 | FinalEvaluation Repository 어댑터 (Aggregate Root, 암호화 3개, 점수 계산, 2차 평가 분기) (PROMPT_44) | Claude Code |
