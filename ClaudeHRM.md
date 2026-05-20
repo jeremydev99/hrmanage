@@ -331,6 +331,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - 실제 구현은 `server/adapters/{어댑터}/`에 위치
     - 환경변수 `DATA_ADAPTER`로 어댑터 선택 (기본: prisma)
     - force-phase, unlock 라우터 전환 완료 (EvalCycle.updatePhaseAndLocked, FinalEvaluation.resetForUnlock 추가) (PROMPT 44-B)
+    - ProgressReport Repository 추가 (content 암호화, files Aggregate Root, 트랜잭션, 라우터 3개 전환) (PROMPT 45)
     - 새 DB 지원 시 어댑터 추가만 하면 됨 (인터페이스/라우터 변경 불필요)
     - 향후 멀티테넌시 도입 시 메서드 시그니처에 `tenantId` 추가
     - Prisma의 camelCase 응답을 기존 snake_case로 자동 변환 (toSnakeCase 헬퍼)
@@ -370,6 +371,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | ProgressReport Repository 어댑터 (content 암호화, files Aggregate Root, 트랜잭션, 라우터 3개 전환) (PROMPT 45) | Claude Code |
 | 2026-05-20 | force-phase, unlock 라우터 Repository 전환 (EvalCycle.updatePhaseAndLocked, FinalEvaluation.resetForUnlock 추가) (PROMPT 44-B) | Claude Code |
 | 2026-05-20 | 승인 이력 화면에 목표 내용 항상 표시 (final_eval 없어도 표시, KPI/가중치 추가) (BUG-2-FIX) | Claude Code |
 | 2026-05-20 | "내 승인 이력" 자기평가 완료 배지 표시 버그 수정 (score 기반 판정) (BUG-2) | Claude Code |
