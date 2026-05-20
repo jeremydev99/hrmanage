@@ -371,6 +371,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | PostgreSQL 호환 schema 설계 (schema.postgresql.prisma 신규, 20개 모델, FK 관계 명시, INFRA-2A-1) (PROMPT 46) | Claude Code |
 | 2026-05-20 | ProgressReport Repository 어댑터 (content 암호화, files Aggregate Root, 트랜잭션, 라우터 3개 전환) (PROMPT 45) | Claude Code |
 | 2026-05-20 | force-phase, unlock 라우터 Repository 전환 (EvalCycle.updatePhaseAndLocked, FinalEvaluation.resetForUnlock 추가) (PROMPT 44-B) | Claude Code |
 | 2026-05-20 | 승인 이력 화면에 목표 내용 항상 표시 (final_eval 없어도 표시, KPI/가중치 추가) (BUG-2-FIX) | Claude Code |
@@ -543,6 +544,47 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - "마케팅 포인트 섹션 기반으로 1페이지 제품 소개서 만들어줘"
 - "기술 스택 차별화 항목으로 영업 PT 슬라이드 5장 작성"
 - "Phase 2 완성 후 마케팅 포인트 섹션 최신화해줘"
+
+---
+
+## 운영 진입 준비 체크리스트 (INFRA-2 시리즈)
+
+### INFRA-2A: PostgreSQL 전환
+- [x] INFRA-2A-1: PostgreSQL 호환 schema 설계 (2026-05-20)
+- [ ] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석
+- [ ] INFRA-2A-3: 어댑터 _flatten() DateTime → ISO string 변환 추가
+- [ ] INFRA-2A-4: 로컬 PostgreSQL 컨테이너 마이그레이션 + 기능 검증
+- [ ] INFRA-2A-5: SQLite → PostgreSQL 데이터 이관 스크립트
+
+### INFRA-2B: 정합성 100% 적용
+- [ ] phase 일관성 CHECK 제약
+- [ ] score-done 일관성 트리거
+- [ ] 승인 순서 CHECK 제약
+- [ ] 승인 1인 1회 UNIQUE 제약
+- [ ] 외래키 ON DELETE 정책 명시 (INFRA-2A-1에서 schema에 반영, 마이그레이션은 INFRA-2A-4)
+- [ ] 암호화 검증 CHECK 제약
+- [ ] 타임스탬프 일관성 CHECK 제약
+- [ ] force-phase 백도어 master 제한 + 감사로그 강제
+
+### INFRA-2C: Object Storage
+- [ ] report_files.file_data → NCloud Object Storage 이관
+
+### INFRA-2D: NCloud 환경 셋업
+- [ ] 인스턴스 사이즈 결정
+- [ ] Cloud DB for PostgreSQL 플랜 결정
+- [ ] HTTPS 인증서 적용
+- [ ] 배포 자동화
+
+### INFRA-3: 보안 강화
+- [x] .env 분리 (2026-05-13, PROMPT 34)
+- [ ] AES-256-CBC → AES-256-GCM
+- [ ] JWT 키 로테이션 정책
+
+### INFRA-4: 법무·계약
+- [ ] 개인정보처리방침
+- [ ] 표준약관
+- [ ] DPA (데이터 처리 위탁 계약)
+- [ ] 국외이전 동의서
 | 2026-05-12 | PC 드롭다운 슬라이드 애니, 성과관리 메뉴, 세션 보안 정책 추가 | Claude Code |
 | 2026-05-12 | organizations 테이블 추가, org_id 기반 평가방식 조회, 조직 관리 탭 추가 | Claude Code |
 | 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 768px/480px 미디어쿼리) | Claude Code |

@@ -1,0 +1,460 @@
+// ㈜사이냅소프트 인사평가 시스템 — PostgreSQL 16 호환 schema
+//
+// 작성: 2026-05-20 (PROMPT 46, INFRA-2A-1)
+// 기준: prisma/schema.prisma (SQLite 버전, 2026-05-14 prisma db pull)
+//
+// 변환 원칙:
+// 1. 모든 시각 컬럼(*_at, created_at, updated_at, submitted_at, approved_at,
+//    *_done_at, locked_at)은 String? → DateTime? @default(now()) 또는 DateTime?
+//    (created_at 는 @default(now()), 이벤트성 *_at 필드는 default 없이 DateTime?)
+// 2. Boolean 의미 정수(is_active, locked, *_done) 필드는 일단 Int 유지.
+//    INFRA-2B에서 CHECK 제약(0 또는 1만 허용)으로 정합성 100% 보장 예정
+// 3. SQLite 자동 인덱스 명명(sqlite_autoindex_*) 제거.
+//    PG 명명 규칙으로 변경 또는 map 제거 (Prisma 기본 명명 사용)
+// 4. 외래키 관계 @relation 명시 추가 (이전에는 raw Int 컬럼만 존재):
+//    users.manager_id, org_id / organizations.leader_id, parent_id /
+//    eval_cycles.user_id / goals.eval_id, category_id /
+//    goal_approvals.eval_id, approver_id / feedbacks.eval_id, author_id /
+//    feedback_items.feedback_id, goal_id / final_evaluations.eval_id,
+//    mgr_approver_id, second_mgr_id / final_eval_scores.final_id, goal_id /
+//    progress_reports.eval_id, author_id / report_files.report_id,
+//    feedback_id, final_eval_id / eval_period_modes.period_id, manager_id /
+//    okr_objectives.cycle_id / okr_key_results.objective_id /
+//    audit_logs.user_id
+// 5. AppSetting의 @@ignore 제거. key를 String @id로 정의 (SQLite에서 이미 이 형태)
+// 6. report_files.file_data는 매우 큰 BLOB 가능 → PG는 bytea 또는 text.
+//    현재 base64 문자열 저장이므로 String 유지 (INFRA-2C에서 Object Storage 이관 예정)
+// 7. 모든 snake_case 필드는 camelCase Prisma 필드명 + @map("snake_case") 로 통일
+//
+// 이 파일은 INFRA-2A-4 (로컬 PostgreSQL 마이그레이션) 시점부터 활성화 예정.
+// 현재는 설계 검토용 — 실제 prisma generate에는 schema.prisma만 사용됨.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma-pg"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_PG")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AppSetting
+// ──────────────────────────────────────────────────────────────────────────────
+model AppSetting {
+  key       String  @id
+  value     String?
+  updatedBy Int?    @map("updated_by")
+  updatedAt String? @map("updated_at")
+
+  @@map("app_settings")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// AuditLog
+// ──────────────────────────────────────────────────────────────────────────────
+model AuditLog {
+  id         Int       @id @default(autoincrement())
+  userId     Int?      @map("user_id")
+  action     String?
+  ip         String?
+  createdAt  DateTime? @default(now()) @map("created_at")
+  targetId   Int?      @map("target_id")
+  targetName String?   @map("target_name")
+  detail     String?
+
+  // audit_logs.target_id는 다양한 테이블을 가리키므로 외래키 미설정
+  user User? @relation("AuditLogUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// EvalCycle
+// ──────────────────────────────────────────────────────────────────────────────
+model EvalCycle {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  periodType   String?   @map("period_type")
+  periodLabel  String?   @map("period_label")
+  evalYear     String?   @map("eval_year")
+  phase        String?   @default("draft")
+  selfReason   String?   @map("self_reason")
+  submittedAt  DateTime? @map("submitted_at")
+  approvedAt   DateTime? @map("approved_at")
+  locked       Int?      @default(0)
+  createdAt    DateTime? @default(now()) @map("created_at")
+  updatedAt    DateTime? @default(now()) @map("updated_at")
+  rejectReason String?   @map("reject_reason")
+  phase2       String?
+
+  user            User             @relation("UserEvalCycles", fields: [userId], references: [id], onDelete: Cascade)
+  goals           Goal[]           @relation("EvalCycleGoals")
+  feedbacks       Feedback[]       @relation("EvalCycleFeedbacks")
+  finalEvaluation FinalEvaluation? @relation("EvalCycleFinalEvaluation")
+  progressReports ProgressReport[] @relation("EvalCycleProgressReports")
+  goalApprovals   GoalApproval[]   @relation("EvalCycleGoalApprovals")
+
+  @@map("eval_cycles")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// EvalPeriod
+// ──────────────────────────────────────────────────────────────────────────────
+model EvalPeriod {
+  id          Int       @id @default(autoincrement())
+  periodType  String    @map("period_type")
+  periodLabel String    @map("period_label")
+  evalYear    String    @map("eval_year")
+  isActive    Int?      @default(1) @map("is_active")
+  createdBy   Int?      @map("created_by")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  evalMode    String?   @default("MBO") @map("eval_mode")
+  locked      Int?      @default(0)
+
+  modes EvalPeriodMode[] @relation("EvalPeriodModes")
+
+  @@map("eval_periods")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// EvalPeriodMode
+// ──────────────────────────────────────────────────────────────────────────────
+model EvalPeriodMode {
+  id        Int       @id @default(autoincrement())
+  periodId  Int       @map("period_id")
+  managerId Int       @map("manager_id")
+  evalMode  String    @default("MBO") @map("eval_mode")
+  locked    Int?      @default(0)
+  createdAt DateTime? @default(now()) @map("created_at")
+
+  period  EvalPeriod @relation("EvalPeriodModes", fields: [periodId], references: [id], onDelete: Cascade)
+  manager User       @relation("EvalPeriodModeManager", fields: [managerId], references: [id], onDelete: Cascade)
+
+  @@unique([periodId, managerId])
+  @@map("eval_period_modes")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Feedback
+// ──────────────────────────────────────────────────────────────────────────────
+model Feedback {
+  id          Int       @id @default(autoincrement())
+  evalId      Int       @map("eval_id")
+  authorId    Int       @map("author_id")
+  overallNote String?   @map("overall_note")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  evalCycle EvalCycle      @relation("EvalCycleFeedbacks", fields: [evalId], references: [id], onDelete: Cascade)
+  author    User           @relation("UserAuthoredFeedbacks", fields: [authorId], references: [id], onDelete: Restrict)
+  items     FeedbackItem[] @relation("FeedbackToItems")
+  files     ReportFile[]   @relation("ReportFileFeedback")
+
+  @@map("feedbacks")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FeedbackItem
+// ──────────────────────────────────────────────────────────────────────────────
+model FeedbackItem {
+  id         Int       @id @default(autoincrement())
+  feedbackId Int       @map("feedback_id")
+  goalId     Int       @map("goal_id")
+  score      Int?
+  note       String?
+  createdAt  DateTime? @default(now()) @map("created_at")
+
+  feedback Feedback @relation("FeedbackToItems", fields: [feedbackId], references: [id], onDelete: Cascade)
+  goal     Goal     @relation("GoalFeedbackItems", fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@map("feedback_items")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FinalEvalScore
+// ──────────────────────────────────────────────────────────────────────────────
+model FinalEvalScore {
+  id             Int       @id @default(autoincrement())
+  finalId        Int       @map("final_id")
+  goalId         Int       @map("goal_id")
+  selfScore      Int?      @map("self_score")
+  mgrScore       Int?      @map("mgr_score")
+  createdAt      DateTime? @default(now()) @map("created_at")
+  secondMgrScore Int?      @map("second_mgr_score")
+
+  finalEvaluation FinalEvaluation @relation("FinalEvaluationScores", fields: [finalId], references: [id], onDelete: Cascade)
+  goal            Goal            @relation("GoalFinalEvalScores", fields: [goalId], references: [id], onDelete: Cascade)
+
+  @@map("final_eval_scores")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// FinalEvaluation
+// ──────────────────────────────────────────────────────────────────────────────
+model FinalEvaluation {
+  id                  Int       @id @default(autoincrement())
+  evalId              Int       @unique @map("eval_id")
+  selfNote            String?   @map("self_note")
+  selfDone            Int?      @default(0) @map("self_done")
+  selfDoneAt          DateTime? @map("self_done_at")
+  mgrNote             String?   @map("mgr_note")
+  mgrDone             Int?      @default(0) @map("mgr_done")
+  mgrDoneAt           DateTime? @map("mgr_done_at")
+  mgrApproverId       Int?      @map("mgr_approver_id")
+  finalScore          Float?    @map("final_score")
+  finalGrade          String?   @map("final_grade")
+  locked              Int?      @default(0)
+  lockedAt            DateTime? @map("locked_at")
+  createdAt           DateTime? @default(now()) @map("created_at")
+  updatedAt           DateTime? @default(now()) @map("updated_at")
+  secondMgrDone       Int?      @default(0) @map("second_mgr_done")
+  secondMgrNote       String?   @map("second_mgr_note")
+  secondMgrId         Int?      @map("second_mgr_id")
+  secondMgrDoneAt     DateTime? @map("second_mgr_done_at")
+  selectedGrade       String?   @map("selected_grade")
+  secondSelectedGrade String?   @map("second_selected_grade")
+
+  evalCycle   EvalCycle        @relation("EvalCycleFinalEvaluation", fields: [evalId], references: [id], onDelete: Cascade)
+  mgrApprover User?            @relation("MgrApprover", fields: [mgrApproverId], references: [id], onDelete: SetNull)
+  secondMgr   User?            @relation("SecondMgr", fields: [secondMgrId], references: [id], onDelete: SetNull)
+  scores      FinalEvalScore[] @relation("FinalEvaluationScores")
+  files       ReportFile[]     @relation("ReportFileFinalEval")
+
+  @@map("final_evaluations")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Goal
+// ──────────────────────────────────────────────────────────────────────────────
+model Goal {
+  id         Int       @id @default(autoincrement())
+  evalId     Int       @map("eval_id")
+  categoryId Int       @map("category_id")
+  name       String?
+  kpi        String?
+  weight     Int?      @default(0)
+  sortOrder  Int?      @default(0) @map("sort_order")
+  status     String?   @default("draft")
+  createdAt  DateTime? @default(now()) @map("created_at")
+
+  evalCycle       EvalCycle        @relation("EvalCycleGoals", fields: [evalId], references: [id], onDelete: Cascade)
+  category        GoalCategory     @relation("GoalCategoryGoals", fields: [categoryId], references: [id], onDelete: Restrict)
+  feedbackItems   FeedbackItem[]   @relation("GoalFeedbackItems")
+  finalEvalScores FinalEvalScore[] @relation("GoalFinalEvalScores")
+
+  @@map("goals")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GoalApproval
+// ──────────────────────────────────────────────────────────────────────────────
+model GoalApproval {
+  id         Int       @id @default(autoincrement())
+  evalId     Int       @map("eval_id")
+  approverId Int       @map("approver_id")
+  level      Int?
+  action     String?
+  note       String?
+  createdAt  DateTime? @default(now()) @map("created_at")
+
+  evalCycle EvalCycle @relation("EvalCycleGoalApprovals", fields: [evalId], references: [id], onDelete: Cascade)
+  approver  User      @relation("GoalApprovalApprover", fields: [approverId], references: [id], onDelete: Restrict)
+
+  @@map("goal_approvals")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GoalCategory
+// ──────────────────────────────────────────────────────────────────────────────
+model GoalCategory {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  weight      Int?      @default(0)
+  color       String?
+  textColor   String?   @map("text_color")
+  sortOrder   Int?      @default(0) @map("sort_order")
+  isActive    Int?      @default(1) @map("is_active")
+  createdBy   Int?      @map("created_by")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  goals Goal[] @relation("GoalCategoryGoals")
+
+  @@map("goal_categories")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// GradeCriteria
+// ──────────────────────────────────────────────────────────────────────────────
+model GradeCriteria {
+  id          Int       @id @default(autoincrement())
+  gradeCode   String    @map("grade_code")
+  gradeName   String    @map("grade_name")
+  description String?
+  note        String?
+  sortOrder   Int?      @default(0) @map("sort_order")
+  isActive    Int?      @default(1) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  @@map("grade_criteria")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OkrCycle
+// ──────────────────────────────────────────────────────────────────────────────
+model OkrCycle {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+  periodLabel String    @map("period_label")
+  evalYear    String    @map("eval_year")
+  phase       String?   @default("draft")
+  createdAt   DateTime? @default(now()) @map("created_at")
+  updatedAt   DateTime? @default(now()) @map("updated_at")
+
+  user       User           @relation("OkrCycleUser", fields: [userId], references: [id], onDelete: Cascade)
+  objectives OkrObjective[] @relation("OkrCycleObjectives")
+
+  @@map("okr_cycles")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OkrKeyResult
+// ──────────────────────────────────────────────────────────────────────────────
+model OkrKeyResult {
+  id           Int     @id @default(autoincrement())
+  objectiveId  Int     @map("objective_id")
+  title        String
+  targetValue  Float?  @default(100) @map("target_value")
+  currentValue Float?  @default(0) @map("current_value")
+  unit         String? @default("%")
+  weight       Int?    @default(33)
+  sortOrder    Int?    @default(0) @map("sort_order")
+
+  objective OkrObjective @relation("OkrObjectiveKeyResults", fields: [objectiveId], references: [id], onDelete: Cascade)
+
+  @@map("okr_key_results")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OkrObjective
+// ──────────────────────────────────────────────────────────────────────────────
+model OkrObjective {
+  id          Int     @id @default(autoincrement())
+  cycleId     Int     @map("cycle_id")
+  title       String
+  description String?
+  sortOrder   Int?    @default(0) @map("sort_order")
+
+  cycle      OkrCycle       @relation("OkrCycleObjectives", fields: [cycleId], references: [id], onDelete: Cascade)
+  keyResults OkrKeyResult[] @relation("OkrObjectiveKeyResults")
+
+  @@map("okr_objectives")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Organization
+// ──────────────────────────────────────────────────────────────────────────────
+model Organization {
+  id          Int       @id @default(autoincrement())
+  name        String
+  leaderId    Int?      @map("leader_id")
+  parentId    Int?      @map("parent_id")
+  description String?
+  sortOrder   Int?      @default(0) @map("sort_order")
+  isActive    Int?      @default(1) @map("is_active")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  // 조직장 관계
+  leader User? @relation("OrgLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+
+  // 자기참조: 상위 조직
+  parent   Organization?  @relation("OrganizationParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children Organization[] @relation("OrganizationParent")
+
+  // 역참조: 소속 구성원
+  members User[] @relation("OrgMembers")
+
+  @@map("organizations")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ProgressReport
+// ──────────────────────────────────────────────────────────────────────────────
+model ProgressReport {
+  id        Int       @id @default(autoincrement())
+  evalId    Int       @map("eval_id")
+  authorId  Int       @map("author_id")
+  content   String?
+  createdAt DateTime? @default(now()) @map("created_at")
+  updatedAt DateTime? @default(now()) @map("updated_at")
+
+  evalCycle EvalCycle    @relation("EvalCycleProgressReports", fields: [evalId], references: [id], onDelete: Cascade)
+  author    User         @relation("ProgressReportAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+  files     ReportFile[] @relation("ReportFileReport")
+
+  @@map("progress_reports")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ReportFile
+// ──────────────────────────────────────────────────────────────────────────────
+model ReportFile {
+  id          Int       @id @default(autoincrement())
+  reportId    Int?      @map("report_id")
+  feedbackId  Int?      @map("feedback_id")
+  finalEvalId Int?      @map("final_eval_id")
+  fileName    String?   @map("file_name")
+  fileData    String?   @map("file_data")
+  fileType    String?   @map("file_type")
+  fileSize    Int?      @map("file_size")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  report    ProgressReport?  @relation("ReportFileReport", fields: [reportId], references: [id], onDelete: Cascade)
+  feedback  Feedback?        @relation("ReportFileFeedback", fields: [feedbackId], references: [id], onDelete: Cascade)
+  finalEval FinalEvaluation? @relation("ReportFileFinalEval", fields: [finalEvalId], references: [id], onDelete: Cascade)
+
+  @@map("report_files")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// User
+// ──────────────────────────────────────────────────────────────────────────────
+model User {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  role          String?   @default("user")
+  dept          String?
+  title         String?
+  managerId     Int?      @map("manager_id")
+  isActive      Int?      @default(1) @map("is_active")
+  createdAt     DateTime? @default(now()) @map("created_at")
+  accountStatus String?   @default("approved") @map("account_status")
+  signupNote    String?   @map("signup_note")
+  grade         String?   @default("")
+  evalMode      String?   @default("MBO") @map("eval_mode")
+  orgId         Int?      @map("org_id")
+
+  // 자기참조: 매니저 관계
+  manager User?  @relation("UserManager", fields: [managerId], references: [id], onDelete: SetNull)
+  reports User[] @relation("UserManager")
+
+  // 조직 관계
+  org Organization? @relation("OrgMembers", fields: [orgId], references: [id], onDelete: SetNull)
+
+  // 역참조 관계들
+  ledOrgs            Organization[]    @relation("OrgLeader")
+  evalCycles         EvalCycle[]       @relation("UserEvalCycles")
+  goalApprovals      GoalApproval[]    @relation("GoalApprovalApprover")
+  authoredFeedbacks  Feedback[]        @relation("UserAuthoredFeedbacks")
+  finalEvalsApproved FinalEvaluation[] @relation("MgrApprover")
+  finalEvalsSecond   FinalEvaluation[] @relation("SecondMgr")
+  reportsAuthored    ProgressReport[]  @relation("ProgressReportAuthor")
+  evalPeriodModes    EvalPeriodMode[]  @relation("EvalPeriodModeManager")
+  auditLogs          AuditLog[]        @relation("AuditLogUser")
+  okrCycles          OkrCycle[]        @relation("OkrCycleUser")
+
+  @@map("users")
+}
