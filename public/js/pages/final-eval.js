@@ -44,7 +44,11 @@ Pages.finalEval = async function() {
   });
 
   if (tabs.some(t => t.id === 'fin-self')) {
-    renderFinalSelfPicker(myEvs, defaultEv);
+    // 사이클이 2개 이상일 때만 picker를 tabs 위쪽에 부착
+    if (myEvs.length > 1) {
+      attachCyclePicker(area, tabsEl, myEvs, defaultEv);
+    }
+    renderFinalSelf(defaultEv);
   }
   if (tabs.some(t => t.id === 'fin-mgr')) {
     renderFinalMgr(mgrPending);
@@ -58,65 +62,43 @@ function switchFinTab(id) {
   document.getElementById(id)?.classList.add('active');
 }
 
-// 자기 최종평가 — 사이클 선택 드롭다운 + 선택된 사이클 렌더 (BUG-1)
-function renderFinalSelfPicker(myEvs, defaultEv) {
-  const el = document.getElementById('fin-self');
-  if (!el) return;
-  el.innerHTML = '';
+// 자기 최종평가 — 사이클 선택 드롭다운 (area에 부착, tabs 위쪽 배치)
+function attachCyclePicker(area, tabsEl, myEvs, defaultEv) {
+  const phaseLabel = (p) => ({
+    'approved':            '목표 확정',
+    'final_self':          '자기평가 진행 중',
+    'final_mgr_pending':   '상사평가 대기',
+    'final_mgr2_pending':  '2차 평가자 대기',
+    'final_done':          '평가 완료',
+  }[p] || p);
 
-  if (myEvs.length > 1) {
-    const phaseLabel = (p) => ({
-      'approved':           '목표 확정',
-      'final_self':         '자기평가 진행 중',
-      'final_mgr_pending':  '상사평가 대기',
-      'final_mgr2_pending': '2차 평가자 대기',
-      'final_done':         '평가 완료',
-    }[p] || p);
+  const picker = document.createElement('div');
+  picker.className = 'card';
+  picker.id = 'fin-self-cycle-picker';
+  picker.style.cssText = 'padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+  picker.innerHTML = `
+    <label style="font-size:12px;color:var(--muted);font-weight:500">평가 사이클 선택</label>
+    <select id="fin-self-cycle-sel"
+      style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);
+             border-radius:6px;background:var(--white);font-size:13px;cursor:pointer">
+      ${myEvs.map(e => `
+        <option value="${e.id}" ${e.id === defaultEv.id ? 'selected' : ''}>
+          ${e.eval_year || ''} ${e.period_label || ''} — ${phaseLabel(e.phase)}
+        </option>`).join('')}
+    </select>`;
 
-    const picker = document.createElement('div');
-    picker.className = 'card';
-    picker.style.cssText = 'padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
-    picker.innerHTML = `
-      <label style="font-size:12px;color:var(--muted);font-weight:500">평가 사이클 선택</label>
-      <select id="fin-self-cycle-sel"
-        style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);
-               border-radius:6px;background:var(--white);font-size:13px;cursor:pointer">
-        ${myEvs.map(e => `
-          <option value="${e.id}" ${e.id === defaultEv.id ? 'selected' : ''}>
-            ${e.eval_year || ''} ${e.period_label || ''} — ${phaseLabel(e.phase)}
-          </option>`).join('')}
-      </select>`;
-    el.appendChild(picker);
+  // tabs 바로 앞에 삽입 (자기/상사 탭 위에 표시)
+  area.insertBefore(picker, tabsEl);
 
-    const sel = picker.querySelector('#fin-self-cycle-sel');
-    sel.addEventListener('change', () => {
-      const targetId = parseInt(sel.value);
-      const target = myEvs.find(e => e.id === targetId);
-      if (!target) return;
-      el.innerHTML = '';
-      el.appendChild(picker);
-      picker.querySelector('#fin-self-cycle-sel').value = String(target.id);
-      bindCycleSelChange(myEvs);
-      renderFinalSelf(target);
-    });
-  }
-
-  if (defaultEv) renderFinalSelf(defaultEv);
-}
-
-// 사이클 선택 드롭다운 change 이벤트 재바인딩 헬퍼 (BUG-1)
-function bindCycleSelChange(myEvs) {
-  const sel = document.getElementById('fin-self-cycle-sel');
-  if (!sel) return;
+  // 선택 변경 시 해당 사이클로 다시 렌더
+  const sel = picker.querySelector('#fin-self-cycle-sel');
   sel.addEventListener('change', () => {
     const targetId = parseInt(sel.value);
     const target = myEvs.find(e => e.id === targetId);
     if (!target) return;
-    const el = document.getElementById('fin-self');
-    const pickerCard = sel.closest('.card');
-    el.innerHTML = '';
-    el.appendChild(pickerCard);
-    bindCycleSelChange(myEvs);
+    // 자기 최종평가 탭으로 자동 전환
+    switchFinTab('fin-self');
+    // 해당 사이클로 재렌더 (#fin-self 내부만 갈아끼움, picker는 유지)
     renderFinalSelf(target);
   });
 }
