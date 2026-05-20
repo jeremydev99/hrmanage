@@ -43,7 +43,9 @@ const DB_PATH        = process.env.DB_PATH || path.join(__dirname, '..', 'data',
 
 // ── DB 초기화 ──────────────────────────────────────────────
 const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
+// WAL 모드는 Docker + Windows 바인드 마운트에서 SQLITE_IOERR_SHMOPEN 발생
+// DELETE 모드로 대체 (단일 프로세스 환경에서 안전)
+db.pragma('journal_mode = DELETE');
 db.pragma('foreign_keys = ON');
 initDB();
 
