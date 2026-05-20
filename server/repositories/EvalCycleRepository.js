@@ -57,6 +57,16 @@ class EvalCycleRepository {
   async reopen(id) {
     throw new Error('EvalCycleRepository.reopen is not implemented');
   }
+
+  /**
+   * 평가 단계 + 잠금 상태를 동시에 변경 (force-phase용)
+   * @param {number} id - eval_cycles.id
+   * @param {string} phase - 변경할 phase 값
+   * @param {number} locked - 0 또는 1
+   */
+  async updatePhaseAndLocked(id, phase, locked) {
+    throw new Error('Not implemented');
+  }
 }
 
 module.exports = EvalCycleRepository;

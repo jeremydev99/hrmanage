@@ -143,6 +143,43 @@ class PrismaFinalEvaluationRepository extends FinalEvaluationRepository {
       }
     });
   }
+
+  async findById(id) {
+    const fe = await this.prisma.finalEvaluation.findUnique({
+      where: { id: Number(id) },
+      include: { scores: true }
+    });
+    return this._flatten(fe);
+  }
+
+  async resetForUnlock(finalId) {
+    await this.prisma.$transaction(async (tx) => {
+      // final_evaluations 완전 초기화
+      await tx.finalEvaluation.update({
+        where: { id: Number(finalId) },
+        data: {
+          locked: 0,
+          locked_at: null,
+          selfDone: 0,
+          self_done_at: null,
+          mgrDone: 0,
+          mgr_done_at: null,
+          mgrApproverId: null,
+          secondMgrDone: 0,
+          second_mgr_done_at: null,
+          secondMgrId: null,
+          finalScore: null,
+          finalGrade: null,
+          selectedGrade: null,
+        }
+      });
+      // 별점 초기화 (mgr_score, second_mgr_score만 NULL — self_score는 보존)
+      await tx.finalEvalScore.updateMany({
+        where: { finalId: Number(finalId) },
+        data: { mgrScore: null, secondMgrScore: null }
+      });
+    });
+  }
 }
 
 module.exports = PrismaFinalEvaluationRepository;

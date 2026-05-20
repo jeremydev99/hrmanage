@@ -1285,8 +1285,34 @@ app.get('/api/files/:fileId', auth, (req, res) => {
   }
 });
 
-// 평가 단계 강제 변경 (admin+)
-app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
+// [PROMPT_44-B] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
+//   try {
+//     const { phase } = req.body;
+//     const validPhases = ['draft','pending','approved','rejected',
+//                          'final_self','final_mgr_pending','final_mgr2_pending','final_done'];
+//     if (!validPhases.includes(phase))
+//       return res.status(400).json({ error: '유효하지 않은 phase입니다.' });
+//     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+//     if (!ev) return res.status(404).json({ error: '평가를 찾을 수 없습니다.' });
+//     const locked = phase === 'final_done' ? 1 : 0;
+//     db.prepare("UPDATE eval_cycles SET phase=?, locked=?, updated_at=datetime('now') WHERE id=?")
+//       .run(phase, locked, req.params.evalId);
+//     if (phase === 'final_done') {
+//       db.prepare("UPDATE final_evaluations SET locked=1, locked_at=datetime('now') WHERE eval_id=?")
+//         .run(req.params.evalId);
+//     }
+//     const target = db.prepare('SELECT u.name FROM eval_cycles e JOIN users u ON e.user_id=u.id WHERE e.id=?').get(req.params.evalId);
+//     auditLog(req.user.sub, 'FORCE_PHASE_CHANGE', req.params.evalId, target?.name,
+//       `평가 단계 강제 변경: ${ev.phase} → ${phase}`, req.ip);
+//     res.json({ success: true });
+//   } catch(err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// [PROMPT_44-B] Repository Pattern 적용
+app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, async (req, res) => {
   try {
     const { phase } = req.body;
     const validPhases = ['draft','pending','approved','rejected',
@@ -1294,16 +1320,17 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
     if (!validPhases.includes(phase))
       return res.status(400).json({ error: '유효하지 않은 phase입니다.' });
 
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const ev = await evalCycleRepo.findById(req.params.evalId);
     if (!ev) return res.status(404).json({ error: '평가를 찾을 수 없습니다.' });
 
     const locked = phase === 'final_done' ? 1 : 0;
-    db.prepare("UPDATE eval_cycles SET phase=?, locked=?, updated_at=datetime('now') WHERE id=?")
-      .run(phase, locked, req.params.evalId);
+    await evalCycleRepo.updatePhaseAndLocked(req.params.evalId, phase, locked);
 
     if (phase === 'final_done') {
-      db.prepare("UPDATE final_evaluations SET locked=1, locked_at=datetime('now') WHERE eval_id=?")
-        .run(req.params.evalId);
+      await finalEvalRepo.upsert(req.params.evalId, {
+        locked: 1,
+        locked_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      });
     }
 
     const target = db.prepare('SELECT u.name FROM eval_cycles e JOIN users u ON e.user_id=u.id WHERE e.id=?').get(req.params.evalId);
@@ -1312,6 +1339,7 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, (req, res) => {
 
     res.json({ success: true });
   } catch(err) {
+    console.error('[force-phase]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -2107,37 +2135,53 @@ app.get('/api/admin/audit', auth, adminOnly, (req, res) => {
   }
 });
 
-app.post('/api/admin/final/:id/unlock', auth, masterOnly, (req, res) => {
+// [PROMPT_44-B] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.post('/api/admin/final/:id/unlock', auth, masterOnly, (req, res) => {
+//   try {
+//     const fe = db.prepare('SELECT * FROM final_evaluations WHERE id=?').get(req.params.id);
+//     if (!fe) return res.status(404).json({ error: '최종평가를 찾을 수 없습니다.' });
+//     db.prepare(`UPDATE final_evaluations
+//       SET locked=0, locked_at=NULL,
+//           self_done=0, self_done_at=NULL,
+//           mgr_done=0, mgr_done_at=NULL,
+//           mgr_approver_id=NULL,
+//           second_mgr_done=0, second_mgr_done_at=NULL,
+//           second_mgr_id=NULL,
+//           final_score=NULL, final_grade=NULL, selected_grade=NULL
+//       WHERE id=?`).run(req.params.id);
+//     db.prepare(`UPDATE eval_cycles
+//       SET phase='final_self', locked=0, updated_at=datetime('now')
+//       WHERE id=?`).run(fe.eval_id);
+//     db.prepare(`UPDATE final_eval_scores
+//       SET mgr_score=NULL, second_mgr_score=NULL
+//       WHERE final_id=?`).run(req.params.id);
+//     const ev = db.prepare('SELECT user_id, period_label FROM eval_cycles WHERE id=?').get(fe.eval_id);
+//     const target = ev ? db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id) : null;
+//     auditLog(req.user.sub, 'FINAL_EVAL_UNLOCKED', fe.eval_id, target?.name,
+//       `최종평가 잠금 해제 및 초기화 (${ev?.period_label||''})`, req.ip);
+//     res.json({ success: true });
+//   } catch(err) {
+//     console.error('[unlock]', err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// [PROMPT_44-B] Repository Pattern 적용
+app.post('/api/admin/final/:id/unlock', auth, masterOnly, async (req, res) => {
   try {
-    const fe = db.prepare('SELECT * FROM final_evaluations WHERE id=?').get(req.params.id);
+    const fe = await finalEvalRepo.findById(req.params.id);
     if (!fe) return res.status(404).json({ error: '최종평가를 찾을 수 없습니다.' });
 
-    // final_evaluations 완전 초기화
-    db.prepare(`UPDATE final_evaluations
-      SET locked=0, locked_at=NULL,
-          self_done=0, self_done_at=NULL,
-          mgr_done=0, mgr_done_at=NULL,
-          mgr_approver_id=NULL,
-          second_mgr_done=0, second_mgr_done_at=NULL,
-          second_mgr_id=NULL,
-          final_score=NULL, final_grade=NULL, selected_grade=NULL
-      WHERE id=?`).run(req.params.id);
+    // final_evaluations 초기화 + 별점 초기화 (트랜잭션 내)
+    await finalEvalRepo.resetForUnlock(req.params.id);
 
     // eval_cycles → final_self, 잠금 해제
-    db.prepare(`UPDATE eval_cycles
-      SET phase='final_self', locked=0, updated_at=datetime('now')
-      WHERE id=?`).run(fe.eval_id);
-
-    // 별점 초기화
-    db.prepare(`UPDATE final_eval_scores
-      SET mgr_score=NULL, second_mgr_score=NULL
-      WHERE final_id=?`).run(req.params.id);
+    await evalCycleRepo.updatePhaseAndLocked(fe.eval_id, 'final_self', 0);
 
     const ev = db.prepare('SELECT user_id, period_label FROM eval_cycles WHERE id=?').get(fe.eval_id);
     const target = ev ? db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id) : null;
     auditLog(req.user.sub, 'FINAL_EVAL_UNLOCKED', fe.eval_id, target?.name,
       `최종평가 잠금 해제 및 초기화 (${ev?.period_label||''})`, req.ip);
-
     res.json({ success: true });
   } catch(err) {
     console.error('[unlock]', err);

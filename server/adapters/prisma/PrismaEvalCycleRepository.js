@@ -123,6 +123,17 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       }
     });
   }
+
+  async updatePhaseAndLocked(id, phase, locked) {
+    await this.prisma.evalCycle.update({
+      where: { id: Number(id) },
+      data: {
+        phase,
+        locked:     Number(locked),
+        updated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      }
+    });
+  }
 }
 
 module.exports = PrismaEvalCycleRepository;

@@ -32,6 +32,24 @@ class FinalEvaluationRepository {
   async upsertScores(finalId, scores, scoreField) {
     throw new Error('FinalEvaluationRepository.upsertScores is not implemented');
   }
+
+  /**
+   * 최종평가 잠금 해제 및 초기화 (unlock용)
+   * final_evaluations의 모든 진행 필드를 초기 상태로 되돌리고
+   * final_eval_scores의 mgr_score, second_mgr_score를 NULL로 초기화
+   * @param {number} finalId - final_evaluations.id
+   */
+  async resetForUnlock(finalId) {
+    throw new Error('Not implemented');
+  }
+
+  /**
+   * id로 최종평가 단건 조회 (eval_id가 아닌 id 기준 — unlock에서 사용)
+   * @param {number} id - final_evaluations.id
+   */
+  async findById(id) {
+    throw new Error('Not implemented');
+  }
 }
 
 module.exports = FinalEvaluationRepository;
