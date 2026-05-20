@@ -23,6 +23,7 @@ const {
   getGoalRepository,
   getFeedbackRepository,
   getFinalEvaluationRepository,
+  getProgressReportRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -32,6 +33,7 @@ const evalCycleRepo = getEvalCycleRepository();
 const goalRepo = getGoalRepository();
 const feedbackRepo = getFeedbackRepository();
 const finalEvalRepo = getFinalEvaluationRepository();
+const progressReportRepo = getProgressReportRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -1216,13 +1218,43 @@ app.post('/api/eval-periods/:id/lock', auth, adminOnly, (req, res) => {
 
 // ── 중간 보고 API ────────────────────────────────────────
 
-// 중간 보고 목록 조회
-app.get('/api/reports/:evalId', auth, (req, res) => {
+// [PROMPT_45] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.get('/api/reports/:evalId', auth, (req, res) => {
+//   try {
+//     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+//     if (!ev) return res.status(404).json({ error: '없음' });
+//     const isAdmin   = ['master','admin'].includes(req.user.role);
+//     const isOwner   = String(ev.user_id) === String(req.user.sub);
+//     const chain = [];
+//     let cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(ev.user_id));
+//     while (cur?.manager_id && chain.length < 5) {
+//       chain.push(String(cur.manager_id));
+//       cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(cur.manager_id));
+//     }
+//     const isApprover = chain.includes(String(req.user.sub));
+//     if (!isAdmin && !isOwner && !isApprover)
+//       return res.status(403).json({ error: '권한 없음' });
+//     const reports = db.prepare(
+//       'SELECT r.*, u.name as author_name FROM progress_reports r JOIN users u ON r.author_id=u.id WHERE r.eval_id=? ORDER BY r.created_at DESC'
+//     ).all(req.params.evalId).map(r => ({
+//       ...r,
+//       content: r.content ? decrypt(r.content) : '',
+//       files: db.prepare('SELECT id,file_name,file_type,file_size,created_at FROM report_files WHERE report_id=?').all(r.id),
+//     }));
+//     res.json(reports);
+//   } catch(err) {
+//     console.error('[reports GET]', err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// [PROMPT_45] Repository Pattern 적용
+app.get('/api/reports/:evalId', auth, async (req, res) => {
   try {
     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
     if (!ev) return res.status(404).json({ error: '없음' });
-    const isAdmin   = ['master','admin'].includes(req.user.role);
-    const isOwner   = String(ev.user_id) === String(req.user.sub);
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const isOwner = String(ev.user_id) === String(req.user.sub);
     const chain = [];
     let cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(ev.user_id));
     while (cur?.manager_id && chain.length < 5) {
@@ -1233,13 +1265,7 @@ app.get('/api/reports/:evalId', auth, (req, res) => {
     if (!isAdmin && !isOwner && !isApprover)
       return res.status(403).json({ error: '권한 없음' });
 
-    const reports = db.prepare(
-      'SELECT r.*, u.name as author_name FROM progress_reports r JOIN users u ON r.author_id=u.id WHERE r.eval_id=? ORDER BY r.created_at DESC'
-    ).all(req.params.evalId).map(r => ({
-      ...r,
-      content: r.content ? decrypt(r.content) : '',
-      files: db.prepare('SELECT id,file_name,file_type,file_size,created_at FROM report_files WHERE report_id=?').all(r.id),
-    }));
+    const reports = await progressReportRepo.findByEvalId(req.params.evalId);
     res.json(reports);
   } catch(err) {
     console.error('[reports GET]', err);
@@ -1247,39 +1273,74 @@ app.get('/api/reports/:evalId', auth, (req, res) => {
   }
 });
 
-// 중간 보고 작성
-app.post('/api/reports/:evalId', auth, (req, res) => {
+// [PROMPT_45] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.post('/api/reports/:evalId', auth, (req, res) => {
+//   try {
+//     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+//     if (!ev || String(ev.user_id) !== String(req.user.sub))
+//       return res.status(403).json({ error: '본인만 작성 가능' });
+//     if (!['approved','final_self','final_mgr_pending','final_done'].includes(ev.phase))
+//       return res.status(400).json({ error: '목표 확정 후 작성 가능합니다.' });
+//     const { content, files } = req.body;
+//     const r = db.prepare(
+//       "INSERT INTO progress_reports(eval_id,author_id,content,created_at) VALUES(?,?,?,datetime('now'))"
+//     ).run(req.params.evalId, req.user.sub, encrypt(content || ''));
+//     (files || []).forEach(f => {
+//       db.prepare(
+//         'INSERT INTO report_files(report_id,file_name,file_data,file_type,file_size) VALUES(?,?,?,?,?)'
+//       ).run(r.lastInsertRowid, f.name, f.data, f.type, f.size);
+//     });
+//     auditLog(req.user.sub, 'REPORT_SUBMITTED', ev.user_id, null,
+//       `중간 보고 작성 (${ev.period_label||''})`, req.ip);
+//     res.json({ id: r.lastInsertRowid });
+//   } catch(err) {
+//     console.error('[reports POST]', err);
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// [PROMPT_45] Repository Pattern 적용
+app.post('/api/reports/:evalId', auth, async (req, res) => {
   try {
     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
     if (!ev || String(ev.user_id) !== String(req.user.sub))
       return res.status(403).json({ error: '본인만 작성 가능' });
     if (!['approved','final_self','final_mgr_pending','final_done'].includes(ev.phase))
       return res.status(400).json({ error: '목표 확정 후 작성 가능합니다.' });
+
     const { content, files } = req.body;
-    const r = db.prepare(
-      "INSERT INTO progress_reports(eval_id,author_id,content,created_at) VALUES(?,?,?,datetime('now'))"
-    ).run(req.params.evalId, req.user.sub, encrypt(content || ''));
-    // 파일 저장 (base64)
-    (files || []).forEach(f => {
-      db.prepare(
-        'INSERT INTO report_files(report_id,file_name,file_data,file_type,file_size) VALUES(?,?,?,?,?)'
-      ).run(r.lastInsertRowid, f.name, f.data, f.type, f.size);
+    const reportId = await progressReportRepo.create({
+      eval_id:   req.params.evalId,
+      author_id: req.user.sub,
+      content:   content || '',
+      files:     files || [],
     });
     auditLog(req.user.sub, 'REPORT_SUBMITTED', ev.user_id, null,
       `중간 보고 작성 (${ev.period_label||''})`, req.ip);
-    res.json({ id: r.lastInsertRowid });
+    res.json({ id: reportId });
   } catch(err) {
     console.error('[reports POST]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 파일 다운로드
-app.get('/api/files/:fileId', auth, (req, res) => {
+// [PROMPT_45] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
+// app.get('/api/files/:fileId', auth, (req, res) => {
+//   try {
+//     const f = db.prepare('SELECT * FROM report_files WHERE id=?').get(req.params.fileId);
+//     if (!f) return res.status(404).json({ error: '파일 없음' });
+//     res.json({ file_name: f.file_name, file_data: f.file_data, file_type: f.file_type });
+//   } catch(err) {
+//     res.status(500).json({ error: err.message });
+//   }
+// });
+
+// [PROMPT_45] Repository Pattern 적용
+app.get('/api/files/:fileId', auth, async (req, res) => {
   try {
-    const f = db.prepare('SELECT * FROM report_files WHERE id=?').get(req.params.fileId);
+    const f = await progressReportRepo.findFileById(req.params.fileId);
     if (!f) return res.status(404).json({ error: '파일 없음' });
-    res.json({ file_name: f.file_name, file_data: f.file_data, file_type: f.file_type });
+    res.json(f);
   } catch(err) {
     res.status(500).json({ error: err.message });
   }
