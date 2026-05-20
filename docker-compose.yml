@@ -15,7 +15,7 @@ services:
       - ./prisma:/app/prisma
     environment:
       - PORT=3000
-      - DATABASE_URL=file:./data/hrmanage.db
+      - DATABASE_URL=file:/app/data/hrmanage.db
       - DB_PATH=/app/data/hrmanage.db
       - JWT_SECRET=synap-hr-local-dev-secret-2025
       - ENC_SECRET=synap-local-enc-secret-32bytes!!
