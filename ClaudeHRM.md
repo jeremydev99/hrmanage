@@ -101,6 +101,7 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 | PORT | 서버 포트 | 3000 |
 | DATABASE_URL | DB 연결 문자열 (Prisma) | file:../data/hrmanage.db |
 | DATA_ADAPTER | DB 어댑터 선택 | prisma |
+| SQLITE_JOURNAL_MODE | SQLite journal mode (로컬은 WAL, Docker는 DELETE) | WAL |
 
 - 사용 가능 모델: SynapAssistant-MoE-30B, SynapAssistant-27B
 - 응답 포맷: OpenAI 호환 (`data.choices[0].message.content`)
@@ -371,6 +372,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | SQLite journal_mode 환경변수 분기 (로컬 WAL, Docker DELETE) (PROMPT 47) | Claude Code |
 | 2026-05-20 | PostgreSQL 호환 schema 설계 (schema.postgresql.prisma 신규, 20개 모델, FK 관계 명시, INFRA-2A-1) (PROMPT 46) | Claude Code |
 | 2026-05-20 | ProgressReport Repository 어댑터 (content 암호화, files Aggregate Root, 트랜잭션, 라우터 3개 전환) (PROMPT 45) | Claude Code |
 | 2026-05-20 | force-phase, unlock 라우터 Repository 전환 (EvalCycle.updatePhaseAndLocked, FinalEvaluation.resetForUnlock 추가) (PROMPT 44-B) | Claude Code |

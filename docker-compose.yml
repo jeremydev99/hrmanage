@@ -21,6 +21,7 @@ services:
       - ENC_SECRET=synap-local-enc-secret-32bytes!!
       - TZ=Asia/Seoul
       - NODE_ENV=development
+      - SQLITE_JOURNAL_MODE=DELETE  # Windows 바인드 마운트 호환 (SQLITE_IOERR_SHMOPEN 회피)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/notice"]
