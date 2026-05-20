@@ -150,6 +150,10 @@ async function renderMyApprovalHistory() {
     const actionCls    = { approved:'bd-approved', rejected:'bd-rejected' };
 
     history.forEach(h => {
+      // 자기평가 완료 판정: self_done 플래그 OR self_score 실제 입력
+      const selfDone = h.final_eval
+        ? (h.final_eval.self_done || (h.final_eval.scores||[]).some(s => s.self_score != null && s.self_score > 0))
+        : false;
       const card = document.createElement('div');
       card.className = 'card';
       card.style.marginBottom = '10px';
@@ -183,8 +187,8 @@ async function renderMyApprovalHistory() {
 
           <!-- 상태 뱃지 -->
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <span class="bd ${h.final_eval.self_done?'bd-approved':'bd-draft'}" style="font-size:11px">
-              자기평가 ${h.final_eval.self_done?'완료':'미완료'}
+            <span class="bd ${selfDone?'bd-approved':'bd-draft'}" style="font-size:11px">
+              자기평가 ${selfDone?'완료':'미완료'}
             </span>
             <span class="bd ${h.final_eval.mgr_done?'bd-locked':'bd-pending'}" style="font-size:11px">
               1차(${h.final_eval.mgr_approver_name||'상사'}) ${h.final_eval.mgr_done?'완료':'대기'}
