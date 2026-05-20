@@ -30,6 +30,8 @@ model User {
   ledOrganizations Organization[] @relation("OrgLeader")
   // === explicit relations (PROMPT 40-A 추가) ===
   evalCycles       EvalCycle[]    @relation("UserEvalCycles")
+  // === PROMPT 43 추가 ===
+  authoredFeedbacks Feedback[]    @relation("UserAuthoredFeedbacks")
 
   @@map("users")
 }
@@ -73,6 +75,8 @@ model EvalCycle {
   user         User    @relation("UserEvalCycles", fields: [userId], references: [id])
   // === PROMPT 41 추가 ===
   goals        Goal[]  @relation("EvalCycleGoals")
+  // === PROMPT 43 추가 ===
+  feedbacks    Feedback[] @relation("EvalCycleFeedbacks")
 
   @@map("eval_cycles")
 }
@@ -89,8 +93,10 @@ model Goal {
   created_at String?
 
   // === explicit relations (PROMPT 41 추가) ===
-  evalCycle  EvalCycle    @relation("EvalCycleGoals", fields: [evalId], references: [id])
-  category   GoalCategory @relation("GoalCategoryGoals", fields: [categoryId], references: [id])
+  evalCycle     EvalCycle      @relation("EvalCycleGoals", fields: [evalId], references: [id])
+  category      GoalCategory   @relation("GoalCategoryGoals", fields: [categoryId], references: [id])
+  // === PROMPT 43 추가 ===
+  feedbackItems FeedbackItem[] @relation("GoalFeedbackItems")
 
   @@map("goals")
 }
@@ -132,6 +138,11 @@ model Feedback {
   overallNote String? @map("overall_note")
   created_at  String?
 
+  // === PROMPT 43 추가 ===
+  evalCycle   EvalCycle      @relation("EvalCycleFeedbacks", fields: [evalId], references: [id])
+  author      User           @relation("UserAuthoredFeedbacks", fields: [authorId], references: [id])
+  items       FeedbackItem[] @relation("FeedbackToItems")
+
   @@map("feedbacks")
 }
 
@@ -142,6 +153,10 @@ model FeedbackItem {
   score      Int?
   note       String?
   created_at String?
+
+  // === PROMPT 43 추가 ===
+  feedback   Feedback @relation("FeedbackToItems", fields: [feedbackId], references: [id])
+  goal       Goal     @relation("GoalFeedbackItems", fields: [goalId], references: [id])
 
   @@map("feedback_items")
 }

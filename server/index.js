@@ -21,6 +21,7 @@ const {
   getOrganizationRepository,
   getEvalCycleRepository,
   getGoalRepository,
+  getFeedbackRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -28,6 +29,7 @@ const gradeCriteriaRepo = getGradeCriteriaRepository();
 const organizationRepo = getOrganizationRepository();
 const evalCycleRepo = getEvalCycleRepository();
 const goalRepo = getGoalRepository();
+const feedbackRepo = getFeedbackRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -815,37 +817,60 @@ app.get('/api/approvals/:evalId/history', auth, (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  FEEDBACK (중간 피드백)
 // ════════════════════════════════════════════════════════════
-app.get('/api/feedback/:evalId', auth, (req, res) => {
-  const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
-  if (!ev) return res.status(404).json({ error: '없음' });
-  const isAdmin = ['master','admin'].includes(req.user.role);
-  const isOwner = String(ev.user_id) === String(req.user.sub);
-  const fbs = db.prepare('SELECT f.*,u.name as author_name FROM feedbacks f JOIN users u ON f.author_id=u.id WHERE f.eval_id=? ORDER BY f.created_at DESC').all(req.params.evalId);
-  fbs.forEach(fb => {
-    fb.overall_note = (isAdmin || isOwner || fb.author_id === req.user.sub) ? decrypt(fb.overall_note) : null;
-    fb.items = db.prepare('SELECT fi.*,g.name as goal_enc FROM feedback_items fi JOIN goals g ON fi.goal_id=g.id WHERE fi.feedback_id=?').all(fb.id)
-      .map(it => ({ ...it, note: isAdmin||isOwner ? decrypt(it.note) : null,
-                           goal_name: isAdmin||isOwner ? decrypt(it.goal_enc) : '***' }));
-  });
-  res.json(fbs);
+// [PROMPT 43] Repository Pattern 적용
+app.get('/api/feedback/:evalId', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.evalId);
+    if (!ev) return res.status(404).json({ error: '없음' });
+
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const isOwner = String(ev.user_id) === String(req.user.sub);
+
+    const fbs = await feedbackRepo.findByEvalId(req.params.evalId);
+
+    fbs.forEach(fb => {
+      const isAuthor = String(fb.author_id) === String(req.user.sub);
+      if (!isAdmin && !isOwner && !isAuthor) {
+        fb.overall_note = null;
+      }
+      fb.items.forEach(it => {
+        if (!isAdmin && !isOwner) {
+          it.note = null;
+          it.goal_name = '***';
+        }
+      });
+    });
+
+    res.json(fbs);
+  } catch(err) {
+    console.error('[GET /api/feedback/:evalId]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.post('/api/feedback/:evalId', auth, (req, res) => {
-  const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
-  if (!ev || !['approved','final_self','final_mgr_pending'].includes(ev.phase))
-    return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
-  const { overall_note, items } = req.body; // items: [{goal_id, score, note}]
-  const fb = db.prepare('INSERT INTO feedbacks(eval_id,author_id,overall_note) VALUES(?,?,?)')
-    .run(req.params.evalId, req.user.sub, encrypt(overall_note||''));
-  (items||[]).forEach(it => {
-    db.prepare('INSERT INTO feedback_items(feedback_id,goal_id,score,note) VALUES(?,?,?,?)')
-      .run(fb.lastInsertRowid, it.goal_id, it.score||null, encrypt(it.note||''));
-  });
-  const fbTargetUser = db.prepare('SELECT user_id FROM eval_cycles WHERE id=?').get(req.params.evalId);
-  const fbTarget     = fbTargetUser ? db.prepare('SELECT name FROM users WHERE id=?').get(fbTargetUser.user_id) : null;
-  auditLog(req.user.sub, 'FEEDBACK_SUBMITTED', fbTargetUser?.user_id, fbTarget?.name,
-    `중간 피드백 제출 (평가ID: ${req.params.evalId})`, req.ip);
-  res.json({ id: fb.lastInsertRowid });
+// [PROMPT 43] Repository Pattern 적용
+app.post('/api/feedback/:evalId', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.evalId);
+    if (!ev || !['approved','final_self','final_mgr_pending'].includes(ev.phase))
+      return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
+
+    const { overall_note, items } = req.body;
+    const newId = await feedbackRepo.create({
+      eval_id: req.params.evalId,
+      author_id: req.user.sub,
+      overall_note: overall_note || '',
+      items: items || []
+    });
+
+    auditLog(req.user.sub, 'FEEDBACK_SUBMITTED', ev.user_id, ev.user_name,
+      `중간 피드백 제출 (평가ID: ${req.params.evalId})`, req.ip);
+
+    res.json({ id: newId });
+  } catch(err) {
+    console.error('[POST /api/feedback/:evalId]', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ════════════════════════════════════════════════════════════
