@@ -103,6 +103,10 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 | DATA_ADAPTER | DB 어댑터 선택 | prisma |
 | SQLITE_JOURNAL_MODE | SQLite journal mode (로컬은 WAL, Docker는 DELETE) | WAL |
 
+**Docker 환경 주의**: docker-compose가 호스트의 `.env`를 `env_file` 지시어로 컨테이너에 주입.
+`.env` 파일이 호스트의 docker-compose.yml과 같은 디렉토리에 있어야 함. `.dockerignore`로
+빌드 제외돼도 `env_file`은 별도 메커니즘이라 문제없음.
+
 - 사용 가능 모델: SynapAssistant-MoE-30B, SynapAssistant-27B
 - 응답 포맷: OpenAI 호환 (`data.choices[0].message.content`)
 - 요청 시 `stream: false` 명시 필수
@@ -372,6 +376,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-21 | Docker env_file 추가 (LLM_* 환경변수 컨테이너 주입, AI 요약 403 해결) (PROMPT 49) | Claude Code |
 | 2026-05-20 | Docker 환경 Prisma DATABASE_URL 절대경로 수정 (잠복 버그 — INFRA-1 시점부터 존재, Prisma 라우터 미검증으로 미발견) (PROMPT 48) | Claude Code |
 | 2026-05-20 | SQLite journal_mode 환경변수 분기 (로컬 WAL, Docker DELETE) (PROMPT 47) | Claude Code |
 | 2026-05-20 | PostgreSQL 호환 schema 설계 (schema.postgresql.prisma 신규, 20개 모델, FK 관계 명시, INFRA-2A-1) (PROMPT 46) | Claude Code |
