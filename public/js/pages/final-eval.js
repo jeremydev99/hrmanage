@@ -1,18 +1,29 @@
 Pages.finalEval = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
-  const evs = await API.get('/evals');
-  const myEv = evs.find(e => String(e.user_id) === String(App.user.id));
 
-  // 내가 직속 상사인 직원의 final_mgr_pending 평가 (서버에서 직속 상사 여부 필터링)
+  const evs = await API.get('/evals');
+
+  // 본인의 사이클 중 최종평가 화면에서 다룰 수 있는 phase만 수집
+  const ALLOWED_PHASES = ['approved','final_self','final_mgr_pending','final_mgr2_pending','final_done'];
+  const myEvs = evs
+    .filter(e => String(e.user_id) === String(App.user.id))
+    .filter(e => ALLOWED_PHASES.includes(e.phase));
+  myEvs.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+
+  // 기본 선택: 진행 중(final_done 이외) 우선, 없으면 가장 최근 완료
+  const inProgress = myEvs.find(e => e.phase !== 'final_done');
+  const defaultEv = inProgress || myEvs[0] || null;
+
+  // 내가 직속 상사인 직원의 최종평가 대기 목록
   const mgrPending = await API.get('/evals/my-mgr-pending').catch(() => []);
 
   area.innerHTML = '';
+
   const tabs = [];
-  if (myEv && ['approved','final_self','final_mgr_pending','final_mgr2_pending','final_done'].includes(myEv.phase))
-    tabs.push({ id:'fin-self', label:'자기 최종평가' });
-  if (mgrPending.length)
-    tabs.push({ id:'fin-mgr', label:`상사 최종평가 (${mgrPending.length}건)` });
+  if (defaultEv) tabs.push({ id: 'fin-self', label: '자기 최종평가' });
+  if (mgrPending.length) tabs.push({ id: 'fin-mgr', label: `상사 최종평가 (${mgrPending.length}건)` });
+
   if (!tabs.length) {
     area.innerHTML = '<div class="card"><div class="alert alert-orange">목표가 확정된 평가가 없습니다.</div></div>';
     return;
@@ -20,17 +31,24 @@ Pages.finalEval = async function() {
 
   const tabsEl = document.createElement('div');
   tabsEl.className = 'stabs';
-  tabsEl.innerHTML = tabs.map((t,i)=>
+  tabsEl.innerHTML = tabs.map((t, i) =>
     `<button class="stb${i===0?' active':''}" id="stb-${t.id}" onclick="switchFinTab('${t.id}')">${t.label}</button>`
   ).join('');
   area.appendChild(tabsEl);
-  tabs.forEach((t,i) => {
+
+  tabs.forEach((t, i) => {
     const sp = document.createElement('div');
-    sp.className='sp'+(i===0?' active':''); sp.id=t.id; area.appendChild(sp);
+    sp.className = 'sp' + (i===0 ? ' active' : '');
+    sp.id = t.id;
+    area.appendChild(sp);
   });
 
-  if (tabs.some(t=>t.id==='fin-self')) renderFinalSelf(myEv);
-  if (tabs.some(t=>t.id==='fin-mgr')) renderFinalMgr(mgrPending);
+  if (tabs.some(t => t.id === 'fin-self')) {
+    renderFinalSelfPicker(myEvs, defaultEv);
+  }
+  if (tabs.some(t => t.id === 'fin-mgr')) {
+    renderFinalMgr(mgrPending);
+  }
 };
 
 function switchFinTab(id) {
@@ -38,6 +56,69 @@ function switchFinTab(id) {
   document.querySelectorAll('.sp').forEach(s=>s.classList.remove('active'));
   document.getElementById('stb-'+id)?.classList.add('active');
   document.getElementById(id)?.classList.add('active');
+}
+
+// 자기 최종평가 — 사이클 선택 드롭다운 + 선택된 사이클 렌더 (BUG-1)
+function renderFinalSelfPicker(myEvs, defaultEv) {
+  const el = document.getElementById('fin-self');
+  if (!el) return;
+  el.innerHTML = '';
+
+  if (myEvs.length > 1) {
+    const phaseLabel = (p) => ({
+      'approved':           '목표 확정',
+      'final_self':         '자기평가 진행 중',
+      'final_mgr_pending':  '상사평가 대기',
+      'final_mgr2_pending': '2차 평가자 대기',
+      'final_done':         '평가 완료',
+    }[p] || p);
+
+    const picker = document.createElement('div');
+    picker.className = 'card';
+    picker.style.cssText = 'padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+    picker.innerHTML = `
+      <label style="font-size:12px;color:var(--muted);font-weight:500">평가 사이클 선택</label>
+      <select id="fin-self-cycle-sel"
+        style="flex:1;min-width:200px;padding:6px 10px;border:1px solid var(--border);
+               border-radius:6px;background:var(--white);font-size:13px;cursor:pointer">
+        ${myEvs.map(e => `
+          <option value="${e.id}" ${e.id === defaultEv.id ? 'selected' : ''}>
+            ${e.eval_year || ''} ${e.period_label || ''} — ${phaseLabel(e.phase)}
+          </option>`).join('')}
+      </select>`;
+    el.appendChild(picker);
+
+    const sel = picker.querySelector('#fin-self-cycle-sel');
+    sel.addEventListener('change', () => {
+      const targetId = parseInt(sel.value);
+      const target = myEvs.find(e => e.id === targetId);
+      if (!target) return;
+      el.innerHTML = '';
+      el.appendChild(picker);
+      picker.querySelector('#fin-self-cycle-sel').value = String(target.id);
+      bindCycleSelChange(myEvs);
+      renderFinalSelf(target);
+    });
+  }
+
+  if (defaultEv) renderFinalSelf(defaultEv);
+}
+
+// 사이클 선택 드롭다운 change 이벤트 재바인딩 헬퍼 (BUG-1)
+function bindCycleSelChange(myEvs) {
+  const sel = document.getElementById('fin-self-cycle-sel');
+  if (!sel) return;
+  sel.addEventListener('change', () => {
+    const targetId = parseInt(sel.value);
+    const target = myEvs.find(e => e.id === targetId);
+    if (!target) return;
+    const el = document.getElementById('fin-self');
+    const pickerCard = sel.closest('.card');
+    el.innerHTML = '';
+    el.appendChild(pickerCard);
+    bindCycleSelChange(myEvs);
+    renderFinalSelf(target);
+  });
 }
 
 async function renderFinalSelf(ev) {

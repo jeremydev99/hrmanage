@@ -369,6 +369,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-20 | 자기 최종평가 화면 다중 사이클 지원 (find→filter+드롭다운) (BUG-1) | Claude Code |
 | 2026-05-20 | FinalEvaluation Repository 어댑터 (Aggregate Root, 암호화 3개, 점수 계산, 2차 평가 분기) (PROMPT_44) | Claude Code |
 | 2026-05-20 | Feedback Repository 어댑터 (Aggregate Root: feedbacks+feedback_items, 암호화 3개 필드) (PROMPT_43) | Claude Code |
 | 2026-05-20 | 피드백 화면 중간 보고 전체 표시 UI 버그 수정 (80자 제한 해제, 줄바꿈 보존, XSS 방지) (PROMPT_42) | Claude Code |
