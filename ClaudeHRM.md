@@ -356,7 +356,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
   - PROMPT 36-9 이후 admin.js 수정 예정
 
 ### 🟡 미완성 기능
-- [ ] 비밀번호 변경 기능
+- [ ] 비밀번호 변경 기능 (INFRA-3 범위로 이관, 2026-05-20)
 - [ ] 동일 기간 중복 평가 방지
 - [ ] 평가 결과 Excel/PDF 출력
 - [ ] 이메일 알림
@@ -376,6 +376,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-21 | INFRA-2 로드맵 재정리 + 표준 검증 시나리오 V1/V2/V3 도입 (PROMPT 50) | Claude Code |
 | 2026-05-21 | Docker env_file 추가 (LLM_* 환경변수 컨테이너 주입, AI 요약 403 해결) (PROMPT 49) | Claude Code |
 | 2026-05-20 | Docker 환경 Prisma DATABASE_URL 절대경로 수정 (잠복 버그 — INFRA-1 시점부터 존재, Prisma 라우터 미검증으로 미발견) (PROMPT 48) | Claude Code |
 | 2026-05-20 | SQLite journal_mode 환경변수 분기 (로컬 WAL, Docker DELETE) (PROMPT 47) | Claude Code |
@@ -557,6 +558,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ## 운영 진입 준비 체크리스트 (INFRA-2 시리즈)
 
+> 상위 수준 체크리스트. 세부 로드맵 및 PR 분리 원칙은 아래 "INFRA-2 로드맵 (재정리)" 섹션 참조.
+
 ### INFRA-2A: PostgreSQL 전환
 - [x] INFRA-2A-1: PostgreSQL 호환 schema 설계 (2026-05-20)
 - [ ] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석
@@ -593,6 +596,121 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - [ ] 표준약관
 - [ ] DPA (데이터 처리 위탁 계약)
 - [ ] 국외이전 동의서
+
+---
+
+## 표준 검증 시나리오 (인프라 변경 시 필수 실행)
+
+> 인프라 관련 변경(Docker, 환경변수, 스키마, DB 등) 후 다음 시나리오를 반드시 실행한다.
+> 표층(로그인 화면)만 확인하면 잠복 버그를 놓친다 (PROMPT 48, 49 사례 참조).
+
+### 검증 시나리오 V1 — 최소 필수 (5분)
+
+매 인프라 변경 후 무조건 실행:
+
+1. **컨테이너/서버 기동** — 로그에 ERROR, Exception, FATAL 메시지 없음
+2. **환경변수 주입 확인** — 컨테이너 안에서 다음 환경변수가 모두 SET 상태:
+   - `DATABASE_URL`
+   - `JWT_SECRET`, `ENC_SECRET`
+   - `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL`
+   - `SQLITE_JOURNAL_MODE` (Docker 환경) 또는 미설정 (로컬, WAL 기본)
+3. **로그인** — ceo@synapsoft.com / admin1234 정상 로그인
+4. **Prisma 라우터 검증** — 로그인 직후 자동 호출되는 `/api/auth/me`가 정상 응답
+5. **카테고리 조회** — 관리자 메뉴 → 카테고리 관리 진입 (Prisma 기반 `/api/categories` 검증)
+6. **AI 요약** — 성과관리 → AI 요약 버튼 → 정상 응답 (LLM 환경변수 + 인증 + 사내 LLM 연결성 검증)
+
+### 검증 시나리오 V2 — 주요 변경 시 추가 실행 (15분)
+
+스키마 변경, DB 마이그레이션, 어댑터 추가/수정 시 V1에 더해 다음 실행:
+
+7. **목표 작성 사이클** — 일반 직원(dev3)으로 로그인 → 1차 분기 목표 작성 → 제출 → 로그아웃
+8. **승인 사이클** — 상사(dev1)로 로그인 → 승인 대기 목록에서 dev3 목표 승인 → 로그아웃
+9. **자기평가 사이클** — dev3 로그인 → 자기 최종평가 점수/의견 입력 → 제출 → 로그아웃
+10. **상사 평가 사이클** — dev1 로그인 → dev3 최종평가 점수/의견 입력 → 등급 선택 → 확정
+11. **감사 로그 확인** — 관리자 메뉴 → 감사 로그 200건 조회 → 위 7~10 동작이 기록됨
+12. **AI 요약 (개인용)** — dev3 본인 성과 요약 + dev1 팀 성과 요약 둘 다 동작
+
+### 검증 시나리오 V3 — DB 종류 변경 시 전체 검증 (1시간)
+
+PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V2에 더해 다음 추가:
+
+13. **모든 어댑터 도메인 검증** — User, GoalCategory, GradeCriteria, Organization, EvalCycle, Goal, Feedback, FinalEvaluation, ProgressReport 9개 도메인 각각 최소 1개 CRUD 실행
+14. **암호화 필드 검증** — 목표명, KPI, 자기평가 의견, 상사 평가 의견을 입력 → DB 직접 조회 시 암호화된 형태(`iv:enc` hex)로 저장됨 확인
+15. **트랜잭션 검증** — Goal 일괄 교체(`replaceByEvalId`), Feedback Aggregate Root, FinalEvaluation Aggregate Root 등이 부분 실패 시 롤백되는지 확인
+16. **외래키 정합성 검증** — `users` 1개 삭제 시 child(eval_cycles, goals 등)가 정책대로 처리되는지 확인 (CASCADE, SET NULL, RESTRICT)
+17. **datetime 일관성 검증** — DB에 저장된 `created_at`이 Asia/Seoul 기준인지 (TZ=Asia/Seoul 환경변수 효과 확인)
+
+---
+
+## INFRA-2 로드맵 (재정리)
+
+### INFRA-2A: PostgreSQL 전환
+- [x] INFRA-2A-1: PostgreSQL 호환 schema 설계 (2026-05-20, PROMPT 46)
+- [ ] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석
+- [ ] INFRA-2A-3: 어댑터 _flatten() DateTime → ISO string 변환 추가
+- [ ] INFRA-2A-4: 로컬 PostgreSQL 컨테이너 마이그레이션 + 기능 검증 (V3 시나리오 필수)
+- [ ] INFRA-2A-5: SQLite → PostgreSQL 데이터 이관 스크립트
+
+**PR 분리 원칙**: 2A-2 ~ 2A-5는 각각 독립 PR로 분리. 한 PR에 두 단계 묶지 않음. 롤백 가능성 보장.
+
+**데이터 이관 안전장치 (2A-5)**:
+- 이관 직전 SQLite DB 파일 백업 (`hrmanage.db.bak.YYYYMMDD-HHMM`)
+- 이관 후 행 수 비교 (모든 테이블 row count 일치 확인)
+- 이관 후 V3 검증 시나리오 통과까지 운영 DB 전환 보류
+- 이관 실패 시 SQLite 백업 복원 절차 명시
+
+### INFRA-2B: 정합성 100% 적용
+- [ ] phase 일관성 CHECK 제약
+- [ ] score-done 일관성 트리거
+- [ ] 승인 순서 CHECK 제약
+- [ ] 승인 1인 1회 UNIQUE 제약
+- [ ] 외래키 ON DELETE 정책 명시 (INFRA-2A-1에서 schema에 반영, 마이그레이션은 INFRA-2A-4)
+- [ ] 암호화 검증 CHECK 제약 (iv:enc 정규식)
+- [ ] 타임스탬프 일관성 CHECK 제약
+- [ ] force-phase 백도어 master 제한 + 감사로그 강제
+
+**PR 분리 원칙**: 각 제약을 1개씩 별도 PR로 분리. 이유: 제약 추가 후 기존 데이터에서 위반 발견 시 롤백 단순화.
+
+### INFRA-2C: Object Storage (NCloud Object Storage 또는 호환)
+- [ ] report_files.file_data 컬럼 분석 (현재 base64 String 저장)
+- [ ] Object Storage 클라이언트 도입 (AWS S3 호환 SDK)
+- [ ] file_data 이관 스크립트 (DB → Object Storage)
+- [ ] 다운로드 라우터 변경 (presigned URL 또는 프록시)
+- [ ] 업로드 라우터 변경
+
+**도입 이유**: PostgreSQL에서 큰 BLOB을 row 안에 저장하면 성능 저하. 첨부 파일은 별도 스토리지로 분리.
+
+### INFRA-2D: NCloud 환경 셋업
+- [ ] 인스턴스 사이즈 결정
+- [ ] Cloud DB for PostgreSQL 플랜 결정 (16 버전 명시)
+- [ ] Object Storage 버킷 생성
+- [ ] HTTPS 인증서 적용 (Let's Encrypt 또는 NCloud 발급)
+- [ ] 도메인 연결
+- [ ] 배포 자동화 (선택)
+
+### INFRA-3: 보안 강화
+- [x] .env 분리 (2026-05-13, PROMPT 34)
+- [ ] AES-256-CBC → AES-256-GCM 마이그레이션
+  - 기존 데이터 재암호화 필요 (마이그레이션 스크립트)
+  - 신규 데이터부터 GCM 적용
+  - 호환 기간 동안 두 알고리즘 모두 복호화 지원
+- [ ] JWT_SECRET, ENC_SECRET을 docker-compose.yml의 평문 → .env로 분리 (`${VAR}` 참조)
+- [ ] JWT 키 로테이션 정책 (선택)
+- [ ] 비밀번호 변경 기능 구현 (현재 미완성)
+  - 본인 비밀번호 변경 API
+  - 관리자가 다른 사용자 비밀번호 초기화 API
+  - 비밀번호 정책 (최소 길이, 복잡도)
+  - 비밀번호 변경 시 감사 로그
+
+### INFRA-4: 법무·계약
+- [ ] 개인정보처리방침
+- [ ] 표준약관
+- [ ] DPA (데이터 처리 위탁 계약, B2B 표준)
+- [ ] 국외이전 동의서 (해외 인프라 사용 시)
+- [ ] 개인정보 관리 백서 (외부 감사·조사 대응)
+- [ ] 사용자 매뉴얼 (페이지별 도움말)
+- [ ] FAQ 페이지
+- [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇)
 | 2026-05-12 | PC 드롭다운 슬라이드 애니, 성과관리 메뉴, 세션 보안 정책 추가 | Claude Code |
 | 2026-05-12 | organizations 테이블 추가, org_id 기반 평가방식 조회, 조직 관리 탭 추가 | Claude Code |
 | 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 768px/480px 미디어쿼리) | Claude Code |
