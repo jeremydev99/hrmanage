@@ -376,6 +376,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-21 | 국내 호스팅 4사 비교 (md+xlsx, 신뢰도·인지도 ×2 가중 추가) → NCloud 선정 (PROMPT 51) | Claude Code |
 | 2026-05-21 | INFRA-2 로드맵 재정리 + 표준 검증 시나리오 V1/V2/V3 도입 (PROMPT 50) | Claude Code |
 | 2026-05-21 | Docker env_file 추가 (LLM_* 환경변수 컨테이너 주입, AI 요약 403 해결) (PROMPT 49) | Claude Code |
 | 2026-05-20 | Docker 환경 Prisma DATABASE_URL 절대경로 수정 (잠복 버그 — INFRA-1 시점부터 존재, Prisma 라우터 미검증으로 미발견) (PROMPT 48) | Claude Code |
@@ -580,11 +581,19 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 ### INFRA-2C: Object Storage
 - [ ] report_files.file_data → NCloud Object Storage 이관
 
-### INFRA-2D: NCloud 환경 셋업
-- [ ] 인스턴스 사이즈 결정
-- [ ] Cloud DB for PostgreSQL 플랜 결정
-- [ ] HTTPS 인증서 적용
-- [ ] 배포 자동화
+### INFRA-2D: NCloud 환경 셋업 (사용자 결정 완료, 2026-05-21)
+- [x] 국내 호스팅 4사 비교 완료 → `INFRA_HOSTING_COMPARISON.md` / `INFRA_HOSTING_COMPARISON.xlsx` 참조
+- [x] 클라우드 선정: **NCloud** (가중 점수 1위 54/60, 인사 데이터 신뢰도·인지도 우선)
+- [ ] NCloud 무료 평가판 신청 (7~30일)
+- [ ] 테스트 인스턴스에서 INFRA-2A-4 마이그레이션 검증 (V3 시나리오)
+- [ ] MSP 파트너 채널 통해 정식 견적 + 약정 할인 협상
+- [ ] 백업 자동화 스크립트 설계 (NCloud DB → Object Storage, 일/주/월 정책)
+- [ ] 인스턴스 사이즈 최종 결정
+- [ ] PostgreSQL 16 매니지드 플랜 결정
+- [ ] Object Storage 버킷 생성
+- [ ] HTTPS 인증서 적용 (Let's Encrypt 또는 NCloud 발급)
+- [ ] 도메인 연결
+- [ ] 배포 자동화 (선택)
 
 ### INFRA-3: 보안 강화
 - [x] .env 분리 (2026-05-13, PROMPT 34)
@@ -680,9 +689,15 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
 
 **도입 이유**: PostgreSQL에서 큰 BLOB을 row 안에 저장하면 성능 저하. 첨부 파일은 별도 스토리지로 분리.
 
-### INFRA-2D: NCloud 환경 셋업
-- [ ] 인스턴스 사이즈 결정
-- [ ] Cloud DB for PostgreSQL 플랜 결정 (16 버전 명시)
+### INFRA-2D: NCloud 환경 셋업 (사용자 결정 완료, 2026-05-21)
+- [x] 국내 호스팅 4사 비교 완료 → `INFRA_HOSTING_COMPARISON.md` / `INFRA_HOSTING_COMPARISON.xlsx` 참조
+- [x] 클라우드 선정: **NCloud** (가중 점수 1위 54/60, 인사 데이터 신뢰도·인지도 우선)
+- [ ] NCloud 무료 평가판 신청 (7~30일)
+- [ ] 테스트 인스턴스에서 INFRA-2A-4 마이그레이션 검증 (V3 시나리오)
+- [ ] MSP 파트너 채널 통해 정식 견적 + 약정 할인 협상
+- [ ] 백업 자동화 스크립트 설계 (NCloud DB → Object Storage, 일/주/월 정책)
+- [ ] 인스턴스 사이즈 최종 결정
+- [ ] PostgreSQL 16 매니지드 플랜 결정
 - [ ] Object Storage 버킷 생성
 - [ ] HTTPS 인증서 적용 (Let's Encrypt 또는 NCloud 발급)
 - [ ] 도메인 연결
