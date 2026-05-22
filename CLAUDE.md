@@ -47,8 +47,9 @@ prisma/schema.prisma     Prisma 스키마 (DB 종류 추상화)
 
 1. 이 파일(CLAUDE.md) 읽기
 2. **ClaudeHRM.md 읽기** (DB 스키마, API 목록, 설계 원칙, 개발 이력)
-3. 수정할 파일 직접 열어서 현재 상태 확인
-4. 작업 완료 후 → CLAUDE.md + ClaudeHRM.md 업데이트
+3. **HRPRIVACY_PRINCIPLES.md 읽기** (개인정보 보호 원칙, 점검 체크리스트)
+4. 수정할 파일 직접 열어서 현재 상태 확인
+5. 작업 완료 후 → CLAUDE.md + ClaudeHRM.md 업데이트
 
 ---
 
