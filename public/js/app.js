@@ -758,23 +758,36 @@ function closePasswordChangeModal() {
 
 // ── 전체 조직 분석 (PROMPT 58) ────────────────────────────
 function renderOrgViewHTML(periods) {
-  const sp = Array.isArray(periods) ? [...periods].sort((a,b) => {
+  const isAdmin = ['master','admin'].includes(window._perfData?.user?.role);
+  const allSorted = Array.isArray(periods) ? [...periods].sort((a,b) => {
     if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
     return a.period_label < b.period_label ? -1 : 1;
   }) : [];
+  const sp = allSorted.filter(p => p.is_active);
   const defFromId = sp.length > 8 ? sp[sp.length - 8].id : (sp[0]?.id || '');
   const defToId   = sp[sp.length - 1]?.id || '';
-  const opts = p => sp.map(q => `<option value="${q.id}"${q.id == p?' selected':''}>${q.period_label}</option>`).join('');
+  const opts = (arr, selId) => arr.map(q =>
+    `<option value="${q.id}"${q.id == selId ? ' selected' : ''}>${q.period_label}${!q.is_active ? ' (비활성)' : ''}</option>`
+  ).join('');
+  const inactiveRow = isAdmin ? `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none">
+          <input type="checkbox" id="include-inactive-check" onchange="reloadOrgPeriods()">
+          <span>비활성 기간 포함</span>
+        </label>
+        <span style="font-size:11px;color:var(--muted)">관리자 전용 — 비활성 기간 통계 분석</span>
+      </div>` : '';
   return `
     <div class="card" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:12px">📈 전체 조직 분석</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
         <span style="font-size:13px;color:var(--o700)">기간:</span>
-        <select id="org-period-from" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(defFromId)}</select>
+        <select id="org-period-from" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(sp, defFromId)}</select>
         <span style="font-size:13px;color:var(--o700)">~</span>
-        <select id="org-period-to" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(defToId)}</select>
+        <select id="org-period-to" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(sp, defToId)}</select>
         <span style="font-size:11px;color:var(--muted)">(최대 8개 기간)</span>
       </div>
+      ${inactiveRow}
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <span style="font-size:13px;color:var(--o700)">조직 깊이:</span>
         <select id="org-max-depth" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">
@@ -789,6 +802,29 @@ function renderOrgViewHTML(periods) {
     </div>`;
 }
 
+function reloadOrgPeriods() {
+  const includeInactive = document.getElementById('include-inactive-check')?.checked || false;
+  const allPeriods = window._perfData?.evalPeriods || [];
+  const sorted = [...allPeriods]
+    .filter(p => includeInactive || p.is_active)
+    .sort((a,b) => {
+      if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
+      return a.period_label < b.period_label ? -1 : 1;
+    });
+  const fromEl = document.getElementById('org-period-from');
+  const toEl   = document.getElementById('org-period-to');
+  if (!fromEl || !toEl) return;
+  const opts = sorted.map(q =>
+    `<option value="${q.id}">${q.period_label}${!q.is_active ? ' (비활성)' : ''}</option>`
+  ).join('');
+  fromEl.innerHTML = opts;
+  toEl.innerHTML = opts;
+  if (sorted.length) {
+    fromEl.value = sorted.length > 8 ? sorted[sorted.length - 8].id : sorted[0].id;
+    toEl.value = sorted[sorted.length - 1].id;
+  }
+}
+
 async function loadOrgAnalysis() {
   const fromEl = document.getElementById('org-period-from');
   const toEl   = document.getElementById('org-period-to');
@@ -797,10 +833,13 @@ async function loadOrgAnalysis() {
   if (!fromEl || !toEl || !resEl) return;
   const fromId = parseInt(fromEl.value), toId = parseInt(toEl.value);
   const maxDep = parseInt(depEl?.value) || 999;
-  const allPeriods = [...(window._perfData?.evalPeriods || [])].sort((a,b) => {
-    if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
-    return a.period_label < b.period_label ? -1 : 1;
-  });
+  const includeInactive = document.getElementById('include-inactive-check')?.checked || false;
+  const allPeriods = [...(window._perfData?.evalPeriods || [])]
+    .filter(p => includeInactive || p.is_active)
+    .sort((a,b) => {
+      if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
+      return a.period_label < b.period_label ? -1 : 1;
+    });
   const fromIdx = allPeriods.findIndex(p => p.id === fromId);
   const toIdx   = allPeriods.findIndex(p => p.id === toId);
   if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) {
@@ -820,10 +859,10 @@ async function loadOrgAnalysis() {
   try {
     const pIds = ep.map(p => p.id).join(',');
     const [orgTree, trend] = await Promise.all([
-      API.get(`/perf/org-tree?period_ids=${pIds}&max_depth=${maxDep}`),
-      API.get(`/perf/quarterly-trend?period_ids=${pIds}`)
+      API.get(`/perf/org-tree?period_ids=${pIds}&max_depth=${maxDep}&include_inactive=${includeInactive}`),
+      API.get(`/perf/quarterly-trend?period_ids=${pIds}&include_inactive=${includeInactive}`)
     ]);
-    window._orgData = { orgTree, trend, fromId, toId, pIds };
+    window._orgData = { orgTree, trend, fromId, toId, pIds, includeInactive };
     renderOrgAnalysisResult(orgTree, trend);
   } catch(err) {
     resEl.innerHTML = `<div class="card"><div class="alert alert-red">오류: ${err.message}</div></div>`;
@@ -971,7 +1010,7 @@ async function renderOrgHeatmap() {
   if (!d) return;
   container.innerHTML = '<div class="spinner" style="font-size:12px;padding:10px">히트맵 로드 중...</div>';
   try {
-    const data = await API.get(`/perf/grade-distribution?period_ids=${d.pIds}`);
+    const data = await API.get(`/perf/grade-distribution?period_ids=${d.pIds}&include_inactive=${d.includeInactive || false}`);
     const maxCnt = Math.max(...data.matrix.flat(), 1);
     const gradeRgb = [[45,164,78],[87,171,90],[240,120,32],[240,180,41],[229,57,53],[198,40,40]];
     let html = `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;min-width:300px">
@@ -1011,7 +1050,8 @@ async function generateOrgAISummary() {
   resEl.innerHTML = '<div class="spinner" style="font-size:13px">AI 분석 중...</div>';
   try {
     const r = await API.post('/perf/org-ai-summary', {
-      period_ids: window._orgData?.pIds || `${fromEl.value},${toEl.value}`
+      period_ids: window._orgData?.pIds || `${fromEl.value},${toEl.value}`,
+      include_inactive: window._orgData?.includeInactive || false
     });
     if (r.structured) {
       const s = r.structured;

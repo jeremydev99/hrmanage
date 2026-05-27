@@ -2046,16 +2046,22 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { period_ids, max_depth = '999' } = req.query;
+    const { period_ids, max_depth = '999', include_inactive: inclInact } = req.query;
     const maxDepth = Math.min(parseInt(max_depth) || 999, 999);
+    const includeInactive = String(inclInact) === 'true';
+    const effectiveInclInactive = isAdmin && includeInactive;
+    if (!isAdmin && includeInactive) {
+      auditLog(userId, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null, '비관리자의 비활성 기간 포함 시도 (org-tree)', req.ip);
+    }
+    const activeFilter = effectiveInclInactive ? '' : 'AND is_active = 1';
     let periodRows;
     if (period_ids) {
       const ids = period_ids.split(',').map(Number).filter(Boolean);
       if (ids.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 선택 가능합니다.' });
       if (!ids.length) return res.status(400).json({ error: 'period_ids가 올바르지 않습니다.' });
-      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id`).all(...ids);
+      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${ids.map(() => '?').join(',')}) ${activeFilter} ORDER BY eval_year, period_label`).all(...ids);
     } else {
-      periodRows = db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id').all();
+      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year, period_label`).all();
     }
     const periodLabels = periodRows.map(p => p.period_label);
     const gm = buildGradeMap();
@@ -2106,13 +2112,19 @@ app.get('/api/perf/quarterly-trend', auth, (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { org_id, period_ids } = req.query;
+    const { org_id, period_ids, include_inactive: inclInact } = req.query;
+    const includeInactive = String(inclInact) === 'true';
+    const effectiveInclInactive = isAdmin && includeInactive;
+    if (!isAdmin && includeInactive) {
+      auditLog(userId, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null, '비관리자의 비활성 기간 포함 시도 (quarterly-trend)', req.ip);
+    }
     if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
     const pPh = pIdList.map(() => '?').join(',');
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
+    const activeFilter = effectiveInclInactive ? '' : 'AND is_active = 1';
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter} ORDER BY eval_year, period_label`).all(...pIdList);
     const gm = buildGradeMap();
     let userIds, orgName = '회사 전체';
     if (org_id) {
@@ -2149,13 +2161,19 @@ app.get('/api/perf/grade-distribution', auth, (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { org_id, period_ids } = req.query;
+    const { org_id, period_ids, include_inactive: inclInact } = req.query;
+    const includeInactive = String(inclInact) === 'true';
+    const effectiveInclInactive = isAdmin && includeInactive;
+    if (!isAdmin && includeInactive) {
+      auditLog(userId, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null, '비관리자의 비활성 기간 포함 시도 (grade-distribution)', req.ip);
+    }
     if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
     const pPh = pIdList.map(() => '?').join(',');
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
+    const activeFilter2 = effectiveInclInactive ? '' : 'AND is_active = 1';
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter2} ORDER BY eval_year, period_label`).all(...pIdList);
     const gm = buildGradeMap();
     let userIds;
     if (org_id) {
@@ -2199,13 +2217,19 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { period_ids } = req.body;
+    const { period_ids, include_inactive: inclInact } = req.body;
+    const includeInactive = String(inclInact) === 'true';
+    const effectiveInclInactive = isAdmin && includeInactive;
+    if (!isAdmin && includeInactive) {
+      auditLog(userId, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null, '비관리자의 비활성 기간 포함 시도 (org-ai-summary)', req.ip);
+    }
     if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
     const pPh = pIdList.map(() => '?').join(',');
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
+    const activeFilter3 = effectiveInclInactive ? '' : 'AND is_active = 1';
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter3} ORDER BY eval_year, period_label`).all(...pIdList);
     const periodLabels = periods.map(p => p.period_label);
     const periodStr = periods.length
       ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';

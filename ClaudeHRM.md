@@ -295,10 +295,10 @@ POST   /api/okr/:id/progress            OKR 달성률 업데이트
 GET    /api/perf/my-summary             내 성과 요약
 GET    /api/perf/team-summary           팀 성과 요약 (조직장)
 POST   /api/perf/ai-summary             AI 성과 요약 생성
-GET    /api/perf/org-tree               전체 조직 트리 + 통계 (권한별, 최대 8기간)
-GET    /api/perf/quarterly-trend        분기별 평균 추이 (최대 8기간)
-GET    /api/perf/grade-distribution     등급 분포 시계열 (히트맵용, 최대 8기간)
-POST   /api/perf/org-ai-summary         전체 조직 AI 요약 (사내 LLM, ORG_AI_SUMMARY_GENERATED 감사)
+GET    /api/perf/org-tree               전체 조직 트리 + 통계 (권한별, 최대 8기간, ?include_inactive)
+GET    /api/perf/quarterly-trend        분기별 평균 추이 (최대 8기간, ?include_inactive)
+GET    /api/perf/grade-distribution     등급 분포 시계열 (히트맵용, 최대 8기간, ?include_inactive)
+POST   /api/perf/org-ai-summary         전체 조직 AI 요약 (사내 LLM, ORG_AI_SUMMARY_GENERATED 감사, include_inactive)
 
 GET    /api/admin/eval-status           전직원 평가 현황
 POST   /api/admin/eval/:evalId/force-phase  평가 단계 강제 변경 (admin+)
@@ -384,6 +384,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 전체 조직 분석 활성/비활성 기간 선택 옵션 (master/admin 전용 체크박스, 비관리자 차단 audit_log) (PROMPT 58B) | Claude Code |
 | 2026-05-27 | 시드 데이터 생성 스크립트 (8명×9분기=72사이클, 64최종평가, 시나리오별 등급 분포, period_ids 기반 크로스년도 수정) (PROMPT 59) | Claude Code |
 | 2026-05-27 | 전체 조직 AI 요약 + 평가 통계 (회사/본부/팀 3단계, 8기간 추이, 차트 3종, AI 10줄 구조화) (PROMPT 58) | Claude Code |
 | 2026-05-27 | 본인 비밀번호 변경 기능 (validatePassword + change-password API + 모달 UI, INFRA-3 일부) (PROMPT 57) | Claude Code |
@@ -728,6 +729,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - 평가 결과 Excel/PDF 출력 (영업 단계에서 필요)
 - 이메일 알림 (단계 2 진입 직전)
 - KPI 평가방식 상세 구현 (사용자 피드백 기반 결정)
+- PC 전용 UI 최적화 — PC 모니터 전체 활용한 컴팩트 레이아웃, 평가/분석/관리 화면 한 눈에 보기 (2026-05-27 결정, 우선순위 4, PROMPT 58B/58C/59 완료 후 진행)
 
 ---
 
