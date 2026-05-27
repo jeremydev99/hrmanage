@@ -2207,6 +2207,26 @@ app.get('/api/perf/grade-distribution', auth, (req, res) => {
   }
 });
 
+function buildOrgAIPrompt(level, { periodStr, gm, compStats, evalRate, distStr, orgSArr, trendArr }) {
+  const n = level === 'comprehensive' ? 5 : 3;
+  const sorted = [...orgSArr].filter(o => o.avg_score !== null).sort((a,b) => (b.avg_score||0)-(a.avg_score||0));
+  const fmt = o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score||'-'}/${gm.maxScore} (${o.avg_grade||'-'})`;
+  const topStr  = sorted.slice(0, n).map(fmt).join('\n') || '- 데이터 없음';
+  const botStr  = sorted.slice(-n).reverse().map(fmt).join('\n') || '- 데이터 없음';
+  const trendStr = trendArr.map(t => `- ${t.label}: ${t.avg_score !== null ? t.avg_score+'/'+gm.maxScore : '없음'} (${t.avg_grade||'-'})`).join('\n') || '- 데이터 없음';
+  const orgDetailStr = orgSArr.map(o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score !== null ? o.avg_score+'/'+gm.maxScore : '-'} (${o.avg_grade||'-'})`).join('\n') || '- 없음';
+  const base = `- 회사: ㈜사이냅소프트\n- 기간: ${periodStr}\n- 점수 체계: ${gm.maxScore}점 만점 (${gm.gradeCodes.join('>')})\n\n## 회사 전체 통계\n- 직원: ${compStats.total}명, 평가 완료: ${compStats.evaluated}명 (${evalRate}%)\n- 평균: ${compStats.avg_score !== null ? compStats.avg_score+'/'+gm.maxScore : '없음'} (${compStats.avg_grade||'-'})\n- 등급 분포: ${distStr}`;
+
+  if (level === 'summary') {
+    return `당신은 회사의 인사 데이터 분석 전문가입니다.\n아래 평가 통계를 분석하여 경영진·인사팀용 요약 보고서를 작성해주세요.\n\n## 분석 대상\n${base}\n\n## 우수 조직\n${topStr}\n\n## 하위 조직\n${botStr}\n\n## 분기별 추이\n${trendStr}\n\n## 요청\n다음 5개 항목을 각 1~2줄, 총 10줄 이내. 반드시 아래 JSON만 출력 (마크다운 코드블록 없이):\n{"overall":"...","strengths":["...","..."],"weaknesses":["...","..."],"trend":"...","actions":["...","..."]}`;
+  }
+  if (level === 'detailed') {
+    return `당신은 회사의 인사 데이터 분석 전문가입니다. 임원과 인사팀이 의사결정 회의 자료로 활용할 수 있도록 평가 통계를 분석해주세요.\n\n## 분석 대상\n${base}\n\n## 조직별 현황\n${orgDetailStr}\n\n## 우수 조직\n${topStr}\n\n## 하위 조직\n${botStr}\n\n## 분기별 추이\n${trendStr}\n\n## 요청\n다음 6개 항목으로 총 20~30줄 작성. 반드시 아래 JSON만 출력 (마크다운 코드블록 없이):\n{"overall":"...","strengths":[{"dept":"...","detail":"..."}],"weaknesses":[{"dept":"...","detail":"..."}],"department_details":[{"name":"...","avg_score":0,"grade":"...","completion_rate":0,"strength":"...","improvement":"..."}],"trend":"...","actions":[{"action":"...","difficulty":"중","duration":"1개월"}]}`;
+  }
+  // comprehensive
+  return `당신은 회사의 인사 데이터 분석 전문가입니다. 이사회 보고·연말 평가·전략 수립 자료로 활용할 수 있도록 평가 통계를 심층 분석해주세요.\n\n## 분석 대상\n${base}\n\n## 조직별 현황\n${orgDetailStr}\n\n## 우수 조직\n${topStr}\n\n## 하위 조직\n${botStr}\n\n## 분기별 추이\n${trendStr}\n\n## 요청\n다음 10개 항목으로 총 50줄 이상 작성. 반드시 아래 JSON만 출력 (마크다운 코드블록 없이):\n{"overall":"...","strengths":[{"dept":"...","detail":"...","quantitative":"...","qualitative":"..."}],"weaknesses":[{"dept":"...","detail":"...","concern_scope":"..."}],"department_details":[{"name":"...","avg_score":0,"grade":"...","completion_rate":0,"strength":"...","improvement":"...","trend":"..."}],"trend":"...","risks":["..."],"forecast":"...","comparison":"...","long_term_recommendations":["..."],"actions":[{"action":"...","priority":"상","expected_effect":"...","difficulty":"중","duration":"3개월"}]}`;
+}
+
 app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
   try {
     const userId = req.user.sub;
@@ -2217,7 +2237,8 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { period_ids, include_inactive: inclInact } = req.body;
+    const { period_ids, include_inactive: inclInact, level: rawLevel } = req.body;
+    const level = ['summary','detailed','comprehensive'].includes(rawLevel) ? rawLevel : 'summary';
     const includeInactive = String(inclInact) === 'true';
     const effectiveInclInactive = isAdmin && includeInactive;
     if (!isAdmin && includeInactive) {
@@ -2249,17 +2270,15 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
       const s = calcGradeStats(baseIds, [p.period_label], gm);
       return { label: p.period_label, avg_score: s.avg_score, avg_grade: s.avg_grade };
     });
-    const sorted = [...orgSArr].filter(o => o.avg_score !== null).sort((a,b) => (b.avg_score||0)-(a.avg_score||0));
     const evalRate = compStats.total > 0 ? Math.round(compStats.evaluated/compStats.total*100) : 0;
     const distStr = Object.entries(compStats.dist).map(([g,c]) => `${g}: ${c}명`).join(', ') || '없음';
-    const topStr = sorted.slice(0,3).map(o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score||'-'}/${gm.maxScore} (${o.avg_grade||'-'})`).join('\n') || '- 데이터 없음';
-    const botStr = sorted.slice(-2).reverse().map(o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score||'-'}/${gm.maxScore} (${o.avg_grade||'-'})`).join('\n') || '- 데이터 없음';
-    const trendStr = trendArr.map(t => `- ${t.label}: ${t.avg_score !== null ? t.avg_score+'/'+gm.maxScore : '데이터 없음'} (${t.avg_grade||'-'})`).join('\n');
-    const prompt = `당신은 회사의 인사 데이터 분석 전문가입니다.\n아래 평가 통계를 분석하여 경영진·인사팀용 요약 보고서를 작성해주세요.\n\n## 분석 대상\n- 회사: ㈜사이냅소프트\n- 기간: ${periodStr}\n- 점수 체계: ${gm.maxScore}점 만점 (${gm.gradeCodes.join('>')})\n\n## 회사 전체 통계\n- 직원: ${compStats.total}명, 평가 완료: ${compStats.evaluated}명 (${evalRate}%)\n- 평균: ${compStats.avg_score !== null ? compStats.avg_score+'/'+gm.maxScore : '데이터 없음'} (${compStats.avg_grade||'-'})\n- 등급 분포: ${distStr}\n\n## 우수 조직\n${topStr}\n\n## 하위 조직\n${botStr}\n\n## 분기별 추이\n${trendStr||'- 데이터 없음'}\n\n## 요청\n다음 5개 항목을 각 1~2줄, 총 10줄 이내. 반드시 아래 JSON만 출력 (마크다운 코드블록 없이):\n{"overall":"...","strengths":["...","..."],"weaknesses":["...","..."],"trend":"...","actions":["...","..."]}`;
+    const prompt = buildOrgAIPrompt(level, { periodStr, gm, compStats, evalRate, distStr, orgSArr, trendArr });
+    const tokenLimits = { summary: 800, detailed: 2500, comprehensive: 5000 };
     const llmRes = await fetch(
       process.env.LLM_API_BASE || 'https://chat.synap.co.kr/api/chat/completions',
       { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.LLM_API_KEY||''}` },
-        body: JSON.stringify({ model: process.env.LLM_MODEL||'SynapAssistant-MoE-30B', stream: false, max_tokens: 600,
+        body: JSON.stringify({ model: process.env.LLM_MODEL||'SynapAssistant-MoE-30B', stream: false,
+          max_tokens: tokenLimits[level] || 800,
           messages: [{ role: 'user', content: prompt }] }) }
     );
     if (!llmRes.ok) {
@@ -2271,8 +2290,8 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const raw = llmData.choices?.[0]?.message?.content || '';
     let structured = null;
     try { const m = raw.match(/\{[\s\S]*\}/); if (m) structured = JSON.parse(m[0]); } catch(e) {}
-    auditLog(userId, 'ORG_AI_SUMMARY_GENERATED', null, '전체 조직', `기간: ${periodStr}`, req.ip);
-    res.json({ summary: raw, structured, generated_at: new Date().toISOString() });
+    auditLog(userId, 'ORG_AI_SUMMARY_GENERATED', null, '전체 조직', `level=${level}, 기간: ${periodStr}`, req.ip);
+    res.json({ summary: raw, structured, level, generated_at: new Date().toISOString() });
   } catch(err) {
     console.error('[POST /api/perf/org-ai-summary]', err);
     res.status(500).json({ error: err.message });

@@ -961,12 +961,18 @@ function renderOrgAnalysisResult(orgTree, trend) {
 
   const aiHtml = `
     <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600">🤖 조직 AI 요약</div>
-        <button class="btn btn-ghost btn-sm" onclick="generateOrgAISummary()">AI 요약 생성</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">🤖 조직 AI 요약</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;color:var(--o700)">요약 수준:</span>
+        <select id="ai-summary-level" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">
+          <option value="summary">요약 (10줄, 약 5초)</option>
+          <option value="detailed">상세 요약 (20~30줄, 약 15초)</option>
+          <option value="comprehensive">상세 분석 (50줄+, 약 30초)</option>
+        </select>
+        <button id="org-ai-btn" class="btn btn-ghost btn-sm" onclick="generateOrgAISummary()">AI 요약 생성</button>
       </div>
       <div id="org-ai-result" style="font-size:13px;color:var(--muted);line-height:1.7">
-        "AI 요약 생성" 버튼을 클릭하면 조직 평가 데이터를 AI가 분석합니다.
+        요약 수준을 선택한 후 "AI 요약 생성" 버튼을 클릭하세요.
       </div>
     </div>`;
 
@@ -1043,35 +1049,91 @@ function switchOrgChartType(type) {
 }
 
 async function generateOrgAISummary() {
-  const resEl = document.getElementById('org-ai-result');
+  const resEl  = document.getElementById('org-ai-result');
+  const btn    = document.getElementById('org-ai-btn');
   const fromEl = document.getElementById('org-period-from');
   const toEl   = document.getElementById('org-period-to');
   if (!resEl || !fromEl || !toEl) return;
-  resEl.innerHTML = '<div class="spinner" style="font-size:13px">AI 분석 중...</div>';
+  const level = document.getElementById('ai-summary-level')?.value || 'summary';
+  const pIds  = window._orgData?.pIds || `${fromEl.value},${toEl.value}`;
+  const inclInactive = window._orgData?.includeInactive || false;
+  const cacheKey = `${pIds}|${inclInactive}|${level}`;
+  if (window._aiSummaryCache?.[cacheKey]) {
+    renderAISummaryByLevel(window._aiSummaryCache[cacheKey], level, resEl);
+    return;
+  }
+  const timeHint = { summary: '약 5초', detailed: '약 15초', comprehensive: '약 30초' }[level] || '';
+  resEl.innerHTML = `<div class="spinner" style="font-size:13px">AI 분석 중... (${timeHint})</div>`;
+  if (btn) { btn.disabled = true; btn.textContent = `생성 중...`; }
   try {
     const r = await API.post('/perf/org-ai-summary', {
-      period_ids: window._orgData?.pIds || `${fromEl.value},${toEl.value}`,
-      include_inactive: window._orgData?.includeInactive || false
+      period_ids: pIds,
+      include_inactive: inclInactive,
+      level
     });
-    if (r.structured) {
-      const s = r.structured;
-      const parts = [];
-      if (s.overall)    parts.push(`<div style="margin-bottom:8px"><b>📊 전체 요약</b><br>${s.overall}</div>`);
-      if (s.strengths?.length) parts.push(`<div style="margin-bottom:8px"><b>💪 강점 부서</b><br>${s.strengths.map(x=>'• '+x).join('<br>')}</div>`);
-      if (s.weaknesses?.length) parts.push(`<div style="margin-bottom:8px"><b>⚠️ 약점 부서</b><br>${s.weaknesses.map(x=>'• '+x).join('<br>')}</div>`);
-      if (s.trend)      parts.push(`<div style="margin-bottom:8px"><b>📈 트렌드</b><br>${s.trend}</div>`);
-      if (s.actions?.length) parts.push(`<div style="margin-bottom:8px"><b>🎯 액션 아이템</b><br>${s.actions.map(x=>'• '+x).join('<br>')}</div>`);
-      parts.push(`<div style="font-size:11px;color:var(--muted);margin-top:8px">생성: ${new Date(r.generated_at).toLocaleString('ko-KR')} · AI 결과는 참고용입니다.</div>`);
-      resEl.innerHTML = `<div style="line-height:1.8">${parts.join('')}</div>`;
-    } else {
-      const el = document.createElement('div');
-      el.style.cssText = 'white-space:pre-wrap;line-height:1.8;color:var(--o800);font-size:13px';
-      el.textContent = r.summary;
-      resEl.innerHTML = '';
-      resEl.appendChild(el);
-    }
+    if (!window._aiSummaryCache) window._aiSummaryCache = {};
+    window._aiSummaryCache[cacheKey] = r;
+    renderAISummaryByLevel(r, level, resEl);
   } catch(e) {
     resEl.innerHTML = `<div style="color:#E53935;font-size:13px">AI 요약 생성 실패: ${e.message}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'AI 요약 생성'; }
+  }
+}
+
+function renderAISummaryByLevel(r, level, resEl) {
+  if (!resEl) return;
+  const footer = `<div style="font-size:11px;color:var(--muted);margin-top:10px">생성: ${new Date(r.generated_at).toLocaleString('ko-KR')} · AI 결과는 참고용입니다.</div>`;
+  const s = r.structured || {};
+  const raw = r.summary || '';
+  if (!r.structured) {
+    const el = document.createElement('div');
+    el.style.cssText = 'white-space:pre-wrap;line-height:1.8;color:var(--o800);font-size:13px';
+    el.textContent = raw;
+    resEl.innerHTML = footer;
+    resEl.prepend(el);
+    return;
+  }
+  if (level === 'summary') {
+    const parts = [];
+    if (s.overall)           parts.push(`<div class="ai-section"><b>📊 전체 요약</b><br>${s.overall}</div>`);
+    if (s.strengths?.length) parts.push(`<div class="ai-section"><b>💪 강점 부서</b><br>${(Array.isArray(s.strengths[0]) || typeof s.strengths[0]==='string' ? s.strengths : s.strengths.map(x=>x.dept+': '+x.detail)).map(x=>'• '+x).join('<br>')}</div>`);
+    if (s.weaknesses?.length) parts.push(`<div class="ai-section"><b>⚠️ 약점 부서</b><br>${(Array.isArray(s.weaknesses[0]) || typeof s.weaknesses[0]==='string' ? s.weaknesses : s.weaknesses.map(x=>x.dept+': '+x.detail)).map(x=>'• '+x).join('<br>')}</div>`);
+    if (s.trend)             parts.push(`<div class="ai-section"><b>📈 트렌드</b><br>${s.trend}</div>`);
+    if (s.actions?.length)   parts.push(`<div class="ai-section"><b>🎯 액션 아이템</b><br>${(typeof s.actions[0]==='string' ? s.actions : s.actions.map(x=>x.action||JSON.stringify(x))).map(x=>'• '+x).join('<br>')}</div>`);
+    resEl.innerHTML = `<div style="line-height:1.8">${parts.join('')}${footer}</div>`;
+  } else if (level === 'detailed') {
+    const strList = (s.strengths||[]).map(x => typeof x==='string' ? `<div class="dept-item">• ${x}</div>` : `<div class="dept-item"><b>${x.dept||''}</b>: ${x.detail||''}</div>`).join('');
+    const wkList  = (s.weaknesses||[]).map(x => typeof x==='string' ? `<div class="dept-item">• ${x}</div>` : `<div class="dept-item"><b>${x.dept||''}</b>: ${x.detail||''}</div>`).join('');
+    const deptRows = (s.department_details||[]).map(d => `<tr><td style="padding:5px 8px">${d.name||''}</td><td style="padding:5px 8px;text-align:center">${d.avg_score??'-'}</td><td style="padding:5px 8px;text-align:center">${d.grade||'-'}</td><td style="padding:5px 8px;text-align:center">${d.completion_rate!=null?d.completion_rate+'%':'-'}</td><td style="padding:5px 8px">${d.strength||''}</td><td style="padding:5px 8px">${d.improvement||''}</td></tr>`).join('');
+    const actList = (s.actions||[]).map(x => typeof x==='string' ? `• ${x}` : `• ${x.action||''} <span style="font-size:11px;color:var(--muted)">[난이도:${x.difficulty||'-'} / ${x.duration||''}]</span>`).join('<br>');
+    resEl.innerHTML = `<div style="line-height:1.8">
+      <div class="ai-section"><b>📊 전체 요약</b><br>${s.overall||''}</div>
+      ${strList ? `<div class="ai-section"><b>💪 강점 부서</b>${strList}</div>` : ''}
+      ${wkList  ? `<div class="ai-section"><b>⚠️ 약점 부서</b>${wkList}</div>` : ''}
+      ${deptRows ? `<div class="ai-section"><b>📋 부서별 상세</b><div style="overflow-x:auto;margin-top:6px"><table class="dept-detail-table"><thead><tr><th>부서</th><th>평균</th><th>등급</th><th>완료율</th><th>강점</th><th>개선점</th></tr></thead><tbody>${deptRows}</tbody></table></div></div>` : ''}
+      <div class="ai-section"><b>📈 트렌드</b><br>${s.trend||''}</div>
+      ${actList ? `<div class="ai-section"><b>🎯 액션 아이템</b><br>${actList}</div>` : ''}
+      ${footer}</div>`;
+  } else {
+    const strList = (s.strengths||[]).map(x => typeof x==='string' ? `<div class="dept-item">• ${x}</div>` : `<div class="dept-item"><b>${x.dept||''}</b>: ${x.detail||''} ${x.quantitative?'<span style="font-size:11px;color:var(--muted)">('+x.quantitative+')</span>':''}</div>`).join('');
+    const wkList  = (s.weaknesses||[]).map(x => typeof x==='string' ? `<div class="dept-item">• ${x}</div>` : `<div class="dept-item"><b>${x.dept||''}</b>: ${x.detail||''} ${x.concern_scope?'<span style="font-size:11px;color:#E53935">[범위: '+x.concern_scope+']</span>':''}</div>`).join('');
+    const deptRows = (s.department_details||[]).map(d => `<tr><td style="padding:5px 8px">${d.name||''}</td><td style="padding:5px 8px;text-align:center">${d.avg_score??'-'}</td><td style="padding:5px 8px;text-align:center">${d.grade||'-'}</td><td style="padding:5px 8px;text-align:center">${d.completion_rate!=null?d.completion_rate+'%':'-'}</td><td style="padding:5px 8px">${d.strength||''}</td><td style="padding:5px 8px">${d.improvement||''}</td><td style="padding:5px 8px">${d.trend||''}</td></tr>`).join('');
+    const riskList = (s.risks||[]).map(x=>'• '+x).join('<br>');
+    const recList  = (s.long_term_recommendations||[]).map(x=>'• '+x).join('<br>');
+    const actList  = (s.actions||[]).map(x => typeof x==='string' ? `• ${x}` : `• [${x.priority||''}] ${x.action||''} <span style="font-size:11px;color:var(--muted)">[${x.difficulty||''}/${x.duration||''}, 기대효과: ${x.expected_effect||''}]</span>`).join('<br>');
+    resEl.innerHTML = `<div style="line-height:1.8">
+      <div class="ai-section"><b>📊 전체 요약</b><br>${s.overall||''}</div>
+      ${strList ? `<div class="ai-section"><b>💪 강점 부서</b>${strList}</div>` : ''}
+      ${wkList  ? `<div class="ai-section"><b>⚠️ 약점 부서</b>${wkList}</div>` : ''}
+      ${deptRows ? `<div class="ai-section"><b>📋 부서별 상세</b><div style="overflow-x:auto;margin-top:6px"><table class="dept-detail-table"><thead><tr><th>부서</th><th>평균</th><th>등급</th><th>완료율</th><th>강점</th><th>개선점</th><th>트렌드</th></tr></thead><tbody>${deptRows}</tbody></table></div></div>` : ''}
+      <div class="ai-section"><b>📈 분기별 트렌드</b><br>${s.trend||''}</div>
+      ${riskList ? `<div class="ai-section"><b>🚨 위험 요소</b><br>${riskList}</div>` : ''}
+      ${s.forecast ? `<div class="ai-section"><b>🔭 향후 전망</b><br>${s.forecast}</div>` : ''}
+      ${s.comparison ? `<div class="ai-section"><b>🔀 부서간 비교</b><br>${s.comparison}</div>` : ''}
+      ${recList ? `<div class="ai-section"><b>📌 장기 권고사항</b><br>${recList}</div>` : ''}
+      ${actList ? `<div class="ai-section"><b>🎯 액션 아이템</b><br>${actList}</div>` : ''}
+      ${footer}</div>`;
   }
 }
 

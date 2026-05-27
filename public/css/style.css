@@ -280,6 +280,13 @@ textarea:focus{outline:none;border-color:var(--o400)}
 /* ── Spinner ── */
 .spinner{text-align:center;padding:40px;color:var(--muted);font-size:13px}
 
+/* ── AI 요약 (PROMPT 58C) ── */
+.ai-section{margin-bottom:12px}
+.dept-item{padding:4px 0;border-bottom:1px dashed var(--o100)}
+.dept-detail-table{width:100%;border-collapse:collapse;font-size:12px}
+.dept-detail-table th{padding:6px 8px;background:var(--o50);color:var(--muted);text-align:left;font-weight:500;border-bottom:2px solid var(--o200)}
+.dept-detail-table td{padding:5px 8px;border-bottom:1px solid var(--o100)}
+
 /* ── Scrollbar ── */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:var(--bg)}
