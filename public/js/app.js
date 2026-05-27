@@ -892,8 +892,8 @@ function renderOrgAnalysisResult(orgTree, trend) {
         <div>
           <div style="font-size:14px;font-weight:700;color:var(--o800)">🏢 ${company.name}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:2px">
-            총 ${company.total_members}명 · 평가 완료 ${company.evaluated_members}명
-            (${company.total_members > 0 ? Math.round(company.evaluated_members/company.total_members*100) : 0}%)
+            총 ${company.total_members}명 · 평가 완료 ${company.evaluated_members}/${company.expected_total}
+            (${company.completion_rate ?? 0}%)
           </div>
         </div>
         ${company.avg_score !== null ? `
@@ -935,7 +935,7 @@ function renderOrgAnalysisResult(orgTree, trend) {
               ${o.leader_name ? `<span style="font-size:11px;color:var(--muted);margin-left:4px">(${o.leader_name})</span>` : ''}
             </td>
             <td style="text-align:center;padding:6px 8px">${o.direct_members}</td>
-            <td style="text-align:center;padding:6px 8px">${o.evaluated_members}${o.total_members > 0 ? `<span style="font-size:10px;color:var(--muted)">(${Math.round(o.evaluated_members/o.total_members*100)}%)</span>` : ''}</td>
+            <td style="text-align:center;padding:6px 8px">${o.evaluated_members}/${o.expected_total}<span style="font-size:10px;color:var(--muted)"> (${o.completion_rate ?? 0}%)</span></td>
             <td style="text-align:center;padding:6px 8px">${o.avg_grade ? `<span class="bd bd-approved" style="font-size:11px">${o.avg_grade}</span>` : '-'}</td>
             <td style="padding:6px 8px">${scoreBar(o.avg_score, o.avg_score_max)}</td>
           </tr>`).join('')}
@@ -1087,11 +1087,15 @@ function renderAISummaryByLevel(r, level, resEl) {
   const s = r.structured || {};
   const raw = r.summary || '';
   if (!r.structured) {
-    const el = document.createElement('div');
-    el.style.cssText = 'white-space:pre-wrap;line-height:1.8;color:var(--o800);font-size:13px';
-    el.textContent = raw;
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'color:#E53935;font-size:12px;margin-bottom:6px';
+    errDiv.textContent = '⚠️ AI 응답 형식 오류, 원본 텍스트로 표시합니다.';
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'white-space:pre-wrap;line-height:1.6;color:var(--o800);font-size:12px';
+    pre.textContent = raw;
     resEl.innerHTML = footer;
-    resEl.prepend(el);
+    resEl.prepend(pre);
+    resEl.prepend(errDiv);
     return;
   }
   if (level === 'summary') {

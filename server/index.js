@@ -589,6 +589,24 @@ app.patch('/api/evals/:id/reopen', auth, async (req, res) => {
   }
 });
 
+async function validateEvalGoals(evalId) {
+  const goals = await goalRepo.findByEvalId(evalId);
+  if (!goals || goals.length === 0)
+    return { valid: false, error: '최소 1개 이상의 목표를 입력해주세요.' };
+  const totalWeight = goals.reduce((sum, g) => sum + (Number(g.weight) || 0), 0);
+  if (Math.abs(totalWeight - 100) > 0.01)
+    return { valid: false, error: `목표 가중치 합이 100이 되어야 합니다. (현재: ${totalWeight.toFixed(2)})` };
+  for (let i = 0; i < goals.length; i++) {
+    const g = goals[i];
+    const name = decrypt(g.name || '');
+    if (!name || name.trim().length === 0)
+      return { valid: false, error: `${i+1}번째 목표의 제목이 비어있습니다.` };
+    if (!g.weight || g.weight <= 0)
+      return { valid: false, error: `${i+1}번째 목표의 가중치는 0보다 커야 합니다.` };
+  }
+  return { valid: true };
+}
+
 // [PROMPT_40-A] Repository Pattern 적용
 app.post('/api/evals/:id/submit', auth, async (req, res) => {
   try {
@@ -597,6 +615,9 @@ app.post('/api/evals/:id/submit', auth, async (req, res) => {
       return res.status(403).json({ error: '권한 없음' });
     if (!['draft'].includes(ev.phase))
       return res.status(409).json({ error: '제출 불가 상태: ' + ev.phase });
+
+    const validation = await validateEvalGoals(req.params.id);
+    if (!validation.valid) return res.status(400).json({ error: validation.error });
 
     const { self_reason } = req.body;
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
@@ -804,11 +825,15 @@ function isNextApprover(approverId, targetUserId, evalId) {
   return !done;
 }
 
-app.post('/api/approvals/:evalId/approve', auth, (req, res) => {
+app.post('/api/approvals/:evalId/approve', auth, async (req, res) => {
   try {
     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
     if (!ev || ev.phase !== 'pending') return res.status(400).json({ error: '승인 불가 상태' });
     if (!isNextApprover(req.user.sub, ev.user_id, ev.id)) return res.status(403).json({ error: '승인 권한 없음' });
+
+    const validation = await validateEvalGoals(req.params.evalId);
+    if (!validation.valid)
+      return res.status(400).json({ error: `목표 검증 실패: ${validation.error} 평가자에게 목표 수정을 요청하세요.` });
 
     const { note } = req.body;
     const chain    = getApproverChain(ev.user_id);
@@ -2036,6 +2061,24 @@ function calcGradeStats(userIds, periodLabels, { codeToScore, maxScore, scoreToG
   return { total: userIds.length, evaluated: ev, avg_score: avg, avg_score_max: maxScore, avg_grade: scoreToGrade(avg), dist };
 }
 
+function calcCompletionStats(directUserIds, periodIds) {
+  const totalExpected = directUserIds.length * periodIds.length;
+  if (totalExpected === 0) return { completed: 0, total: 0, rate: 0 };
+  const uPh = directUserIds.map(() => '?').join(',');
+  const pPh = periodIds.map(() => '?').join(',');
+  const completed = db.prepare(`
+    SELECT COUNT(*) as cnt
+    FROM eval_cycles ec
+    JOIN final_evaluations fe ON fe.eval_id = ec.id
+    JOIN eval_periods ep ON ep.eval_year = ec.eval_year AND ep.period_label = ec.period_label
+    WHERE ec.user_id IN (${uPh})
+      AND ep.id IN (${pPh})
+      AND ec.phase = 'final_done'
+      AND fe.locked = 1
+  `).get(...directUserIds, ...periodIds).cnt;
+  return { completed, total: totalExpected, rate: Math.round(completed / totalExpected * 100) };
+}
+
 app.get('/api/perf/org-tree', auth, (req, res) => {
   try {
     const userId = req.user.sub;
@@ -2064,6 +2107,7 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
       periodRows = db.prepare(`SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year, period_label`).all();
     }
     const periodLabels = periodRows.map(p => p.period_label);
+    const periodIds = periodRows.map(p => p.id);
     const gm = buildGradeMap();
     let orgs = db.prepare(`
       SELECT o.id, o.name, o.parent_id, o.sort_order, u.name as leader_name
@@ -2080,10 +2124,12 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
       const uIds = getSubtreeUserIds(orgId);
       const directIds = db.prepare('SELECT id FROM users WHERE org_id=? AND is_active=1').all(orgId).map(r => r.id);
       const s = calcGradeStats(uIds, periodLabels, gm);
+      const c = calcCompletionStats(directIds, periodIds);
       result.push({ id: org.id, name: org.name, depth, parent_id: org.parent_id, leader_name: org.leader_name || null,
-        direct_members: directIds.length, total_members: s.total, evaluated_members: s.evaluated,
+        direct_members: directIds.length, total_members: s.total, evaluated_members: c.completed,
+        expected_total: c.total, completion_rate: c.rate,
         avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist });
-      orgs.filter(o => o.parent_id === orgId).forEach(c => traverse(c.id, depth + 1));
+      orgs.filter(o => o.parent_id === orgId).forEach(ch => traverse(ch.id, depth + 1));
     }
     const roots = orgs.filter(o => !o.parent_id || !orgMap.has(o.parent_id));
     roots.forEach(r => traverse(r.id, 0));
@@ -2091,7 +2137,9 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
     if (isAdmin) {
       const allIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
       const s = calcGradeStats(allIds, periodLabels, gm);
-      company = { name: '㈜사이냅소프트 (전체)', total_members: s.total, evaluated_members: s.evaluated,
+      const c = calcCompletionStats(allIds, periodIds);
+      company = { name: '㈜사이냅소프트 (전체)', total_members: s.total, evaluated_members: c.completed,
+        expected_total: c.total, completion_rate: c.rate,
         avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist };
     }
     res.json({ periods: periodRows.map(p => ({ id: p.id, label: p.period_label })),
@@ -2289,7 +2337,11 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const llmData = await llmRes.json();
     const raw = llmData.choices?.[0]?.message?.content || '';
     let structured = null;
-    try { const m = raw.match(/\{[\s\S]*\}/); if (m) structured = JSON.parse(m[0]); } catch(e) {}
+    try {
+      const stripped = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+      const m = stripped.match(/\{[\s\S]*\}/);
+      if (m) structured = JSON.parse(m[0]);
+    } catch(e) {}
     auditLog(userId, 'ORG_AI_SUMMARY_GENERATED', null, '전체 조직', `level=${level}, 기간: ${periodStr}`, req.ip);
     res.json({ summary: raw, structured, level, generated_at: new Date().toISOString() });
   } catch(err) {

@@ -352,6 +352,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - `goalRepo.updateStatusByEvalId(evalId, status)` — reopen/submit 시 goals 상태 일괄 변경
     - category 관계 `include`로 `cat_name`, `color`, `text_color` 평탄화 (`_flatten()`)
 20. **개인정보 보호 원칙** (2026-05-22, PROMPT 52): 모든 PROMPT 작업 시 `HRPRIVACY_PRINCIPLES.md`의 점검 체크리스트 통과 필수. 위반 우려 시 작업 중단 + 사용자(대표) 협의.
+21. **목표 미입력 차단** (2026-05-27, PROMPT 58D): 평가 제출(`/api/evals/:id/submit`) 및 1차 승인(`/api/approvals/:evalId/approve`) 시 `validateEvalGoals(evalId)` 헬퍼로 검증. 규칙: 목표 ≥ 1개, 가중치 합 = 100 (오차 ±0.01), name 필수, weight > 0. kpi는 선택적 (정성 목표 허용).
 
 ---
 
@@ -384,6 +385,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 평가완료 표시 보정(사이클 단위) + comprehensive AI 렌더링 수정 + 목표 미입력 차단 (PROMPT 58D) | Claude Code |
 | 2026-05-27 | 전체 조직 AI 요약 3단계 옵션 추가 (요약10줄/상세요약30줄/상세분석50줄+, 세션 캐싱, max_tokens 분기) (PROMPT 58C) | Claude Code |
 | 2026-05-27 | 전체 조직 분석 활성/비활성 기간 선택 옵션 (master/admin 전용 체크박스, 비관리자 차단 audit_log) (PROMPT 58B) | Claude Code |
 | 2026-05-27 | 시드 데이터 생성 스크립트 (8명×9분기=72사이클, 64최종평가, 시나리오별 등급 분포, period_ids 기반 크로스년도 수정) (PROMPT 59) | Claude Code |
