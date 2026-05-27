@@ -360,6 +360,13 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - **KPI** (Key Performance Indicator): 미구현. 향후 Phase 2 재검토 (개발 백로그 BL-002).
     - 평가 방식 3차원 매핑(조직 × 시기 × 방식) 아키텍처는 구현됨. 단 실제 운영 가능한 방식은 MBO만.
 
+23. **UI 일관성 원칙** (2026-05-27, PROMPT 60D):
+    - 신규 UI 작업 시 시스템 전반에 이미 사용 중인 패턴(색상·여백·구분선·이모지 사용 등) 우선 식별 후 그대로 적용
+    - 새 색상·스타일 발명 금지 (명확한 사용자 요구 시 예외)
+    - 강조 색상: 오렌지(#d97706), 옅은 주황 그라데이션(linear-gradient with rgba(217,119,6,0.3))은 섹션 구분에 사용
+    - 모든 UI 작업 PROMPT의 사전 점검 단계에 기존 CSS 패턴 검색 포함
+    - 협업 시 메타 원칙은 CLAUDE.md 참조
+
 ---
 
 ## 알려진 버그 및 미완성
@@ -453,6 +460,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 메타 원칙 명문화 — 자동 갱신·효율적 협업·UI 일관성 (CLAUDE.md + ClaudeHRM.md 23번) (PROMPT 60D) | Claude Code |
 | 2026-05-27 | nodemon 도입 + 평가 기간 UI 보정(한 줄 배치, 데이터 연도만, 체크박스 한 줄) (PROMPT 60B-fix) | Claude Code |
 | 2026-05-27 | 전직원 평가 현황 기간 선택 + 평가 기간 관리 접기/조회 범위 (PROMPT 60B) | Claude Code |
 | 2026-05-27 | 개발 백로그 섹션 신규 + OKR 평가 정책 결정 (운영 도구로 유지, Phase 2 재검토 등록) (PROMPT 60) | Claude Code |
