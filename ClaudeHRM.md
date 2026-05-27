@@ -377,6 +377,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-22 | 자동 푸시 정책 도입 (일반 수정 자동, 중대 변경 수동) (PROMPT 53A) | Claude Code |
 | 2026-05-22 | 개인정보 보호 원칙 신규 작성 (HRPRIVACY_PRINCIPLES.md, B-1~B-4+C 결정 반영) (PROMPT 52) | Claude Code |
 | 2026-05-21 | 국내 호스팅 4사 비교 (md+xlsx, 신뢰도·인지도 ×2 가중 추가) → NCloud 선정 (PROMPT 51) | Claude Code |
 | 2026-05-21 | INFRA-2 로드맵 재정리 + 표준 검증 시나리오 V1/V2/V3 도입 (PROMPT 50) | Claude Code |

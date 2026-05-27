@@ -1,8 +1,18 @@
 # CLAUDE.md — Claude Code 세션 가이드
 
-> **매 세션 시작 시 반드시**: 이 파일 읽기 → ClaudeHRM.md 읽기 → 수정할 파일 직접 확인
+> **매 세션 시작 시 반드시**: 이 파일 읽기 → ClaudeHRM.md 읽기 → HRPRIVACY_PRINCIPLES.md 읽기 → 수정할 파일 직접 확인
 > **작업 완료 후 반드시**: CLAUDE.md + ClaudeHRM.md 둘 다 업데이트
-> **코드 변경 작업 완료 후 반드시**: `git add . && git commit` 자동 실행 (push는 사용자가 수동)
+> **코드 변경 작업 완료 후 반드시**: `git add . && git commit` 자동 실행
+> **푸시 정책 (2026-05-22 도입)**: 일반 수정은 작업 완료 시 자동 `git push` 진행.
+>   단 다음에 해당하면 푸시 보류 + 사용자 확인 후 수동 푸시:
+>   - DB 스키마 변경 / 마이그레이션 스크립트 / DROP·DELETE 포함 코드
+>   - 계정·권한·인증·암호화 관련 변경 (auth, JWT, AES, bcrypt 등)
+>   - 환경변수 보안 값 변경 (JWT_SECRET, ENC_SECRET, *_API_KEY 등)
+>   - .gitignore 변경
+>   - 의존성 메이저 버전 변경 (Prisma 5→6 같은)
+>   - git push --force, reset --hard, rebase 등 이력 변경
+>   회색 지대(사용자 확인 권장): amend·force, 외부 API 호출 변경, 보안 모듈 변경, DB 종류 변경 등 V3 검증 필요 변경
+> **각 PROMPT 파일에는** "자동 푸시 여부" 항목 명시 (✅ 허용 / ❌ 금지 / ⚠️ 회색)
 > **커밋 메시지 규칙**: 한 줄, "작업 내용 (PROMPT_번호)" 형식. 작업번호가 없으면 작업 내용만 한 줄로
 > **커밋 메시지 예시**: "사내 LLM 연동 + .env 분리 (PROMPT_34)", "시간대 Asia/Seoul로 변경"
 > **신규 기능 작업 시**: ClaudeHRM.md "제품화 마케팅 포인트" 섹션에 해당 항목 추가/체크
