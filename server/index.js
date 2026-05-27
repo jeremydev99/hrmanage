@@ -1974,6 +1974,285 @@ app.post('/api/perf/ai-summary', auth, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// ── 전체 조직 분석 API (PROMPT 58) ─────────────────────────
+
+function buildGradeMap() {
+  const grades = db.prepare(
+    "SELECT grade_code, sort_order FROM grade_criteria WHERE is_active=1 AND grade_code != 'NC' ORDER BY sort_order"
+  ).all();
+  const n = grades.length;
+  const codeToScore = {};
+  grades.forEach(g => { codeToScore[g.grade_code] = n - (g.sort_order - 1); });
+  const scoreToGrade = avg => {
+    if (avg === null) return null;
+    let best = grades[grades.length - 1].grade_code, bestDiff = Infinity;
+    grades.forEach(g => {
+      const d = Math.abs(avg - (n - (g.sort_order - 1)));
+      if (d < bestDiff) { bestDiff = d; best = g.grade_code; }
+    });
+    return best;
+  };
+  return { gradeCodes: grades.map(g => g.grade_code), maxScore: n, codeToScore, scoreToGrade };
+}
+
+function getLeaderOrgIds(userId) {
+  return db.prepare(`
+    WITH RECURSIVE t AS (
+      SELECT id FROM organizations WHERE leader_id=? AND is_active=1
+      UNION ALL
+      SELECT o.id FROM organizations o INNER JOIN t ON o.parent_id=t.id WHERE o.is_active=1
+    )
+    SELECT id FROM t
+  `).all(userId).map(r => r.id);
+}
+
+function getSubtreeUserIds(orgId) {
+  return db.prepare(`
+    WITH RECURSIVE t AS (
+      SELECT id FROM organizations WHERE id=? AND is_active=1
+      UNION ALL
+      SELECT o.id FROM organizations o INNER JOIN t ON o.parent_id=t.id WHERE o.is_active=1
+    )
+    SELECT u.id FROM users u INNER JOIN t ON u.org_id=t.id WHERE u.is_active=1
+  `).all(orgId).map(r => r.id);
+}
+
+function calcGradeStats(userIds, periodLabels, { codeToScore, maxScore, scoreToGrade }) {
+  const empty = { total: userIds.length, evaluated: 0, avg_score: null, avg_grade: null, dist: {}, avg_score_max: maxScore };
+  if (!userIds.length || !periodLabels.length) return empty;
+  const uPh = userIds.map(() => '?').join(',');
+  const pPh = periodLabels.map(() => '?').join(',');
+  const rows = db.prepare(`
+    SELECT fe.selected_grade FROM final_evaluations fe
+    JOIN eval_cycles ec ON fe.eval_id=ec.id
+    WHERE ec.user_id IN (${uPh}) AND ec.period_label IN (${pPh})
+      AND fe.selected_grade IS NOT NULL AND fe.selected_grade != 'NC'
+  `).all(...userIds, ...periodLabels);
+  const dist = {};
+  let sum = 0;
+  rows.forEach(r => { dist[r.selected_grade] = (dist[r.selected_grade] || 0) + 1; sum += codeToScore[r.selected_grade] || 0; });
+  const ev = rows.length;
+  const avg = ev > 0 ? Math.round(sum / ev * 10) / 10 : null;
+  return { total: userIds.length, evaluated: ev, avg_score: avg, avg_score_max: maxScore, avg_grade: scoreToGrade(avg), dist };
+}
+
+app.get('/api/perf/org-tree', auth, (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    let allowedIds = null;
+    if (!isAdmin) {
+      const lIds = getLeaderOrgIds(userId);
+      if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
+      allowedIds = lIds;
+    }
+    const { period_ids, max_depth = '999' } = req.query;
+    const maxDepth = Math.min(parseInt(max_depth) || 999, 999);
+    let periodRows;
+    if (period_ids) {
+      const ids = period_ids.split(',').map(Number).filter(Boolean);
+      if (ids.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 선택 가능합니다.' });
+      if (!ids.length) return res.status(400).json({ error: 'period_ids가 올바르지 않습니다.' });
+      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY id`).all(...ids);
+    } else {
+      periodRows = db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id').all();
+    }
+    const periodLabels = periodRows.map(p => p.period_label);
+    const gm = buildGradeMap();
+    let orgs = db.prepare(`
+      SELECT o.id, o.name, o.parent_id, o.sort_order, u.name as leader_name
+      FROM organizations o LEFT JOIN users u ON o.leader_id=u.id
+      WHERE o.is_active=1 ORDER BY o.sort_order, o.id
+    `).all();
+    if (allowedIds) orgs = orgs.filter(o => allowedIds.includes(o.id));
+    const orgMap = new Map(orgs.map(o => [o.id, o]));
+    const result = [];
+    function traverse(orgId, depth) {
+      if (depth > maxDepth) return;
+      const org = orgMap.get(orgId);
+      if (!org) return;
+      const uIds = getSubtreeUserIds(orgId);
+      const directIds = db.prepare('SELECT id FROM users WHERE org_id=? AND is_active=1').all(orgId).map(r => r.id);
+      const s = calcGradeStats(uIds, periodLabels, gm);
+      result.push({ id: org.id, name: org.name, depth, parent_id: org.parent_id, leader_name: org.leader_name || null,
+        direct_members: directIds.length, total_members: s.total, evaluated_members: s.evaluated,
+        avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist });
+      orgs.filter(o => o.parent_id === orgId).forEach(c => traverse(c.id, depth + 1));
+    }
+    const roots = orgs.filter(o => !o.parent_id || !orgMap.has(o.parent_id));
+    roots.forEach(r => traverse(r.id, 0));
+    let company = null;
+    if (isAdmin) {
+      const allIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
+      const s = calcGradeStats(allIds, periodLabels, gm);
+      company = { name: '㈜사이냅소프트 (전체)', total_members: s.total, evaluated_members: s.evaluated,
+        avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist };
+    }
+    res.json({ periods: periodRows.map(p => ({ id: p.id, label: p.period_label })),
+      grade_codes: gm.gradeCodes, company, orgs: result });
+  } catch(err) {
+    console.error('[GET /api/perf/org-tree]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/perf/quarterly-trend', auth, (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    let allowedIds = null;
+    if (!isAdmin) {
+      const lIds = getLeaderOrgIds(userId);
+      if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
+      allowedIds = lIds;
+    }
+    const { org_id, period_id_from, period_id_to } = req.query;
+    if (!period_id_from || !period_id_to)
+      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
+    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
+    if (fromId > toId) return res.status(400).json({ error: '시작 기간이 종료 기간보다 큽니다.' });
+    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
+    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const gm = buildGradeMap();
+    let userIds, orgName = '회사 전체';
+    if (org_id) {
+      const orgIdNum = parseInt(org_id);
+      if (allowedIds && !allowedIds.includes(orgIdNum)) return res.status(403).json({ error: '해당 조직 접근 권한이 없습니다.' });
+      orgName = db.prepare('SELECT name FROM organizations WHERE id=?').get(orgIdNum)?.name || '알 수 없음';
+      userIds = getSubtreeUserIds(orgIdNum);
+    } else if (isAdmin) {
+      userIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
+    } else {
+      const rootOrgId = allowedIds[0];
+      orgName = db.prepare('SELECT name FROM organizations WHERE id=?').get(rootOrgId)?.name || '알 수 없음';
+      userIds = getSubtreeUserIds(rootOrgId);
+    }
+    const result = periods.map(p => {
+      const s = calcGradeStats(userIds, [p.period_label], gm);
+      return { period_id: p.id, label: p.period_label, total: s.total, evaluated: s.evaluated,
+        avg_score: s.avg_score, avg_grade: s.avg_grade, dist: s.dist };
+    });
+    res.json({ org_name: orgName, periods: result, grade_codes: gm.gradeCodes, max_score: gm.maxScore });
+  } catch(err) {
+    console.error('[GET /api/perf/quarterly-trend]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/perf/grade-distribution', auth, (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    let allowedIds = null;
+    if (!isAdmin) {
+      const lIds = getLeaderOrgIds(userId);
+      if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
+      allowedIds = lIds;
+    }
+    const { org_id, period_id_from, period_id_to } = req.query;
+    if (!period_id_from || !period_id_to)
+      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
+    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
+    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
+    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const gm = buildGradeMap();
+    let userIds;
+    if (org_id) {
+      const orgIdNum = parseInt(org_id);
+      if (allowedIds && !allowedIds.includes(orgIdNum)) return res.status(403).json({ error: '해당 조직 접근 권한이 없습니다.' });
+      userIds = getSubtreeUserIds(orgIdNum);
+    } else if (isAdmin) {
+      userIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
+    } else {
+      userIds = getSubtreeUserIds(allowedIds[0]);
+    }
+    if (!userIds.length) {
+      return res.json({ periods: periods.map(p => p.period_label), grades: gm.gradeCodes,
+        matrix: gm.gradeCodes.map(() => periods.map(() => 0)) });
+    }
+    const uPh = userIds.map(() => '?').join(',');
+    const matrix = gm.gradeCodes.map(grade =>
+      periods.map(p => {
+        const row = db.prepare(`
+          SELECT COUNT(*) as c FROM final_evaluations fe
+          JOIN eval_cycles ec ON fe.eval_id=ec.id
+          WHERE ec.user_id IN (${uPh}) AND ec.period_label=? AND fe.selected_grade=?
+        `).get(...userIds, p.period_label, grade);
+        return row?.c || 0;
+      })
+    );
+    res.json({ periods: periods.map(p => p.period_label), grades: gm.gradeCodes, matrix });
+  } catch(err) {
+    console.error('[GET /api/perf/grade-distribution]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    let allowedIds = null;
+    if (!isAdmin) {
+      const lIds = getLeaderOrgIds(userId);
+      if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
+      allowedIds = lIds;
+    }
+    const { period_id_from, period_id_to } = req.body;
+    if (!period_id_from || !period_id_to)
+      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
+    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
+    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
+    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const periodLabels = periods.map(p => p.period_label);
+    const periodStr = periods.length
+      ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';
+    const gm = buildGradeMap();
+    const baseIds = isAdmin
+      ? db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id)
+      : getSubtreeUserIds(allowedIds[0]);
+    const compStats = calcGradeStats(baseIds, periodLabels, gm);
+    const subOrgs = db.prepare(
+      'SELECT id, name FROM organizations WHERE is_active=1 AND parent_id IS NOT NULL ORDER BY sort_order, id'
+    ).all().filter(o => !allowedIds || allowedIds.includes(o.id));
+    const orgSArr = subOrgs.map(o => {
+      const s = calcGradeStats(getSubtreeUserIds(o.id), periodLabels, gm);
+      return { name: o.name, total: s.total, avg_score: s.avg_score, avg_grade: s.avg_grade };
+    });
+    const trendArr = periods.map(p => {
+      const s = calcGradeStats(baseIds, [p.period_label], gm);
+      return { label: p.period_label, avg_score: s.avg_score, avg_grade: s.avg_grade };
+    });
+    const sorted = [...orgSArr].filter(o => o.avg_score !== null).sort((a,b) => (b.avg_score||0)-(a.avg_score||0));
+    const evalRate = compStats.total > 0 ? Math.round(compStats.evaluated/compStats.total*100) : 0;
+    const distStr = Object.entries(compStats.dist).map(([g,c]) => `${g}: ${c}명`).join(', ') || '없음';
+    const topStr = sorted.slice(0,3).map(o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score||'-'}/${gm.maxScore} (${o.avg_grade||'-'})`).join('\n') || '- 데이터 없음';
+    const botStr = sorted.slice(-2).reverse().map(o => `- ${o.name}: ${o.total}명, 평균 ${o.avg_score||'-'}/${gm.maxScore} (${o.avg_grade||'-'})`).join('\n') || '- 데이터 없음';
+    const trendStr = trendArr.map(t => `- ${t.label}: ${t.avg_score !== null ? t.avg_score+'/'+gm.maxScore : '데이터 없음'} (${t.avg_grade||'-'})`).join('\n');
+    const prompt = `당신은 회사의 인사 데이터 분석 전문가입니다.\n아래 평가 통계를 분석하여 경영진·인사팀용 요약 보고서를 작성해주세요.\n\n## 분석 대상\n- 회사: ㈜사이냅소프트\n- 기간: ${periodStr}\n- 점수 체계: ${gm.maxScore}점 만점 (${gm.gradeCodes.join('>')})\n\n## 회사 전체 통계\n- 직원: ${compStats.total}명, 평가 완료: ${compStats.evaluated}명 (${evalRate}%)\n- 평균: ${compStats.avg_score !== null ? compStats.avg_score+'/'+gm.maxScore : '데이터 없음'} (${compStats.avg_grade||'-'})\n- 등급 분포: ${distStr}\n\n## 우수 조직\n${topStr}\n\n## 하위 조직\n${botStr}\n\n## 분기별 추이\n${trendStr||'- 데이터 없음'}\n\n## 요청\n다음 5개 항목을 각 1~2줄, 총 10줄 이내. 반드시 아래 JSON만 출력 (마크다운 코드블록 없이):\n{"overall":"...","strengths":["...","..."],"weaknesses":["...","..."],"trend":"...","actions":["...","..."]}`;
+    const llmRes = await fetch(
+      process.env.LLM_API_BASE || 'https://chat.synap.co.kr/api/chat/completions',
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.LLM_API_KEY||''}` },
+        body: JSON.stringify({ model: process.env.LLM_MODEL||'SynapAssistant-MoE-30B', stream: false, max_tokens: 600,
+          messages: [{ role: 'user', content: prompt }] }) }
+    );
+    if (!llmRes.ok) {
+      const t = await llmRes.text();
+      console.error('[org-ai-summary] LLM 오류:', llmRes.status, t);
+      return res.status(500).json({ error: `LLM 호출 실패 (${llmRes.status})` });
+    }
+    const llmData = await llmRes.json();
+    const raw = llmData.choices?.[0]?.message?.content || '';
+    let structured = null;
+    try { const m = raw.match(/\{[\s\S]*\}/); if (m) structured = JSON.parse(m[0]); } catch(e) {}
+    auditLog(userId, 'ORG_AI_SUMMARY_GENERATED', null, '전체 조직', `기간: ${periodStr}`, req.ip);
+    res.json({ summary: raw, structured, generated_at: new Date().toISOString() });
+  } catch(err) {
+    console.error('[POST /api/perf/org-ai-summary]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── 조직 관리 API ─────────────────────────────────────────
 
 // [PROMPT_38] Repository Pattern 적용

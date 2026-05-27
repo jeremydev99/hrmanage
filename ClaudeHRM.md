@@ -293,6 +293,10 @@ POST   /api/okr/:id/progress            OKR 달성률 업데이트
 GET    /api/perf/my-summary             내 성과 요약
 GET    /api/perf/team-summary           팀 성과 요약 (조직장)
 POST   /api/perf/ai-summary             AI 성과 요약 생성
+GET    /api/perf/org-tree               전체 조직 트리 + 통계 (권한별, 최대 8기간)
+GET    /api/perf/quarterly-trend        분기별 평균 추이 (최대 8기간)
+GET    /api/perf/grade-distribution     등급 분포 시계열 (히트맵용, 최대 8기간)
+POST   /api/perf/org-ai-summary         전체 조직 AI 요약 (사내 LLM, ORG_AI_SUMMARY_GENERATED 감사)
 
 GET    /api/admin/eval-status           전직원 평가 현황
 POST   /api/admin/eval/:evalId/force-phase  평가 단계 강제 변경 (admin+)
@@ -321,7 +325,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - `close_on_browser_close`: sessionStorage 사용
     - `timeout_minutes`: localStorage synap_expire, 1분마다 체크, 최대 8시간
 11. **로그인 공지사항**: `app_settings.notice` — `GET /api/notice` 인증 불필요, 감사로그 기록
-12. **성과관리 홈**: `Pages.perfHome` — 역할별 뷰(내 성과/우리팀/전체조직), AI 요약(`POST /api/perf/ai-summary`)
+12. **성과관리 홈**: `Pages.perfHome` — 역할별 뷰(내 성과/우리팀/전체조직 분석), AI 요약(`POST /api/perf/ai-summary`, `POST /api/perf/org-ai-summary`), 전체 조직 분석은 master/admin/조직장만 접근, 최대 8기간 추이 + Chart.js 라인/바/히트맵 토글
 13. **OKR**: `Pages.okrEval(periodLabel, evalYear, mode)` + `startNewOKR()` (기간 선택 UI 포함)
 14. **관리자 dirty 추적**: `_adminDirty`, `markDirty()`, `clearDirty()` — `switchAdmTab()` 에서 미저장 경고
 15. **관리자 평가정책 저장 방식**: `_policyState`(임시 저장) + `setPolicyState(key, val, btn)` — 버튼 강조, `saveAllPolicy()`로 일괄 API 호출, `_policyDirty` 로 탭 이동 경고
@@ -378,6 +382,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 전체 조직 AI 요약 + 평가 통계 (회사/본부/팀 3단계, 8기간 추이, 차트 3종, AI 10줄 구조화) (PROMPT 58) | Claude Code |
 | 2026-05-27 | 본인 비밀번호 변경 기능 (validatePassword + change-password API + 모달 UI, INFRA-3 일부) (PROMPT 57) | Claude Code |
 | 2026-05-27 | TOTP 2단계 인증 보류 결정 반영 (사용자 정정, 소수 조직 관리자 승인으로 충분) (PROMPT 56B) | Claude Code |
 | 2026-05-27 | INFRA 로드맵 갱신 (옵션 A 결정, 매니지드 전환 호환성 5원칙, TOTP 채택, 신규 기능 우선순위) (PROMPT 56) | Claude Code |
@@ -708,12 +713,11 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - INFRA-3 일부 미리 완료
 - 자동 푸시: 회색 지대 (인증 영역, 사용자 확인 후 푸시)
 
-### 우선순위 2: 전체 조직 AI 요약 + 평가 통계
+### 우선순위 2: 전체 조직 AI 요약 + 평가 통계 ✅ 완료 (2026-05-27, PROMPT 58)
 - 위험도: 중 (기능 추가, 스키마 변경 없음)
-- 작업량: 3~5일
-- 구성: 회사 전체 평균 등급 + 조직별 평균 등급(트리) + 분기별 평균 등급 추이 + AI 요약(구조화)
-- 권한: master/admin만 접근
-- 시각화: 차트 + 테이블
+- 구성: 조직 트리(회사/팀) + 기간별 등급 통계 + 분기별 추이 차트(라인/바/히트맵) + AI 10줄 구조화 요약
+- 권한: master/admin 전체, 조직장 본인+하위 재귀, 일반 user 접근 불가
+- 신규 API: org-tree, quarterly-trend, grade-distribution, org-ai-summary
 
 ### 보류 (별도 검토 필요)
 - ~~외부 본인인증 (카톡/PASS)~~ — TOTP로 대체 결정

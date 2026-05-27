@@ -482,9 +482,10 @@ Pages.perfHome = async function() {
     const user = App.user;
     const isAdmin = ['master','admin'].includes(user?.role);
 
-    const [mySummary, teamSummary] = await Promise.all([
+    const [mySummary, teamSummary, evalPeriods] = await Promise.all([
       API.get('/perf/my-summary').catch(() => []),
       API.get('/perf/team-summary').catch(() => ({ is_leader: false, teams: [] })),
+      API.get('/eval-periods').catch(() => []),
     ]);
 
     area.innerHTML = '';
@@ -500,7 +501,7 @@ Pages.perfHome = async function() {
         <div style="display:flex;gap:4px">
           <button class="btn btn-primary btn-sm perf-view-btn" id="view-my" onclick="switchPerfView('my')">내 성과</button>
           ${teamSummary.is_leader ? `<button class="btn btn-ghost btn-sm perf-view-btn" id="view-team" onclick="switchPerfView('team')">우리 팀</button>` : ''}
-          ${isAdmin ? `<button class="btn btn-ghost btn-sm perf-view-btn" id="view-org" onclick="switchPerfView('org')">전체 조직</button>` : ''}
+          ${isAdmin || teamSummary.is_leader ? `<button class="btn btn-ghost btn-sm perf-view-btn" id="view-org" onclick="switchPerfView('org')">전체 조직 분석</button>` : ''}
         </div>
       </div>`;
     area.appendChild(header);
@@ -532,15 +533,15 @@ Pages.perfHome = async function() {
       area.appendChild(teamView);
     }
 
-    if (isAdmin) {
+    if (isAdmin || teamSummary.is_leader) {
       const orgView = document.createElement('div');
       orgView.id = 'perf-view-org';
       orgView.style.display = 'none';
-      orgView.innerHTML = '<div class="card"><div class="alert alert-teal">🚧 전체 조직 뷰는 준비 중입니다.</div></div>';
+      orgView.innerHTML = renderOrgViewHTML(evalPeriods);
       area.appendChild(orgView);
     }
 
-    window._perfData = { mySummary, teamSummary, user };
+    window._perfData = { mySummary, teamSummary, user, evalPeriods };
   } catch(err) {
     area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
   }
@@ -640,10 +641,11 @@ function switchPerfView(view) {
     if (el)  el.style.display  = v===view ? 'block' : 'none';
     if (btn) { btn.classList.toggle('btn-primary', v===view); btn.classList.toggle('btn-ghost', v!==view); }
   });
+  // 전체 조직 뷰는 자체 AI 섹션을 사용하므로 상단 AI 섹션 숨김
+  const aiSection = document.getElementById('ai-summary-section');
+  if (aiSection) aiSection.style.display = view === 'org' ? 'none' : '';
   const aiBtn = document.querySelector('#ai-summary-section button');
-  if (aiBtn) aiBtn.onclick = () => loadAISummary(
-    view==='my' ? 'personal' : view==='team' ? 'team' : 'org'
-  );
+  if (aiBtn) aiBtn.onclick = () => loadAISummary(view === 'my' ? 'personal' : 'team');
 }
 
 async function loadAISummary(type) {
@@ -752,6 +754,277 @@ function openPasswordChangeModal() {
 
 function closePasswordChangeModal() {
   document.getElementById('pw-change-modal')?.remove();
+}
+
+// ── 전체 조직 분석 (PROMPT 58) ────────────────────────────
+function renderOrgViewHTML(periods) {
+  const sp = Array.isArray(periods) ? [...periods].sort((a,b) => a.id - b.id) : [];
+  const defFromId = sp.length > 8 ? sp[sp.length - 8].id : (sp[0]?.id || '');
+  const defToId   = sp[sp.length - 1]?.id || '';
+  const opts = p => sp.map(q => `<option value="${q.id}"${q.id == p?' selected':''}>${q.period_label}</option>`).join('');
+  return `
+    <div class="card" style="margin-bottom:12px">
+      <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:12px">📈 전체 조직 분석</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
+        <span style="font-size:13px;color:var(--o700)">기간:</span>
+        <select id="org-period-from" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(defFromId)}</select>
+        <span style="font-size:13px;color:var(--o700)">~</span>
+        <select id="org-period-to" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(defToId)}</select>
+        <span style="font-size:11px;color:var(--muted)">(최대 8개 기간)</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span style="font-size:13px;color:var(--o700)">조직 깊이:</span>
+        <select id="org-max-depth" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">
+          <option value="0">회사만</option><option value="1">1단계</option>
+          <option value="2">2단계</option><option value="999" selected>전체</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadOrgAnalysis()">분석 로드</button>
+      </div>
+    </div>
+    <div id="org-analysis-result">
+      <div class="card"><div class="alert alert-teal" style="font-size:13px">기간과 조직 깊이를 선택한 후 "분석 로드" 버튼을 클릭하세요.</div></div>
+    </div>`;
+}
+
+async function loadOrgAnalysis() {
+  const fromEl = document.getElementById('org-period-from');
+  const toEl   = document.getElementById('org-period-to');
+  const depEl  = document.getElementById('org-max-depth');
+  const resEl  = document.getElementById('org-analysis-result');
+  if (!fromEl || !toEl || !resEl) return;
+  const fromId = parseInt(fromEl.value), toId = parseInt(toEl.value);
+  const maxDep = parseInt(depEl?.value) || 999;
+  if (fromId > toId) {
+    resEl.innerHTML = '<div class="card"><div class="alert alert-red">시작 기간이 종료 기간보다 늦습니다.</div></div>';
+    return;
+  }
+  const ep = (window._perfData?.evalPeriods || []).filter(p => p.id >= fromId && p.id <= toId);
+  if (ep.length > 8) {
+    resEl.innerHTML = '<div class="card"><div class="alert alert-red">최대 8개 기간까지 선택 가능합니다. 범위를 좁혀주세요.</div></div>';
+    return;
+  }
+  if (!ep.length) {
+    resEl.innerHTML = '<div class="card"><div class="alert alert-orange">선택한 범위에 유효한 기간이 없습니다.</div></div>';
+    return;
+  }
+  resEl.innerHTML = '<div class="spinner" style="padding:20px">분석 중...</div>';
+  try {
+    const pIds = ep.map(p => p.id).join(',');
+    const [orgTree, trend] = await Promise.all([
+      API.get(`/perf/org-tree?period_ids=${pIds}&max_depth=${maxDep}`),
+      API.get(`/perf/quarterly-trend?period_id_from=${fromId}&period_id_to=${toId}`)
+    ]);
+    window._orgData = { orgTree, trend, fromId, toId };
+    renderOrgAnalysisResult(orgTree, trend);
+  } catch(err) {
+    resEl.innerHTML = `<div class="card"><div class="alert alert-red">오류: ${err.message}</div></div>`;
+  }
+}
+
+function renderOrgAnalysisResult(orgTree, trend) {
+  const resEl = document.getElementById('org-analysis-result');
+  if (!resEl) return;
+  const { company, orgs = [], grade_codes = [] } = orgTree;
+
+  const scoreBar = (avg, max) => {
+    if (avg === null) return '<span style="color:var(--muted);font-size:12px">-</span>';
+    const pct = Math.round(avg / max * 100);
+    const col = pct >= 75 ? 'var(--green)' : pct >= 50 ? 'var(--o500)' : '#E53935';
+    return `<div style="display:flex;align-items:center;gap:6px">
+      <div style="width:50px;background:var(--o100);border-radius:6px;height:5px">
+        <div style="background:${col};border-radius:6px;height:100%;width:${pct}%"></div>
+      </div>
+      <span style="font-size:12px;font-weight:600;color:${col}">${avg}/${max}</span>
+    </div>`;
+  };
+
+  const coHtml = company ? `
+    <div class="card" style="margin-bottom:12px;background:linear-gradient(135deg,var(--o50),#fff)">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;align-items:center">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--o800)">🏢 ${company.name}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">
+            총 ${company.total_members}명 · 평가 완료 ${company.evaluated_members}명
+            (${company.total_members > 0 ? Math.round(company.evaluated_members/company.total_members*100) : 0}%)
+          </div>
+        </div>
+        ${company.avg_score !== null ? `
+        <div style="display:flex;gap:16px;align-items:center">
+          <div style="text-align:center">
+            <div style="font-size:28px;font-weight:900;color:var(--o500)">${company.avg_grade||'-'}</div>
+            <div style="font-size:11px;color:var(--muted)">평균 등급</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:18px;font-weight:700;color:var(--o600)">${company.avg_score}/${company.avg_score_max}</div>
+            <div style="font-size:11px;color:var(--muted)">평균 점수</div>
+          </div>
+        </div>` : '<span style="color:var(--muted);font-size:13px">평가 데이터 없음</span>'}
+      </div>
+      ${Object.keys(company.grade_distribution||{}).length ? `
+      <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px">
+        ${grade_codes.filter(g => (company.grade_distribution||{})[g] != null).map(g =>
+          `<span style="background:var(--o100);padding:3px 8px;border-radius:12px;font-size:12px"><b>${g}</b> ${company.grade_distribution[g]||0}명</span>`
+        ).join('')}
+      </div>` : ''}
+    </div>` : '';
+
+  const orgHtml = `
+    <div class="card" style="margin-bottom:12px;overflow-x:auto">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">조직별 현황</div>
+      ${orgs.length ? `<table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:2px solid var(--o200)">
+          <th style="text-align:left;padding:6px 8px;color:var(--muted)">조직</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted)">직접 인원</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted)">평가완료</th>
+          <th style="text-align:center;padding:6px 8px;color:var(--muted)">등급</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--muted)">점수</th>
+        </tr></thead>
+        <tbody>${orgs.map(o => `
+          <tr style="border-bottom:1px solid var(--o100)">
+            <td style="padding:6px 8px 6px ${8 + o.depth * 16}px">
+              ${o.depth > 0 ? '<span style="color:var(--o300);margin-right:2px">└</span>' : ''}
+              <span style="font-weight:${o.depth===0?600:400}">${o.name}</span>
+              ${o.leader_name ? `<span style="font-size:11px;color:var(--muted);margin-left:4px">(${o.leader_name})</span>` : ''}
+            </td>
+            <td style="text-align:center;padding:6px 8px">${o.direct_members}</td>
+            <td style="text-align:center;padding:6px 8px">${o.evaluated_members}${o.total_members > 0 ? `<span style="font-size:10px;color:var(--muted)">(${Math.round(o.evaluated_members/o.total_members*100)}%)</span>` : ''}</td>
+            <td style="text-align:center;padding:6px 8px">${o.avg_grade ? `<span class="bd bd-approved" style="font-size:11px">${o.avg_grade}</span>` : '-'}</td>
+            <td style="padding:6px 8px">${scoreBar(o.avg_score, o.avg_score_max)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : '<div class="alert alert-orange" style="font-size:12px">조직 데이터가 없습니다.</div>'}
+    </div>`;
+
+  const hasTrend = trend?.periods?.length > 0;
+  const chartHtml = hasTrend ? `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+        <div style="font-size:13px;font-weight:600">분기별 추이</div>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-primary btn-sm" id="chart-btn-line" onclick="switchOrgChartType('line')">라인</button>
+          <button class="btn btn-ghost btn-sm" id="chart-btn-bar" onclick="switchOrgChartType('bar')">바</button>
+          <button class="btn btn-ghost btn-sm" id="chart-btn-heatmap" onclick="switchOrgChartType('heatmap')">히트맵</button>
+        </div>
+      </div>
+      <div id="org-chart-container">
+        <canvas id="org-trend-chart" style="max-height:220px"></canvas>
+      </div>
+    </div>` : '';
+
+  const aiHtml = `
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600">🤖 조직 AI 요약</div>
+        <button class="btn btn-ghost btn-sm" onclick="generateOrgAISummary()">AI 요약 생성</button>
+      </div>
+      <div id="org-ai-result" style="font-size:13px;color:var(--muted);line-height:1.7">
+        "AI 요약 생성" 버튼을 클릭하면 조직 평가 데이터를 AI가 분석합니다.
+      </div>
+    </div>`;
+
+  resEl.innerHTML = coHtml + orgHtml + chartHtml + aiHtml;
+  if (hasTrend) requestAnimationFrame(() => { window._orgTrendData = trend; renderOrgChart(trend, 'line'); });
+}
+
+function renderOrgChart(trendData, type) {
+  if (type === 'heatmap') { renderOrgHeatmap(); return; }
+  if (typeof Chart === 'undefined') {
+    const c = document.getElementById('org-chart-container');
+    if (c) c.innerHTML = '<div class="alert alert-orange" style="font-size:12px">Chart.js 라이브러리를 로드하지 못했습니다.</div>';
+    return;
+  }
+  const container = document.getElementById('org-chart-container');
+  if (!container) return;
+  container.innerHTML = '<canvas id="org-trend-chart" style="max-height:220px"></canvas>';
+  const canvas = document.getElementById('org-trend-chart');
+  if (!canvas) return;
+  if (window._orgChart) { try { window._orgChart.destroy(); } catch(e) {} window._orgChart = null; }
+  const labels  = trendData.periods.map(p => p.label);
+  const scores  = trendData.periods.map(p => p.avg_score);
+  const maxScore = trendData.max_score || 6;
+  window._orgChart = new Chart(canvas, {
+    type,
+    data: {
+      labels,
+      datasets: [{ label: `${trendData.org_name||'전체'} 평균 점수`, data: scores,
+        borderColor: '#F07820', backgroundColor: type === 'bar' ? 'rgba(240,120,32,0.65)' : 'rgba(240,120,32,0.12)',
+        fill: type === 'line', tension: 0.35, pointBackgroundColor: '#F07820', pointRadius: 4 }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } },
+      scales: { y: { min: 0, max: maxScore, title: { display: true, text: `점수 (/${maxScore})` } } } }
+  });
+}
+
+async function renderOrgHeatmap() {
+  const container = document.getElementById('org-chart-container');
+  if (!container) return;
+  const d = window._orgData;
+  if (!d) return;
+  container.innerHTML = '<div class="spinner" style="font-size:12px;padding:10px">히트맵 로드 중...</div>';
+  try {
+    const data = await API.get(`/perf/grade-distribution?period_id_from=${d.fromId}&period_id_to=${d.toId}`);
+    const maxCnt = Math.max(...data.matrix.flat(), 1);
+    const gradeRgb = [[45,164,78],[87,171,90],[240,120,32],[240,180,41],[229,57,53],[198,40,40]];
+    let html = `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;min-width:300px">
+      <thead><tr><th style="padding:4px 8px;color:var(--muted)">등급</th>
+      ${data.periods.map(p => `<th style="padding:4px 8px;color:var(--muted);white-space:nowrap;font-weight:400">${p}</th>`).join('')}
+      </tr></thead><tbody>
+      ${data.grades.map((g, gi) => {
+        const [r, gv, b] = gradeRgb[gi] || [108, 117, 125];
+        return `<tr><td style="padding:4px 8px;font-weight:700">${g}</td>
+        ${data.matrix[gi].map(cnt => {
+          const alpha = cnt > 0 ? (0.15 + (cnt/maxCnt)*0.70).toFixed(2) : '0.06';
+          return `<td style="padding:6px 10px;text-align:center;background:rgba(${r},${gv},${b},${alpha});border-radius:3px">
+            <span style="font-weight:${cnt>0?'600':'300'};color:${cnt>0?'#333':'var(--muted)'}">${cnt > 0 ? cnt : '-'}</span>
+          </td>`;
+        }).join('')}</tr>`;
+      }).join('')}
+      </tbody></table></div>`;
+    container.innerHTML = html;
+  } catch(e) {
+    container.innerHTML = `<div class="alert alert-orange" style="font-size:12px">히트맵 로드 실패: ${e.message}</div>`;
+  }
+}
+
+function switchOrgChartType(type) {
+  ['line','bar','heatmap'].forEach(t => {
+    const btn = document.getElementById('chart-btn-'+t);
+    if (btn) { btn.classList.toggle('btn-primary', t===type); btn.classList.toggle('btn-ghost', t!==type); }
+  });
+  if (window._orgTrendData) renderOrgChart(window._orgTrendData, type);
+}
+
+async function generateOrgAISummary() {
+  const resEl = document.getElementById('org-ai-result');
+  const fromEl = document.getElementById('org-period-from');
+  const toEl   = document.getElementById('org-period-to');
+  if (!resEl || !fromEl || !toEl) return;
+  resEl.innerHTML = '<div class="spinner" style="font-size:13px">AI 분석 중...</div>';
+  try {
+    const r = await API.post('/perf/org-ai-summary', {
+      period_id_from: parseInt(fromEl.value),
+      period_id_to: parseInt(toEl.value)
+    });
+    if (r.structured) {
+      const s = r.structured;
+      const parts = [];
+      if (s.overall)    parts.push(`<div style="margin-bottom:8px"><b>📊 전체 요약</b><br>${s.overall}</div>`);
+      if (s.strengths?.length) parts.push(`<div style="margin-bottom:8px"><b>💪 강점 부서</b><br>${s.strengths.map(x=>'• '+x).join('<br>')}</div>`);
+      if (s.weaknesses?.length) parts.push(`<div style="margin-bottom:8px"><b>⚠️ 약점 부서</b><br>${s.weaknesses.map(x=>'• '+x).join('<br>')}</div>`);
+      if (s.trend)      parts.push(`<div style="margin-bottom:8px"><b>📈 트렌드</b><br>${s.trend}</div>`);
+      if (s.actions?.length) parts.push(`<div style="margin-bottom:8px"><b>🎯 액션 아이템</b><br>${s.actions.map(x=>'• '+x).join('<br>')}</div>`);
+      parts.push(`<div style="font-size:11px;color:var(--muted);margin-top:8px">생성: ${new Date(r.generated_at).toLocaleString('ko-KR')} · AI 결과는 참고용입니다.</div>`);
+      resEl.innerHTML = `<div style="line-height:1.8">${parts.join('')}</div>`;
+    } else {
+      const el = document.createElement('div');
+      el.style.cssText = 'white-space:pre-wrap;line-height:1.8;color:var(--o800);font-size:13px';
+      el.textContent = r.summary;
+      resEl.innerHTML = '';
+      resEl.appendChild(el);
+    }
+  } catch(e) {
+    resEl.innerHTML = `<div style="color:#E53935;font-size:13px">AI 요약 생성 실패: ${e.message}</div>`;
+  }
 }
 
 async function submitPasswordChange() {
