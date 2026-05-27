@@ -377,6 +377,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | INFRA-2A-2 영향 분석 (DateTime/Boolean/Naming 패턴, INFRA-2A-2_ANALYSIS.md) (PROMPT 53) | Claude Code |
 | 2026-05-22 | 자동 푸시 정책 도입 (일반 수정 자동, 중대 변경 수동) (PROMPT 53A) | Claude Code |
 | 2026-05-22 | 개인정보 보호 원칙 신규 작성 (HRPRIVACY_PRINCIPLES.md, B-1~B-4+C 결정 반영) (PROMPT 52) | Claude Code |
 | 2026-05-21 | 국내 호스팅 4사 비교 (md+xlsx, 신뢰도·인지도 ×2 가중 추가) → NCloud 선정 (PROMPT 51) | Claude Code |
@@ -566,7 +567,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### INFRA-2A: PostgreSQL 전환
 - [x] INFRA-2A-1: PostgreSQL 호환 schema 설계 (2026-05-20)
-- [ ] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석
+- [x] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석 (2026-05-27, INFRA-2A-2_ANALYSIS.md 참조)
 - [ ] INFRA-2A-3: 어댑터 _flatten() DateTime → ISO string 변환 추가
 - [ ] INFRA-2A-4: 로컬 PostgreSQL 컨테이너 마이그레이션 + 기능 검증
 - [ ] INFRA-2A-5: SQLite → PostgreSQL 데이터 이관 스크립트
@@ -666,7 +667,7 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
 
 ### INFRA-2A: PostgreSQL 전환
 - [x] INFRA-2A-1: PostgreSQL 호환 schema 설계 (2026-05-20, PROMPT 46)
-- [ ] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석
+- [x] INFRA-2A-2: DateTime/Boolean 타입 전환 영향 분석 (2026-05-27, INFRA-2A-2_ANALYSIS.md 참조)
 - [ ] INFRA-2A-3: 어댑터 _flatten() DateTime → ISO string 변환 추가
 - [ ] INFRA-2A-4: 로컬 PostgreSQL 컨테이너 마이그레이션 + 기능 검증 (V3 시나리오 필수)
 - [ ] INFRA-2A-5: SQLite → PostgreSQL 데이터 이관 스크립트
