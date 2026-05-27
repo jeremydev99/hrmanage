@@ -111,6 +111,37 @@ function auditLog(userId, action, targetId, targetName, detail, ip) {
   }
 }
 
+// ── 비밀번호 정책 검증 ────────────────────────────────────
+function validatePassword(password, user) {
+  if (!password || password.length < 8)
+    return { valid: false, error: '비밀번호는 최소 8자 이상이어야 합니다.' };
+  if (password.length > 128)
+    return { valid: false, error: '비밀번호는 128자 이하여야 합니다.' };
+
+  const typeCount = [/[a-z]/, /[A-Z]/, /[0-9]/, /[!@#$%^&*()\-_+=[\]{}|;:,.<>?]/]
+    .filter(r => r.test(password)).length;
+  if (typeCount < 2)
+    return { valid: false, error: '비밀번호는 영문·숫자·특수문자 중 2종 이상을 포함해야 합니다.' };
+
+  const weak = [
+    'password','password1','password123',
+    '12345678','123456789','qwerty','qwerty123',
+    'admin','admin1234','admin1',
+    'user1234','user','user123',
+    'synapsoft','synap1234',
+  ];
+  if (weak.includes(password.toLowerCase()))
+    return { valid: false, error: '자주 사용되는 약한 비밀번호는 사용할 수 없습니다.' };
+
+  if (user) {
+    if (user.email && password.toLowerCase() === user.email.toLowerCase().split('@')[0])
+      return { valid: false, error: '비밀번호는 이메일 아이디와 동일할 수 없습니다.' };
+    if (user.name && user.name.length >= 4 && password.toLowerCase().includes(user.name.toLowerCase()))
+      return { valid: false, error: '비밀번호에 이름을 포함할 수 없습니다.' };
+  }
+  return { valid: true };
+}
+
 // ── JWT 미들웨어 ───────────────────────────────────────────
 function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -247,6 +278,42 @@ app.get('/api/auth/me', auth, async (req, res) => {
   } catch (e) {
     console.error('[/api/auth/me]', e);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// 본인 비밀번호 변경
+app.post('/api/auth/change-password', auth, async (req, res) => {
+  try {
+    const { current_password, new_password, new_password_confirm } = req.body;
+
+    if (!current_password || !new_password || !new_password_confirm)
+      return res.status(400).json({ error: '모든 필드를 입력해주세요.' });
+    if (new_password !== new_password_confirm)
+      return res.status(400).json({ error: '새 비밀번호와 확인이 일치하지 않습니다.' });
+    if (new_password === current_password)
+      return res.status(400).json({ error: '새 비밀번호는 현재 비밀번호와 달라야 합니다.' });
+
+    const user = await userRepo.findById(req.user.sub);
+    if (!user) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+
+    const isMatch = await bcrypt.compare(current_password, user.password_hash);
+    if (!isMatch) {
+      auditLog(req.user.sub, 'PASSWORD_CHANGE_FAILED', req.user.sub, user.name, '현재 비밀번호 불일치', req.ip);
+      return res.status(401).json({ error: '현재 비밀번호가 올바르지 않습니다.' });
+    }
+
+    const validation = validatePassword(new_password, user);
+    if (!validation.valid)
+      return res.status(400).json({ error: validation.error });
+
+    const newHash = await bcrypt.hash(new_password, 10);
+    await userRepo.updatePassword(req.user.sub, newHash);
+
+    auditLog(req.user.sub, 'PASSWORD_CHANGED', req.user.sub, user.name, '본인 비밀번호 변경', req.ip);
+    res.json({ success: true, message: '비밀번호가 변경되었습니다. 다시 로그인해주세요.', logout_required: true });
+  } catch (err) {
+    console.error('[POST /api/auth/change-password]', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

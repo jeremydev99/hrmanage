@@ -70,6 +70,7 @@ const App = {
         <!-- 가운데: PC 사용자 정보 -->
         <div class="topbar-user pc-only">
           <div id="nav-user-name" style="font-size:13px"></div>
+          <button onclick="openPasswordChangeModal()" style="margin-right:4px;background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.4)">비밀번호 변경</button>
           <button onclick="App.logout()">로그아웃</button>
         </div>
         <!-- 우측: 모바일 로그아웃 -->
@@ -324,8 +325,14 @@ function toggleMobileMenu() {
     menu.appendChild(groupDiv);
   });
 
+  const pwChangeBtn = document.createElement('div');
+  pwChangeBtn.style.cssText = 'padding:14px 16px;font-size:14px;color:#555;cursor:pointer;border-top:2px solid var(--o100);display:flex;align-items:center;gap:8px';
+  pwChangeBtn.innerHTML = '🔑 비밀번호 변경';
+  pwChangeBtn.onclick = () => { closeMobileMenu(); openPasswordChangeModal(); };
+  menu.appendChild(pwChangeBtn);
+
   const logoutBtn = document.createElement('div');
-  logoutBtn.style.cssText = 'padding:14px 16px;font-size:14px;color:#E53935;cursor:pointer;border-top:2px solid var(--o100);display:flex;align-items:center;gap:8px';
+  logoutBtn.style.cssText = 'padding:14px 16px;font-size:14px;color:#E53935;cursor:pointer;border-top:1px solid var(--o100);display:flex;align-items:center;gap:8px';
   logoutBtn.innerHTML = '🚪 로그아웃';
   logoutBtn.onclick = () => { closeMobileMenu(); App.logout(); };
   menu.appendChild(logoutBtn);
@@ -703,4 +710,89 @@ function startSessionCheck() {
       setTimeout(() => App.logout(), 1500);
     }
   }, 60 * 1000);
+}
+
+// ── 비밀번호 변경 모달 ────────────────────────────────────
+function openPasswordChangeModal() {
+  if (document.getElementById('pw-change-modal')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'pw-change-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:28px 32px;width:340px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+      <h3 style="margin:0 0 20px;font-size:17px;color:#222">🔑 비밀번호 변경</h3>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;color:#555;margin-bottom:5px">현재 비밀번호</label>
+        <input type="password" id="pw-current" autocomplete="current-password"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+      </div>
+      <div style="margin-bottom:14px">
+        <label style="display:block;font-size:13px;color:#555;margin-bottom:5px">새 비밀번호</label>
+        <input type="password" id="pw-new" autocomplete="new-password"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+        <div style="font-size:11px;color:#888;margin-top:4px">최소 8자, 영문·숫자·특수문자 중 2종 이상</div>
+      </div>
+      <div style="margin-bottom:18px">
+        <label style="display:block;font-size:13px;color:#555;margin-bottom:5px">새 비밀번호 확인</label>
+        <input type="password" id="pw-confirm" autocomplete="new-password"
+          style="width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid #ddd;border-radius:7px;font-size:14px">
+      </div>
+      <div id="pw-error" style="display:none;color:#E53935;font-size:13px;margin-bottom:12px;padding:8px 10px;background:#fff0f0;border-radius:6px"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="closePasswordChangeModal()"
+          style="padding:9px 18px;border:1px solid #ddd;border-radius:7px;background:#f5f5f5;cursor:pointer;font-size:14px">취소</button>
+        <button onclick="submitPasswordChange()"
+          style="padding:9px 18px;border:none;border-radius:7px;background:var(--primary,#F07820);color:#fff;cursor:pointer;font-size:14px;font-weight:600">변경하기</button>
+      </div>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closePasswordChangeModal(); });
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('pw-current')?.focus(), 50);
+}
+
+function closePasswordChangeModal() {
+  document.getElementById('pw-change-modal')?.remove();
+}
+
+async function submitPasswordChange() {
+  const current = document.getElementById('pw-current').value;
+  const newPw   = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  const errEl   = document.getElementById('pw-error');
+
+  errEl.style.display = 'none';
+
+  if (!current || !newPw || !confirm) {
+    errEl.textContent = '모든 필드를 입력해주세요.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPw !== confirm) {
+    errEl.textContent = '새 비밀번호와 확인이 일치하지 않습니다.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.querySelector('#pw-change-modal button:last-child');
+  if (btn) { btn.disabled = true; btn.textContent = '변경 중...'; }
+
+  try {
+    const result = await API.post('/auth/change-password', {
+      current_password: current,
+      new_password: newPw,
+      new_password_confirm: confirm,
+    });
+    closePasswordChangeModal();
+    alert(result.message || '비밀번호가 변경되었습니다. 다시 로그인해주세요.');
+    API.clearToken();
+    sessionStorage.removeItem('synap_token');
+    localStorage.removeItem('synap_token');
+    localStorage.removeItem('synap_expire');
+    App.user = null;
+    location.reload();
+  } catch (err) {
+    errEl.textContent = err.message || '비밀번호 변경에 실패했습니다.';
+    errEl.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.textContent = '변경하기'; }
+  }
 }

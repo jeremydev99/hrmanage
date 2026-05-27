@@ -54,6 +54,10 @@ class UserRepository {
   async isInApproverChain(approverId, targetUserId) {
     throw new Error('UserRepository.isInApproverChain is not implemented');
   }
+
+  async updatePassword(userId, newPasswordHash) {
+    throw new Error('UserRepository.updatePassword is not implemented');
+  }
 }
 
 module.exports = UserRepository;

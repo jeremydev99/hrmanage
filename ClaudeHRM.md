@@ -193,6 +193,7 @@ okr_key_results    id, objective_id, title, target_value, current_value,
 POST   /api/auth/login                  로그인
 POST   /api/auth/signup                 가입 신청
 GET    /api/auth/me                     내 정보
+POST   /api/auth/change-password        본인 비밀번호 변경
 
 GET    /api/users                       전체 사용자 목록 (org_id 포함)
 POST   /api/users                       사용자 추가 (admin+)
@@ -377,6 +378,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 본인 비밀번호 변경 기능 (validatePassword + change-password API + 모달 UI, INFRA-3 일부) (PROMPT 57) | Claude Code |
 | 2026-05-27 | TOTP 2단계 인증 보류 결정 반영 (사용자 정정, 소수 조직 관리자 승인으로 충분) (PROMPT 56B) | Claude Code |
 | 2026-05-27 | INFRA 로드맵 갱신 (옵션 A 결정, 매니지드 전환 호환성 5원칙, TOTP 채택, 신규 기능 우선순위) (PROMPT 56) | Claude Code |
 | 2026-05-27 | INFRA-2A-3: 어댑터 9개 _flatten 보강 + _toStr DateTime 헬퍼 도입 (V2 시나리오 통과) (PROMPT 55) | Claude Code |
@@ -654,7 +656,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### INFRA-3: 보안 강화
 - [x] .env 분리 (2026-05-13, PROMPT 34)
-- [ ] **본인 비밀번호 변경 기능** (우선순위 1, 단독 PROMPT)
+- [x] **본인 비밀번호 변경 기능** (2026-05-27, PROMPT 57)
   - 현재 비밀번호 확인 + 새 비밀번호 입력
   - 비밀번호 정책 (최소 길이, 복잡도)
   - 변경 후 다른 세션 무효화 (재로그인)
@@ -700,7 +702,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 사용자(대표) 결정에 따라 다음 순서로 진행:
 
-### 우선순위 1: 본인 비밀번호 변경
+### 우선순위 1: 본인 비밀번호 변경 ✅ 완료 (2026-05-27, PROMPT 57)
 - 위험도: 중상 (인증 영역)
 - 작업량: 1~2일
 - INFRA-3 일부 미리 완료
@@ -862,7 +864,7 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
 
 ### INFRA-3: 보안 강화
 - [x] .env 분리 (2026-05-13, PROMPT 34)
-- [ ] **본인 비밀번호 변경 기능** (우선순위 1, 단독 PROMPT)
+- [x] **본인 비밀번호 변경 기능** (2026-05-27, PROMPT 57)
   - 현재 비밀번호 확인 + 새 비밀번호 입력
   - 비밀번호 정책 (최소 길이, 복잡도)
   - 변경 후 다른 세션 무효화 (재로그인)

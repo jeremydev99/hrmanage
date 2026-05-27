@@ -71,6 +71,14 @@ class PrismaUserRepository extends UserRepository {
     });
   }
 
+  async updatePassword(userId, newPasswordHash) {
+    await this.prisma.user.update({
+      where: { id: Number(userId) },
+      data: { passwordHash: newPasswordHash },
+    });
+    return true;
+  }
+
   async isInApproverChain(approverId, targetUserId) {
     const approverIdStr = String(approverId);
     let currentUserId = Number(targetUserId);
