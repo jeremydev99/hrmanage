@@ -241,7 +241,7 @@ GET    /api/reports/:evalId             중간 보고 목록
 POST   /api/reports/:evalId             중간 보고 제출
 GET    /api/files/:fileId               파일 다운로드
 
-GET    /api/eval-periods                평가 기간 목록
+GET    /api/eval-periods                평가 기간 목록 (?year_from,?year_to — 최근 2개년 기본, 최대 10년)
 GET    /api/eval-periods/active         활성 기간
 GET    /api/eval-periods/my-modes       활성 기간별 내 평가방식
 POST   /api/eval-periods                기간 추가 (admin+)
@@ -300,7 +300,7 @@ GET    /api/perf/quarterly-trend        분기별 평균 추이 (최대 8기간,
 GET    /api/perf/grade-distribution     등급 분포 시계열 (히트맵용, 최대 8기간, ?include_inactive)
 POST   /api/perf/org-ai-summary         전체 조직 AI 요약 (사내 LLM, ORG_AI_SUMMARY_GENERATED 감사, level=summary|detailed|comprehensive, include_inactive)
 
-GET    /api/admin/eval-status           전직원 평가 현황
+GET    /api/admin/eval-status           전직원 평가 현황 (?period_ids,?include_inactive — users with cycles array)
 POST   /api/admin/eval/:evalId/force-phase  평가 단계 강제 변경 (admin+)
 GET    /api/admin/audit                 감사 로그 200건 (admin+)
 POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
@@ -452,6 +452,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 전직원 평가 현황 기간 선택 + 평가 기간 관리 접기/조회 범위 (PROMPT 60B) | Claude Code |
 | 2026-05-27 | 개발 백로그 섹션 신규 + OKR 평가 정책 결정 (운영 도구로 유지, Phase 2 재검토 등록) (PROMPT 60) | Claude Code |
 | 2026-05-27 | 평가완료 표시 보정(사이클 단위) + comprehensive AI 렌더링 수정 + 목표 미입력 차단 (PROMPT 58D) | Claude Code |
 | 2026-05-27 | 전체 조직 AI 요약 3단계 옵션 추가 (요약10줄/상세요약30줄/상세분석50줄+, 세션 캐싱, max_tokens 분기) (PROMPT 58C) | Claude Code |

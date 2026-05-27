@@ -1120,13 +1120,29 @@ async function renderAdmAudit() {
 
 
 /* ── 전직원 평가 현황 대시보드 ── */
-async function renderAdmStatus() {
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function renderAdmStatus(periodIds, includeInactive) {
+  if (periodIds === undefined) periodIds = null;
+  if (includeInactive === undefined) includeInactive = false;
+
   const el = document.getElementById('adm-status');
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const data = await API.get('/admin/eval-status');
-    if (!Array.isArray(data)) throw new Error('데이터 형식 오류');
+    const allPeriods = await API.get('/eval-periods');
+    const isAdmin = App.isAdmin();
+
+    const qParts = [];
+    if (periodIds) qParts.push('period_ids=' + periodIds);
+    if (includeInactive && isAdmin) qParts.push('include_inactive=true');
+    const qs = qParts.length ? '?' + qParts.join('&') : '';
+
+    const data = await API.get('/admin/eval-status' + qs);
+    if (!data || !data.users) throw new Error('데이터 형식 오류');
 
     const phaseLabel = {
       none:               { text:'미시작',        cls:'bd-draft'    },
@@ -1140,47 +1156,68 @@ async function renderAdmStatus() {
       final_done:         { text:'평가 완료',      cls:'bd-locked'   },
     };
 
-    const total    = data.length;
-    const started  = data.filter(u => u.phase !== 'none').length;
-    const approved = data.filter(u => ['approved','final_self','final_mgr_pending','final_done'].includes(u.phase)).length;
-    const done     = data.filter(u => u.phase === 'final_done').length;
+    const wrap = document.createElement('div');
 
+    // 컨트롤 영역
+    const ctrlDiv = document.createElement('div');
+    ctrlDiv.className = 'admin-status-controls';
+
+    const activePeriods = allPeriods.filter(function(p) { return p.is_active == 1; });
+    const inactivePeriods = allPeriods.filter(function(p) { return p.is_active != 1; });
+    let periodOptHtml = '<option value="">전체 활성 (디폴트)</option>';
+    activePeriods.forEach(function(p) {
+      const sel = periodIds === String(p.id) ? ' selected' : '';
+      periodOptHtml += '<option value="' + p.id + '"' + sel + '>' + p.period_label + ' (활성)</option>';
+    });
+    if (isAdmin && includeInactive && inactivePeriods.length) {
+      periodOptHtml += '<option disabled>───────────</option>';
+      inactivePeriods.forEach(function(p) {
+        const sel = periodIds === String(p.id) ? ' selected' : '';
+        periodOptHtml += '<option value="' + p.id + '"' + sel + '>' + p.period_label + ' (비활성)</option>';
+      });
+    }
+
+    ctrlDiv.innerHTML = '<label style="font-size:13px;color:var(--muted)">조회 기간:</label>'
+      + '<select id="admStatusPeriod" onchange="reloadAdmStatus()" style="height:32px;font-size:13px">'
+      + periodOptHtml + '</select>'
+      + (isAdmin
+          ? '<label class="checkbox-inline"><input type="checkbox" id="admStatusIncludeInactive"'
+            + (includeInactive ? ' checked' : '') + ' onchange="reloadAdmStatusInactive()">'
+            + '<span style="font-size:13px">비활성 기간 포함</span></label>'
+          : '');
+    wrap.appendChild(ctrlDiv);
+
+    // 통계 카드
+    const s = data.stats;
+    const summaryDiv = document.createElement('div');
+    summaryDiv.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px';
+    [
+      { label:'전체 직원', val: s.total_users,   color:'var(--o400)'   },
+      { label:'목표 시작', val: s.started,       color:'var(--o500)'   },
+      { label:'목표 확정', val: s.goal_approved, color:'var(--green)'  },
+      { label:'평가 완료', val: s.final_done,    color:'var(--purple)' },
+    ].forEach(function(c) {
+      summaryDiv.innerHTML += '<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:700;color:' + c.color + '">' + c.val + '</div><div style="font-size:12px;color:var(--muted);margin-top:3px">' + c.label + '</div></div>';
+    });
+    wrap.appendChild(summaryDiv);
+
+    // 부서별 그룹
     const byDept = {};
-    data.forEach(u => {
+    data.users.forEach(function(u) {
       const d = u.dept || '미배정';
       if (!byDept[d]) byDept[d] = [];
       byDept[d].push(u);
     });
 
-    // 요약 카드
-    const summaryCards = [
-      { label:'전체 직원', val:total,    color:'var(--o400)'   },
-      { label:'목표 시작', val:started,  color:'var(--o500)'   },
-      { label:'목표 확정', val:approved, color:'var(--green)'  },
-      { label:'평가 완료', val:done,     color:'var(--purple)' },
-    ];
-
-    const wrap = document.createElement('div');
-
-    // 요약
-    const summaryDiv = document.createElement('div');
-    summaryDiv.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px';
-    summaryCards.forEach(s => {
-      summaryDiv.innerHTML += '<div style="background:var(--white);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center"><div style="font-size:26px;font-weight:700;color:' + s.color + '">' + s.val + '</div><div style="font-size:12px;color:var(--muted);margin-top:3px">' + s.label + '</div></div>';
-    });
-    wrap.appendChild(summaryDiv);
-
-    // 부서별 테이블
     Object.entries(byDept).forEach(function([dept, members], idx) {
       const tableId = 'dept-tbl-' + idx;
       const card = document.createElement('div');
       card.className = 'card';
       card.style.marginBottom = '10px';
 
-      // 헤더
       const hd = document.createElement('div');
       hd.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:10px';
-      hd.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:14px;font-weight:600">' + dept + '</span><span style="font-size:12px;color:var(--muted)">' + members.length + '명</span></div>';
+      hd.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:14px;font-weight:600">' + escapeHtml(dept) + '</span><span style="font-size:12px;color:var(--muted)">' + members.length + '명</span></div>';
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'btn btn-ghost btn-sm';
       toggleBtn.style.fontSize = '12px';
@@ -1190,7 +1227,6 @@ async function renderAdmStatus() {
       hd.appendChild(toggleBtn);
       card.appendChild(hd);
 
-      // 테이블 래퍼
       const tableWrap = document.createElement('div');
       tableWrap.id = tableId;
 
@@ -1200,55 +1236,64 @@ async function renderAdmStatus() {
       const tbody = tbl.querySelector('tbody');
 
       members.forEach(function(u) {
-        const ph = phaseLabel[u.phase] || { text: u.phase, cls: 'bd-draft' };
-        const tr = document.createElement('tr');
-        tr.style.cursor = 'pointer';
-        tr.dataset.userId = u.id;
-        tr.dataset.userName = u.name;
-        tr.onclick = function() { renderEvalDetail(u.id, u.name); };
-
-        const scoreHtml = u.final_score != null
-          ? '<span style="font-weight:600;color:var(--o500)">' + u.final_score + '점</span> <span class="grade grade-' + u.final_grade + '">' + u.final_grade + '</span>'
-          : '<span style="color:var(--muted);font-size:12px">-</span>';
-
-        const evalModeSelect = '<select style="font-size:11px;height:26px" onclick="event.stopPropagation()" onchange="changeUserEvalMode(' + u.id + ', this.value)">'
-          + ['MBO','OKR','KPI'].map(m => '<option value="' + m + '"' + ((u.eval_mode||'MBO')===m?' selected':'') + '>' + m + '</option>').join('')
-          + '</select>';
-        tr.innerHTML = '<td style="font-weight:500">' + u.name + '</td>'
-          + '<td style="font-size:12px;color:var(--muted)">' + (u.title||'-') + '</td>'
-          + '<td>' + evalModeSelect + '</td>'
-          + '<td><span class="bd ' + ph.cls + '">' + ph.text + '</span></td>'
-          + '<td style="font-size:12px;color:var(--muted)">' + (u.period_label||'-') + '</td>'
-          + '<td style="text-align:center;font-size:13px">' + (u.goal_count||'-') + '</td>'
-          + '<td style="text-align:center;font-size:13px">' + (u.feedback_count||'-') + '</td>'
-          + '<td style="text-align:center">' + scoreHtml + '</td>'
-          + '<td><button class="btn btn-ghost btn-sm" style="font-size:11px">상세</button></td>'
-          + (u.eval_id ? '<td><button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--o600)">단계 변경</button></td>' : '<td></td>')
-          + (u.phase === 'final_done' && u.final_eval_id && App.isMaster()
-              ? '<td><button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;font-size:11px;padding:4px 8px">🔓 잠금 해제</button></td>'
-              : '<td></td>');
-
-        // 상세 버튼 이벤트
-        tr.querySelectorAll('button')[0].onclick = function(e) {
-          e.stopPropagation();
-          renderEvalDetail(u.id, u.name);
-        };
-        // 단계 변경 버튼 이벤트
-        if (u.eval_id) {
-          tr.querySelectorAll('button')[1].onclick = function(e) {
-            e.stopPropagation();
-            showForcePhaseModal(u.eval_id, u.name, u.phase || 'none');
-          };
+        if (!u.cycles || u.cycles.length === 0) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td style="font-weight:500">' + escapeHtml(u.name) + '</td>'
+            + '<td style="font-size:12px;color:var(--muted)">' + escapeHtml(u.title || '-') + '</td>'
+            + '<td colspan="9" style="color:var(--muted);font-size:12px;text-align:center">선택 기간 데이터 없음</td>';
+          tbody.appendChild(tr);
+          return;
         }
-        // 잠금 해제 버튼 이벤트
-        if (u.phase === 'final_done' && u.final_eval_id && App.isMaster()) {
-          const btns = tr.querySelectorAll('button');
-          btns[btns.length - 1].onclick = function(e) {
+        u.cycles.forEach(function(c) {
+          const ph = phaseLabel[c.phase] || { text: c.phase || '미시작', cls: 'bd-draft' };
+          const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          tr.onclick = function() { renderEvalDetail(u.id, u.name); };
+
+          const scoreHtml = c.final_score != null
+            ? '<span style="font-weight:600;color:var(--o500)">' + Number(c.final_score).toFixed(1) + '점</span>'
+              + (c.final_grade ? ' <span class="grade grade-' + c.final_grade + '">' + c.final_grade + '</span>' : '')
+            : '<span style="color:var(--muted);font-size:12px">-</span>';
+
+          const evalModeSelect = '<select style="font-size:11px;height:26px" onclick="event.stopPropagation()" onchange="changeUserEvalMode(' + u.id + ', this.value)">'
+            + ['MBO','OKR','KPI'].map(function(m) {
+                return '<option value="' + m + '"' + ((c.eval_mode||'MBO')===m?' selected':'') + '>' + m + '</option>';
+              }).join('')
+            + '</select>';
+
+          tr.innerHTML = '<td style="font-weight:500">' + escapeHtml(u.name) + '</td>'
+            + '<td style="font-size:12px;color:var(--muted)">' + escapeHtml(u.title || '-') + '</td>'
+            + '<td>' + evalModeSelect + '</td>'
+            + '<td><span class="bd ' + ph.cls + '">' + ph.text + '</span></td>'
+            + '<td style="font-size:12px;color:var(--muted)">' + escapeHtml(c.period_label || '-') + '</td>'
+            + '<td style="text-align:center;font-size:13px">' + (c.goal_count != null ? c.goal_count : '-') + '</td>'
+            + '<td style="text-align:center;font-size:13px">' + (c.feedback_count != null ? c.feedback_count : '-') + '</td>'
+            + '<td style="text-align:center">' + scoreHtml + '</td>'
+            + '<td><button class="btn btn-ghost btn-sm" style="font-size:11px">상세</button></td>'
+            + (c.eval_id ? '<td><button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--o600)">단계 변경</button></td>' : '<td></td>')
+            + (c.phase === 'final_done' && c.final_eval_id && App.isMaster()
+                ? '<td><button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;font-size:11px;padding:4px 8px">🔓 잠금 해제</button></td>'
+                : '<td></td>');
+
+          tr.querySelectorAll('button')[0].onclick = function(e) {
             e.stopPropagation();
-            unlockFinalEval(u.final_eval_id, u.name);
+            renderEvalDetail(u.id, u.name);
           };
-        }
-        tbody.appendChild(tr);
+          if (c.eval_id) {
+            tr.querySelectorAll('button')[1].onclick = function(e) {
+              e.stopPropagation();
+              showForcePhaseModal(c.eval_id, u.name, c.phase || 'none');
+            };
+          }
+          if (c.phase === 'final_done' && c.final_eval_id && App.isMaster()) {
+            const btns = tr.querySelectorAll('button');
+            btns[btns.length - 1].onclick = function(e) {
+              e.stopPropagation();
+              unlockFinalEval(c.final_eval_id, u.name);
+            };
+          }
+          tbody.appendChild(tr);
+        });
       });
 
       tableWrap.appendChild(tbl);
@@ -1261,6 +1306,17 @@ async function renderAdmStatus() {
   } catch(e) {
     el.innerHTML = '<div class="alert alert-red">오류: ' + e.message + '</div>';
   }
+}
+
+function reloadAdmStatus() {
+  const periodId = document.getElementById('admStatusPeriod')?.value || '';
+  const includeInactive = document.getElementById('admStatusIncludeInactive')?.checked || false;
+  renderAdmStatus(periodId || null, includeInactive);
+}
+
+function reloadAdmStatusInactive() {
+  const includeInactive = document.getElementById('admStatusIncludeInactive')?.checked || false;
+  renderAdmStatus(null, includeInactive);
 }
 
 
@@ -1967,113 +2023,124 @@ async function addGrade() {
 
 
 /* ── 평가 기간 관리 ── */
-async function renderAdmPeriods() {
+async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
+  if (yearFrom === undefined) yearFrom = null;
+  if (yearTo === undefined) yearTo = null;
+  if (includeInactive === undefined) includeInactive = false;
+
   const el = document.getElementById('adm-periods');
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
+
+  const currentYear = new Date().getFullYear();
+  const effFrom = yearFrom !== null ? yearFrom : (currentYear - 1);
+  const effTo   = yearTo   !== null ? yearTo   : currentYear;
+
   try {
-    const periods = await API.get('/eval-periods');
-    el.innerHTML = `<div class="card">
-      <div class="card-header"><div>
-        <div class="card-header-t">평가 기간 관리</div>
-        <div class="card-header-s">활성화된 기간만 직원들이 목표를 작성할 수 있습니다</div>
-      </div></div>
+    const periods = await API.get('/eval-periods?year_from=' + effFrom + '&year_to=' + effTo);
 
-      <!-- 새 기간 추가 -->
-      <div style="background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:14px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--o800)">새 평가 기간 추가</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-          <div style="flex:1;min-width:100px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">연도</label>
-            <select id="np-year" style="height:34px;font-size:13px;width:100%">
-              <option>2024년</option><option selected>2025년</option><option>2026년</option><option>2027년</option>
-            </select>
-          </div>
-          <div style="flex:1;min-width:100px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">구분</label>
-            <select id="np-type" onchange="updatePeriodLabel()" style="height:34px;font-size:13px;width:100%">
-              <option value="q">분기</option>
-              <option value="h">반기</option>
-            </select>
-          </div>
-          <div style="flex:1;min-width:120px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">기간</label>
-            <select id="np-sub" onchange="updatePeriodLabel()" style="height:34px;font-size:13px;width:100%">
-              <option value="1">1분기 (1~3월)</option>
-              <option value="2">2분기 (4~6월)</option>
-              <option value="3">3분기 (7~9월)</option>
-              <option value="4">4분기 (10~12월)</option>
-            </select>
-          </div>
-          <div style="flex:1;min-width:100px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">활성화</label>
-            <select id="np-active" style="height:34px;font-size:13px;width:100%">
-              <option value="1">즉시 활성화</option>
-              <option value="0">비활성으로 추가</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" style="height:34px;white-space:nowrap" onclick="addEvalPeriod()">+ 추가</button>
-        </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--muted)">
-          생성될 기간: <strong id="np-preview"></strong>
-        </div>
-      </div>
+    el.innerHTML = '';
 
-      <!-- 기간 목록 -->
-      ${!periods.length
-        ? '<div class="alert alert-orange">등록된 평가 기간이 없습니다.</div>'
-        : ''}
-    </div>`;
+    // 조회 범위 컨트롤
+    const ctrlDiv = document.createElement('div');
+    ctrlDiv.className = 'period-mgr-controls';
+    ctrlDiv.style.marginBottom = '12px';
 
-    // 기간별 카드 렌더링
-    periods.forEach(period => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.marginBottom = '12px';
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:15px;font-weight:600">${period.period_label}</span>
-            <span class="bd ${period.period_type==='q'?'bd-q':'bd-h'}">${period.period_type==='q'?'분기':'반기'}</span>
-            <span class="bd ${period.is_active?'bd-approved':'bd-rejected'}">${period.is_active?'활성':'비활성'}</span>
-            ${period.locked ? '<span class="bd bd-locked" style="font-size:11px">🔒 잠김</span>' : ''}
-          </div>
-          <div style="display:flex;gap:4px">
-            <button class="btn btn-ghost btn-sm" onclick="togglePeriod(${period.id})">
-              ${period.is_active?'비활성화':'활성화'}
-            </button>
-            ${App.isMaster() ? `<button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:4px 8px;font-size:11px" onclick="deletePeriod(${period.id})">삭제</button>` : ''}
-          </div>
-        </div>
+    let fromOptHtml = '', toOptHtml = '';
+    for (let y = currentYear + 1; y >= currentYear - 10; y--) {
+      fromOptHtml += '<option value="' + y + '"' + (effFrom === y ? ' selected' : '') + '>' + y + '년</option>';
+      toOptHtml   += '<option value="' + y + '"' + (effTo   === y ? ' selected' : '') + '>' + y + '년</option>';
+    }
+    ctrlDiv.innerHTML = '<label style="font-size:13px;color:var(--muted)">조회 범위:</label>'
+      + '<select id="periodYearFrom" onchange="reloadEvalPeriods()" style="height:32px;font-size:13px">' + fromOptHtml + '</select>'
+      + '<span style="font-size:13px;padding:0 4px">~</span>'
+      + '<select id="periodYearTo" onchange="reloadEvalPeriods()" style="height:32px;font-size:13px">' + toOptHtml + '</select>'
+      + '<button class="btn btn-ghost btn-sm" onclick="reloadEvalPeriods()">조회</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="toggleAllPeriods(\'expand\')" style="margin-left:8px">전체 펼치기</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="toggleAllPeriods(\'collapse\')">전체 접기</button>'
+      + '<small style="color:var(--muted);font-size:11px;margin-left:4px">최근 2개년 기본 표시. 최대 10년.</small>';
+    el.appendChild(ctrlDiv);
 
-        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--o100)">
-          <div style="font-size:13px;font-weight:600;color:var(--o800);margin-bottom:10px">
-            📊 평가방식 설정
-            ${period.locked ? '<span class="bd bd-locked" style="font-size:11px;margin-left:6px">🔒 잠김</span>' : ''}
-          </div>
+    // 새 기간 추가 카드
+    const addCard = document.createElement('div');
+    addCard.className = 'card';
+    addCard.innerHTML = '<div class="card-header"><div>'
+      + '<div class="card-header-t">평가 기간 관리</div>'
+      + '<div class="card-header-s">활성화된 기간만 직원들이 목표를 작성할 수 있습니다</div>'
+      + '</div></div>'
+      + '<div style="background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:14px;margin-bottom:16px">'
+      + '<div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--o800)">새 평가 기간 추가</div>'
+      + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">'
+      + '<div style="flex:1;min-width:100px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">연도</label>'
+      + '<select id="np-year" style="height:34px;font-size:13px;width:100%"><option>2024년</option><option selected>2025년</option><option>2026년</option><option>2027년</option></select></div>'
+      + '<div style="flex:1;min-width:100px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">구분</label>'
+      + '<select id="np-type" onchange="updatePeriodLabel()" style="height:34px;font-size:13px;width:100%"><option value="q">분기</option><option value="h">반기</option></select></div>'
+      + '<div style="flex:1;min-width:120px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">기간</label>'
+      + '<select id="np-sub" onchange="updatePeriodLabel()" style="height:34px;font-size:13px;width:100%">'
+      + '<option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option></select></div>'
+      + '<div style="flex:1;min-width:100px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">활성화</label>'
+      + '<select id="np-active" style="height:34px;font-size:13px;width:100%"><option value="1">즉시 활성화</option><option value="0">비활성으로 추가</option></select></div>'
+      + '<button class="btn btn-primary" style="height:34px;white-space:nowrap" onclick="addEvalPeriod()">+ 추가</button>'
+      + '</div>'
+      + '<div style="margin-top:8px;font-size:12px;color:var(--muted)">생성될 기간: <strong id="np-preview"></strong></div>'
+      + '</div>'
+      + (!periods.length ? '<div class="alert alert-orange">선택 범위에 평가 기간이 없습니다.</div>' : '');
+    el.appendChild(addCard);
 
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-            <span style="font-size:12px;color:var(--muted);min-width:80px">전사 기본</span>
-            <div style="display:flex;gap:6px">
-              ${['MBO','OKR','KPI'].map(m => `
-                <button class="btn btn-sm ${(period.eval_mode||'MBO')===m?'btn-primary':'btn-ghost'}"
-                  ${period.locked?'disabled':''}
-                  onclick="setPeriodEvalMode(${period.id},'${m}',this)"
-                  style="font-size:12px;padding:3px 10px">${m}</button>
-              `).join('')}
-            </div>
-            ${period.locked
-              ? '<span style="font-size:11px;color:var(--muted)">잠금 상태</span>'
-              : `<button class="btn btn-sm" style="font-size:11px;border:1px solid var(--o300);color:var(--o600)"
-                   onclick="lockPeriodMode(${period.id})">🔒 방식 잠금</button>`}
-          </div>
+    // 기간 카드들 (접힌 상태)
+    periods.forEach(function(period) {
+      const pCard = document.createElement('div');
+      pCard.className = 'period-card';
+      pCard.style.marginBottom = '8px';
 
-          <div id="org-modes-${period.id}">
-            <div style="font-size:12px;color:var(--muted)">조직별 설정 로딩 중...</div>
-          </div>
-        </div>`;
+      const hdr = document.createElement('div');
+      hdr.className = 'period-card-header';
+      hdr.onclick = function() { togglePeriodCard(period.id); };
+      hdr.innerHTML = '<span class="toggle-icon" id="periodToggle_' + period.id + '">▶</span>'
+        + '<strong style="font-size:14px">' + period.period_label + '</strong>'
+        + '<span class="bd ' + (period.period_type==='q'?'bd-q':'bd-h') + '" style="font-size:11px">' + (period.period_type==='q'?'분기':'반기') + '</span>'
+        + '<span class="bd ' + (period.is_active?'bd-approved':'bd-rejected') + '" style="font-size:11px">' + (period.is_active?'활성':'비활성') + '</span>'
+        + (period.locked ? '<span class="bd bd-locked" style="font-size:11px">🔒 잠김</span>' : '')
+        + '<span style="color:var(--muted);font-size:12px">' + (period.eval_mode || 'MBO') + '</span>';
+      pCard.appendChild(hdr);
 
-      el.appendChild(card);
+      const body = document.createElement('div');
+      body.className = 'period-card-body';
+      body.id = 'periodBody_' + period.id;
+      body.style.display = 'none';
+      body.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">'
+        + '<div style="display:flex;align-items:center;gap:10px">'
+        + '<span style="font-size:15px;font-weight:600">' + period.period_label + '</span>'
+        + '<span class="bd ' + (period.period_type==='q'?'bd-q':'bd-h') + '">' + (period.period_type==='q'?'분기':'반기') + '</span>'
+        + '<span class="bd ' + (period.is_active?'bd-approved':'bd-rejected') + '">' + (period.is_active?'활성':'비활성') + '</span>'
+        + (period.locked ? '<span class="bd bd-locked" style="font-size:11px">🔒 잠김</span>' : '')
+        + '</div>'
+        + '<div style="display:flex;gap:4px">'
+        + '<button class="btn btn-ghost btn-sm" onclick="togglePeriod(' + period.id + ')">' + (period.is_active?'비활성화':'활성화') + '</button>'
+        + (App.isMaster() ? '<button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:4px 8px;font-size:11px" onclick="deletePeriod(' + period.id + ')">삭제</button>' : '')
+        + '</div></div>'
+        + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--o100)">'
+        + '<div style="font-size:13px;font-weight:600;color:var(--o800);margin-bottom:10px">📊 평가방식 설정'
+        + (period.locked ? '<span class="bd bd-locked" style="font-size:11px;margin-left:6px">🔒 잠김</span>' : '')
+        + '</div>'
+        + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+        + '<span style="font-size:12px;color:var(--muted);min-width:80px">전사 기본</span>'
+        + '<div style="display:flex;gap:6px">'
+        + ['MBO','OKR','KPI'].map(function(m) {
+            return '<button class="btn btn-sm ' + ((period.eval_mode||'MBO')===m?'btn-primary':'btn-ghost') + '"'
+              + (period.locked?' disabled':'')
+              + ' onclick="setPeriodEvalMode(' + period.id + ',\'' + m + '\',this)"'
+              + ' style="font-size:12px;padding:3px 10px">' + m + '</button>';
+          }).join('')
+        + '</div>'
+        + (period.locked
+            ? '<span style="font-size:11px;color:var(--muted)">잠금 상태</span>'
+            : '<button class="btn btn-sm" style="font-size:11px;border:1px solid var(--o300);color:var(--o600)" onclick="lockPeriodMode(' + period.id + ')">🔒 방식 잠금</button>')
+        + '</div>'
+        + '<div id="org-modes-' + period.id + '"><div style="font-size:12px;color:var(--muted)">조직별 설정 로딩 중...</div></div>'
+        + '</div>';
+      pCard.appendChild(body);
+      el.appendChild(pCard);
       loadOrgModes(period.id, period.locked);
     });
 
@@ -2081,6 +2148,28 @@ async function renderAdmPeriods() {
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
+}
+
+function reloadEvalPeriods() {
+  const from = parseInt(document.getElementById('periodYearFrom')?.value) || new Date().getFullYear() - 1;
+  const to   = parseInt(document.getElementById('periodYearTo')?.value)   || new Date().getFullYear();
+  if (to - from > 9) { showAlert('최대 10년 범위까지 조회 가능합니다.', 'orange'); return; }
+  if (to < from)     { showAlert('종료 연도는 시작 연도보다 같거나 커야 합니다.', 'orange'); return; }
+  renderAdmPeriods(from, to);
+}
+
+function togglePeriodCard(periodId) {
+  const body = document.getElementById('periodBody_' + periodId);
+  const icon = document.getElementById('periodToggle_' + periodId);
+  if (!body || !icon) return;
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  icon.textContent = hidden ? '▼' : '▶';
+}
+
+function toggleAllPeriods(action) {
+  document.querySelectorAll('.period-card-body').forEach(function(b) { b.style.display = action === 'expand' ? '' : 'none'; });
+  document.querySelectorAll('#adm-periods .toggle-icon').forEach(function(i) { i.textContent = action === 'expand' ? '▼' : '▶'; });
 }
 
 function updatePeriodLabel() {

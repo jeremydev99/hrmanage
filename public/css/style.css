@@ -563,3 +563,65 @@ textarea:focus{outline:none;border-color:var(--o400)}
     gap: 6px;
   }
 }
+
+/* ── 전직원 평가 현황 컨트롤 ── */
+.admin-status-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--o50);
+  border: 1px solid var(--o100);
+  border-radius: 8px;
+}
+
+/* ── 평가 기간 관리 컨트롤 ── */
+.period-mgr-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: var(--o50);
+  border: 1px solid var(--o100);
+  border-radius: 8px;
+}
+
+/* ── 평가 기간 접기/펼치기 카드 ── */
+.period-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--white);
+  overflow: hidden;
+}
+.period-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.period-card-header:hover {
+  background: var(--o50);
+}
+.toggle-icon {
+  font-size: 11px;
+  color: var(--muted);
+  width: 14px;
+  flex-shrink: 0;
+}
+.period-card-body {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── 공통 체크박스 인라인 ── */
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}

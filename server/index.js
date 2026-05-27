@@ -1157,13 +1157,34 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
 // 전체 평가 기간 목록
 app.get('/api/eval-periods', auth, (req, res) => {
   try {
-    // eval_periods 테이블 없으면 빈 배열 반환
+    const yearFrom = req.query.year_from ? parseInt(req.query.year_from) : null;
+    const yearTo   = req.query.year_to   ? parseInt(req.query.year_to)   : null;
+
+    if (yearFrom !== null && yearTo !== null) {
+      if (yearTo - yearFrom > 9) return res.status(400).json({ error: '최대 10년 범위까지 조회 가능합니다.' });
+      if (yearTo < yearFrom)     return res.status(400).json({ error: '종료 연도는 시작 연도보다 같거나 커야 합니다.' });
+    }
+
+    const filters = [];
+    const params  = [];
+    if (yearFrom !== null && yearTo !== null) {
+      filters.push('CAST(eval_year AS INTEGER) >= ?');
+      params.push(yearFrom);
+      filters.push('CAST(eval_year AS INTEGER) <= ?');
+      params.push(yearTo);
+    }
+
+    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const periods = db.prepare(
-      "SELECT * FROM eval_periods ORDER BY eval_year DESC, period_label"
-    ).all();
+      `SELECT * FROM eval_periods ${where} ORDER BY eval_year DESC, period_label`
+    ).all(...params);
+
+    res.set('X-Periods-Year-From', yearFrom ?? '');
+    res.set('X-Periods-Year-To',   yearTo   ?? '');
+    res.set('X-Periods-Total',     periods.length);
     res.json(periods);
   } catch(err) {
-    res.json([]); // 테이블 없으면 빈 배열
+    res.json([]);
   }
 });
 
@@ -1705,44 +1726,59 @@ app.post('/api/okr/:id/progress', auth, (req, res) => {
 // 전직원 평가 현황 요약 (admin+)
 app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
   try {
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const includeInactive = String(req.query.include_inactive) === 'true';
+    const effectiveInclInactive = isAdmin && includeInactive;
+    if (!isAdmin && includeInactive) {
+      auditLog(req.user.sub, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null,
+        '비관리자의 비활성 기간 포함 시도 (eval-status)', req.ip);
+    }
+
+    // 대상 기간 ID 결정
+    const periodIdsParam = req.query.period_ids || '';
+    let targetPeriodIds = [];
+    if (periodIdsParam) {
+      targetPeriodIds = periodIdsParam.split(',').map(s => Number(s.trim())).filter(Boolean);
+    } else {
+      const activeFilter = effectiveInclInactive ? '' : 'WHERE is_active=1';
+      targetPeriodIds = db.prepare(`SELECT id FROM eval_periods ${activeFilter}`).all().map(p => p.id);
+    }
+    if (targetPeriodIds.length === 0)
+      return res.json({ users: [], stats: { total_users: 0, started: 0, goal_approved: 0, final_done: 0 } });
+
+    const pPh = targetPeriodIds.map(() => '?').join(',');
     const users = db.prepare(
-      "SELECT id, name, dept, title, manager_id FROM users WHERE is_active=1 AND (account_status='approved' OR account_status IS NULL) ORDER BY dept, name"
+      "SELECT id, name, dept, title FROM users WHERE is_active=1 AND (account_status='approved' OR account_status IS NULL) ORDER BY dept, name"
     ).all();
 
     const result = users.map(u => {
-      const ev = db.prepare(
-        'SELECT * FROM eval_cycles WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
-      ).get(u.id);
-
-      let goalCount = 0, feedbackCount = 0, finalScore = null, finalGrade = null, finalEvalId = null;
-      if (ev) {
-        goalCount     = (db.prepare('SELECT COUNT(*) as c FROM goals WHERE eval_id=?').get(ev.id) || {}).c || 0;
-        feedbackCount = (db.prepare('SELECT COUNT(*) as c FROM feedbacks WHERE eval_id=?').get(ev.id) || {}).c || 0;
-        const fe      = db.prepare('SELECT id, final_score, final_grade FROM final_evaluations WHERE eval_id=?').get(ev.id);
-        finalScore    = fe ? fe.final_score : null;
-        finalGrade    = fe ? fe.final_grade : null;
-        finalEvalId   = fe ? fe.id         : null;
-      }
-
-      return {
-        id:             u.id,
-        name:           u.name,
-        dept:           u.dept  || '',
-        title:          u.title || '',
-        phase:          ev ? ev.phase        : 'none',
-        period_label:   ev ? ev.period_label : '-',
-        eval_id:        ev ? ev.id           : null,
-        final_eval_id:  finalEvalId,
-        goal_count:     goalCount,
-        feedback_count: feedbackCount,
-        final_score:    finalScore,
-        final_grade:    finalGrade,
-        submitted_at:   ev ? ev.submitted_at : null,
-        approved_at:    ev ? ev.approved_at  : null,
-        locked:         ev ? ev.locked       : 0,
-      };
+      const cycles = db.prepare(`
+        SELECT ec.id as eval_id, ec.eval_year, ec.period_label, ec.phase,
+               ec.submitted_at, ec.approved_at, ec.locked,
+               COALESCE(ep.eval_mode, 'MBO') as eval_mode,
+               (SELECT COUNT(*) FROM goals    WHERE eval_id=ec.id) as goal_count,
+               (SELECT COUNT(*) FROM feedbacks WHERE eval_id=ec.id) as feedback_count,
+               fe.id as final_eval_id, fe.final_score, fe.final_grade
+        FROM eval_cycles ec
+        LEFT JOIN eval_periods ep ON ep.eval_year=ec.eval_year AND ep.period_label=ec.period_label
+        LEFT JOIN final_evaluations fe ON fe.eval_id=ec.id
+        WHERE ec.user_id=? AND ep.id IN (${pPh})
+        ORDER BY ec.eval_year DESC, ec.period_label DESC
+      `).all(u.id, ...targetPeriodIds);
+      return { ...u, cycles };
     });
-    res.json(result);
+
+    // 통계 (사용자 기준 — 선택 기간 중 가장 진행된 phase)
+    const goalApprovedSet = new Set(['approved','final_self','final_mgr_pending','final_mgr2_pending','final_done']);
+    let started = 0, goalApproved = 0, finalDone = 0;
+    result.forEach(u => {
+      if (!u.cycles.length) return;
+      started++;
+      if (u.cycles.some(c => goalApprovedSet.has(c.phase))) goalApproved++;
+      if (u.cycles.some(c => c.phase === 'final_done')) finalDone++;
+    });
+
+    res.json({ users: result, stats: { total_users: users.length, started, goal_approved: goalApproved, final_done: finalDone } });
   } catch(err) {
     console.error('[eval-status]', err);
     res.status(500).json({ error: err.message });
