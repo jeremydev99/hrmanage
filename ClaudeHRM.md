@@ -377,6 +377,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | TOTP 2단계 인증 보류 결정 반영 (사용자 정정, 소수 조직 관리자 승인으로 충분) (PROMPT 56B) | Claude Code |
 | 2026-05-27 | INFRA 로드맵 갱신 (옵션 A 결정, 매니지드 전환 호환성 5원칙, TOTP 채택, 신규 기능 우선순위) (PROMPT 56) | Claude Code |
 | 2026-05-27 | INFRA-2A-3: 어댑터 9개 _flatten 보강 + _toStr DateTime 헬퍼 도입 (V2 시나리오 통과) (PROMPT 55) | Claude Code |
 | 2026-05-27 | 개인정보·보안 이슈 트래커 신규 작성 (PRIVACY_ISSUES.md, ISSUE-001~006 등록) (PROMPT 54) | Claude Code |
@@ -659,14 +660,17 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
   - 변경 후 다른 세션 무효화 (재로그인)
   - 감사 로그 기록 (PASSWORD_CHANGED)
   - 관리자가 다른 사용자 비밀번호 초기화 기능은 별도 (후순위)
-- [ ] **TOTP 2단계 인증** (우선순위 3, 외부 본인인증 PASS/NICE 대신 채택)
-  - 라이브러리: speakeasy + qrcode
-  - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
-  - API: setup / verify / disable
-  - 백업 코드 10개 (1회용)
-  - 인사팀 비상 해제 기능
-  - Phase 1: 선택적 (사용자가 활성화 선택)
-  - Phase 2: 역할별 차등 또는 필수 (외부 영업 시점)
+- [ ] ~~TOTP 2단계 인증~~ — **보류 (2026-05-27 결정)**
+  - 사용자 결정: "소수 조직의 관리자 승인 절차로 충분"
+  - 향후 재검토 시점: 외부 영업·확장 시점
+  - 채택 시 적용 방안 (기록 유지):
+    - 라이브러리: speakeasy + qrcode
+    - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
+    - API: setup / verify / disable
+    - 백업 코드 10개 (1회용)
+    - 인사팀 비상 해제 기능
+    - 비용 0, 휴대폰번호 수집 없음, HRPRIVACY 원칙 영향 없음
+  - 참고: 외부 본인인증(PASS/NICE)보다 TOTP가 본 시스템에 더 적합 (글로벌 표준, 외부 의존 없음)
 - [ ] AES-256-CBC → AES-256-GCM 마이그레이션
   - 기존 데이터 재암호화 필요
   - 신규 데이터부터 GCM 적용
@@ -709,15 +713,9 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - 권한: master/admin만 접근
 - 시각화: 차트 + 테이블
 
-### 우선순위 3: TOTP 2단계 인증
-- 위험도: 중상 (인증 영역)
-- 작업량: 3~5일
-- 외부 본인인증(PASS/NICE) 대신 TOTP 채택 (비용 0, 외부 의존 없음)
-- Phase 1: 사용자가 선택적 활성화
-- 휴대폰번호 수집 없음 (HRPRIVACY 원칙 영향 없음)
-
 ### 보류 (별도 검토 필요)
 - ~~외부 본인인증 (카톡/PASS)~~ — TOTP로 대체 결정
+- TOTP 2단계 인증 — 소수 조직 관리자 승인 절차로 충분 (2026-05-27 결정). 외부 영업·확장 시점에 재검토. 채택 시 적용 방안은 INFRA-3 섹션 참조.
 - 평가 결과 Excel/PDF 출력 (영업 단계에서 필요)
 - 이메일 알림 (단계 2 진입 직전)
 - KPI 평가방식 상세 구현 (사용자 피드백 기반 결정)
@@ -870,14 +868,17 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
   - 변경 후 다른 세션 무효화 (재로그인)
   - 감사 로그 기록 (PASSWORD_CHANGED)
   - 관리자가 다른 사용자 비밀번호 초기화 기능은 별도 (후순위)
-- [ ] **TOTP 2단계 인증** (우선순위 3, 외부 본인인증 PASS/NICE 대신 채택)
-  - 라이브러리: speakeasy + qrcode
-  - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
-  - API: setup / verify / disable
-  - 백업 코드 10개 (1회용)
-  - 인사팀 비상 해제 기능
-  - Phase 1: 선택적 (사용자가 활성화 선택)
-  - Phase 2: 역할별 차등 또는 필수 (외부 영업 시점)
+- [ ] ~~TOTP 2단계 인증~~ — **보류 (2026-05-27 결정)**
+  - 사용자 결정: "소수 조직의 관리자 승인 절차로 충분"
+  - 향후 재검토 시점: 외부 영업·확장 시점
+  - 채택 시 적용 방안 (기록 유지):
+    - 라이브러리: speakeasy + qrcode
+    - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
+    - API: setup / verify / disable
+    - 백업 코드 10개 (1회용)
+    - 인사팀 비상 해제 기능
+    - 비용 0, 휴대폰번호 수집 없음, HRPRIVACY 원칙 영향 없음
+  - 참고: 외부 본인인증(PASS/NICE)보다 TOTP가 본 시스템에 더 적합 (글로벌 표준, 외부 의존 없음)
 - [ ] AES-256-CBC → AES-256-GCM 마이그레이션
   - 기존 데이터 재암호화 필요
   - 신규 데이터부터 GCM 적용
