@@ -377,6 +377,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | INFRA 로드맵 갱신 (옵션 A 결정, 매니지드 전환 호환성 5원칙, TOTP 채택, 신규 기능 우선순위) (PROMPT 56) | Claude Code |
 | 2026-05-27 | INFRA-2A-3: 어댑터 9개 _flatten 보강 + _toStr DateTime 헬퍼 도입 (V2 시나리오 통과) (PROMPT 55) | Claude Code |
 | 2026-05-27 | 개인정보·보안 이슈 트래커 신규 작성 (PRIVACY_ISSUES.md, ISSUE-001~006 등록) (PROMPT 54) | Claude Code |
 | 2026-05-27 | INFRA-2A-2 영향 분석 (DateTime/Boolean/Naming 패턴, INFRA-2A-2_ANALYSIS.md) (PROMPT 53) | Claude Code |
@@ -584,31 +585,98 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - [ ] 타임스탬프 일관성 CHECK 제약
 - [ ] force-phase 백도어 master 제한 + 감사로그 강제
 
-### INFRA-2C: Object Storage
-- [ ] report_files.file_data → NCloud Object Storage 이관
+### INFRA-2C: Object Storage (보류 — ISSUE-007 결정 의존)
 
-### INFRA-2D: NCloud 환경 셋업 (사용자 결정 완료, 2026-05-21)
-- [x] 국내 호스팅 4사 비교 완료 → `INFRA_HOSTING_COMPARISON.md` / `INFRA_HOSTING_COMPARISON.xlsx` 참조
-- [x] 클라우드 선정: **NCloud** (가중 점수 1위 54/60, 인사 데이터 신뢰도·인지도 우선)
+**보류 사유**: PRIVACY_ISSUES.md ISSUE-007(첨부파일 정책 관찰)의 결정에 따라 진행 여부 달라짐.
+- 첨부 유지(A) 또는 용량 제한(B) 결정 시: INFRA-2C 진행
+- 첨부 비활성화(C) 또는 제거(D) 결정 시: INFRA-2C 불필요
+
+**결정 시점**: 2026-12 (사이냅 자체 운영 6개월 후) 또는 외부 영업 직전
+
+- [ ] ISSUE-007 결정 (2026-12 예정)
+- [ ] (조건부) Object Storage 클라이언트 도입
+- [ ] (조건부) file_data 이관 스크립트
+- [ ] (조건부) 다운로드/업로드 라우터 변경
+
+### INFRA-2D: NCloud 환경 셋업 (옵션 A 결정, 2026-05-27)
+
+**선정 사양**: Server 1대 + Docker PostgreSQL 16-alpine 자체 설치 (매니지드 DB 보류)
+
+**선정 이유**:
+- 사이냅 자체 운영 단계(단계 1)에서는 HA·매니지드 자동화 부담 없음
+- 월 약 ₩68,000으로 비용 약 80% 절감 (매니지드 HA 대비)
+- 1인 개발자 부업 운영 가능 (월 1~2시간)
+- 향후 외부 영업 시점(단계 2)에 매니지드로 전환 가능한 호환성 유지
+
+**Phase 1: 옵션 A 운영 (사내 사용 기간)**
+
+- [x] 호스팅 선정: NCloud (INFRA_HOSTING_COMPARISON 참조, 2026-05-21)
+- [x] 호스팅 검증: Vercel + Supabase·Railway 비교 후 NCloud 유지 결정 (INFRA_NCLOUD_VS_SUPABASE_VERCEL, 2026-05-27)
 - [ ] NCloud 무료 평가판 신청 (7~30일)
-- [ ] 테스트 인스턴스에서 INFRA-2A-4 마이그레이션 검증 (V3 시나리오)
-- [ ] MSP 파트너 채널 통해 정식 견적 + 약정 할인 협상
-- [ ] 백업 자동화 스크립트 설계 (NCloud DB → Object Storage, 일/주/월 정책)
-- [ ] 인스턴스 사이즈 최종 결정
-- [ ] PostgreSQL 16 매니지드 플랜 결정
-- [ ] Object Storage 버킷 생성
+- [ ] Server 인스턴스 셋업 (2vCPU/4GB, ₩60,000/월)
+- [ ] 추가 디스크 50GB 마운트 (DB 데이터 + 첨부 파일)
+- [ ] Docker PostgreSQL 16-alpine 자체 설치 (Docker Compose)
+- [ ] Object Storage 50GB (백업 + 첨부 파일 임시 보관)
+- [ ] 자체 백업 자동화 (`pg_dump` + Object Storage Lifecycle, 일간 7 + 주간 4 + 월간 12)
 - [ ] HTTPS 인증서 적용 (Let's Encrypt 또는 NCloud 발급)
 - [ ] 도메인 연결
-- [ ] 배포 자동화 (선택)
+- [ ] 모니터링 자동화 (NCloud Cloud Insight 무료, 디스크 80% / 인스턴스 다운 알림)
+- [ ] 백업 복구 절차 문서화 (INFRA_BACKUP_RECOVERY.md 신규 작성)
+- [ ] V3 검증 시나리오 통과 (PROMPT 50)
+
+**Phase 2: 매니지드 전환 (외부 영업 시점, 미래)**
+
+- [ ] NCloud Cloud DB for PostgreSQL 16 신청 (HA 자동)
+- [ ] 데이터 마이그레이션 (`pg_dump` → restore, 약 30분 다운타임)
+- [ ] DATABASE_URL 환경변수 갱신 (1줄 변경)
+- [ ] HA 활성화 + Read Replica 추가 (Pro 사양)
+- [ ] 자동 백업 정책 검토 (NCloud 매니지드 + Object Storage Lifecycle 병행)
+- [ ] V3 검증 시나리오 재실행
+
+**매니지드 전환 호환성 유지 원칙 (Phase 1 운영 시 준수)**:
+
+1. **PostgreSQL 16 사용** — Phase 1·2 동일 버전, 호환성 보장
+2. **표준 SQL 기능만 사용** — Prisma ORM이 자동 보장. PostgreSQL-specific 확장 회피
+3. **`pg_dump --format=custom --no-owner --no-acl` 백업 사용** — 다른 환경 복원 시 권한 문제 회피
+4. **DATABASE_URL 환경변수화** — 코드 변경 없이 연결 대상 교체 가능
+5. **매니지드 마이그레이션 절차 문서화** — INFRA_MIGRATION_PLAN.md 향후 작성, 분기 1회 절차 검토
+
+**전환 시점 판단 기준**:
+
+다음 신호 중 2개 이상 발생 시 Phase 2 전환:
+- 외부 영업 1순위 고객사 등장 (HA·SLA 필요)
+- 동시 사용자 200명 초과 (단일 인스턴스 성능 한계)
+- DB 다운으로 분쟁 발생
+- 디스크 풀 위기 1회 이상
+- 백업 복구 실패 경험
+- 분기별 점검 부담 누적
 
 ### INFRA-3: 보안 강화
 - [x] .env 분리 (2026-05-13, PROMPT 34)
-- [ ] AES-256-CBC → AES-256-GCM
-- [ ] JWT 키 로테이션 정책
+- [ ] **본인 비밀번호 변경 기능** (우선순위 1, 단독 PROMPT)
+  - 현재 비밀번호 확인 + 새 비밀번호 입력
+  - 비밀번호 정책 (최소 길이, 복잡도)
+  - 변경 후 다른 세션 무효화 (재로그인)
+  - 감사 로그 기록 (PASSWORD_CHANGED)
+  - 관리자가 다른 사용자 비밀번호 초기화 기능은 별도 (후순위)
+- [ ] **TOTP 2단계 인증** (우선순위 3, 외부 본인인증 PASS/NICE 대신 채택)
+  - 라이브러리: speakeasy + qrcode
+  - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
+  - API: setup / verify / disable
+  - 백업 코드 10개 (1회용)
+  - 인사팀 비상 해제 기능
+  - Phase 1: 선택적 (사용자가 활성화 선택)
+  - Phase 2: 역할별 차등 또는 필수 (외부 영업 시점)
+- [ ] AES-256-CBC → AES-256-GCM 마이그레이션
+  - 기존 데이터 재암호화 필요
+  - 신규 데이터부터 GCM 적용
+  - 호환 기간 동안 두 알고리즘 모두 복호화 지원
+- [ ] JWT_SECRET, ENC_SECRET을 docker-compose.yml의 평문 → .env로 분리 (`${VAR}` 참조)
+- [ ] JWT 키 로테이션 정책 (선택)
 
 ### INFRA-4: 법무·계약·운영 문서
 - [x] 개인정보 보호 원칙 (HRPRIVACY_PRINCIPLES.md) 작성 — 2026-05-21
-- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~006 등록)
+- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~007 등록)
 - [ ] 개인정보처리방침 (HRPRIVACY 기반 작성, 인프라 안정화 후)
 - [ ] 표준약관
 - [ ] DPA (데이터 처리 위탁 계약, B2B 표준)
@@ -620,7 +688,39 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - [ ] 사용자 매뉴얼 (페이지별 우측 위치)
 - [ ] FAQ 페이지
 - [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇)
-- [ ] ISSUE-001~006 해결 (PRIVACY_ISSUES.md 참조)
+- [ ] ISSUE-001~007 해결 (PRIVACY_ISSUES.md 참조)
+
+---
+
+## 신규 기능 우선순위 (2026-05-27 결정)
+
+사용자(대표) 결정에 따라 다음 순서로 진행:
+
+### 우선순위 1: 본인 비밀번호 변경
+- 위험도: 중상 (인증 영역)
+- 작업량: 1~2일
+- INFRA-3 일부 미리 완료
+- 자동 푸시: 회색 지대 (인증 영역, 사용자 확인 후 푸시)
+
+### 우선순위 2: 전체 조직 AI 요약 + 평가 통계
+- 위험도: 중 (기능 추가, 스키마 변경 없음)
+- 작업량: 3~5일
+- 구성: 회사 전체 평균 등급 + 조직별 평균 등급(트리) + 분기별 평균 등급 추이 + AI 요약(구조화)
+- 권한: master/admin만 접근
+- 시각화: 차트 + 테이블
+
+### 우선순위 3: TOTP 2단계 인증
+- 위험도: 중상 (인증 영역)
+- 작업량: 3~5일
+- 외부 본인인증(PASS/NICE) 대신 TOTP 채택 (비용 0, 외부 의존 없음)
+- Phase 1: 사용자가 선택적 활성화
+- 휴대폰번호 수집 없음 (HRPRIVACY 원칙 영향 없음)
+
+### 보류 (별도 검토 필요)
+- ~~외부 본인인증 (카톡/PASS)~~ — TOTP로 대체 결정
+- 평가 결과 Excel/PDF 출력 (영업 단계에서 필요)
+- 이메일 알림 (단계 2 진입 직전)
+- KPI 평가방식 상세 구현 (사용자 피드백 기반 결정)
 
 ---
 
@@ -696,46 +796,98 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
 
 **PR 분리 원칙**: 각 제약을 1개씩 별도 PR로 분리. 이유: 제약 추가 후 기존 데이터에서 위반 발견 시 롤백 단순화.
 
-### INFRA-2C: Object Storage (NCloud Object Storage 또는 호환)
-- [ ] report_files.file_data 컬럼 분석 (현재 base64 String 저장)
-- [ ] Object Storage 클라이언트 도입 (AWS S3 호환 SDK)
-- [ ] file_data 이관 스크립트 (DB → Object Storage)
-- [ ] 다운로드 라우터 변경 (presigned URL 또는 프록시)
-- [ ] 업로드 라우터 변경
+### INFRA-2C: Object Storage (보류 — ISSUE-007 결정 의존)
 
-**도입 이유**: PostgreSQL에서 큰 BLOB을 row 안에 저장하면 성능 저하. 첨부 파일은 별도 스토리지로 분리.
+**보류 사유**: PRIVACY_ISSUES.md ISSUE-007(첨부파일 정책 관찰)의 결정에 따라 진행 여부 달라짐.
+- 첨부 유지(A) 또는 용량 제한(B) 결정 시: INFRA-2C 진행
+- 첨부 비활성화(C) 또는 제거(D) 결정 시: INFRA-2C 불필요
 
-### INFRA-2D: NCloud 환경 셋업 (사용자 결정 완료, 2026-05-21)
-- [x] 국내 호스팅 4사 비교 완료 → `INFRA_HOSTING_COMPARISON.md` / `INFRA_HOSTING_COMPARISON.xlsx` 참조
-- [x] 클라우드 선정: **NCloud** (가중 점수 1위 54/60, 인사 데이터 신뢰도·인지도 우선)
+**결정 시점**: 2026-12 (사이냅 자체 운영 6개월 후) 또는 외부 영업 직전
+
+- [ ] ISSUE-007 결정 (2026-12 예정)
+- [ ] (조건부) Object Storage 클라이언트 도입
+- [ ] (조건부) file_data 이관 스크립트
+- [ ] (조건부) 다운로드/업로드 라우터 변경
+
+### INFRA-2D: NCloud 환경 셋업 (옵션 A 결정, 2026-05-27)
+
+**선정 사양**: Server 1대 + Docker PostgreSQL 16-alpine 자체 설치 (매니지드 DB 보류)
+
+**선정 이유**:
+- 사이냅 자체 운영 단계(단계 1)에서는 HA·매니지드 자동화 부담 없음
+- 월 약 ₩68,000으로 비용 약 80% 절감 (매니지드 HA 대비)
+- 1인 개발자 부업 운영 가능 (월 1~2시간)
+- 향후 외부 영업 시점(단계 2)에 매니지드로 전환 가능한 호환성 유지
+
+**Phase 1: 옵션 A 운영 (사내 사용 기간)**
+
+- [x] 호스팅 선정: NCloud (INFRA_HOSTING_COMPARISON 참조, 2026-05-21)
+- [x] 호스팅 검증: Vercel + Supabase·Railway 비교 후 NCloud 유지 결정 (INFRA_NCLOUD_VS_SUPABASE_VERCEL, 2026-05-27)
 - [ ] NCloud 무료 평가판 신청 (7~30일)
-- [ ] 테스트 인스턴스에서 INFRA-2A-4 마이그레이션 검증 (V3 시나리오)
-- [ ] MSP 파트너 채널 통해 정식 견적 + 약정 할인 협상
-- [ ] 백업 자동화 스크립트 설계 (NCloud DB → Object Storage, 일/주/월 정책)
-- [ ] 인스턴스 사이즈 최종 결정
-- [ ] PostgreSQL 16 매니지드 플랜 결정
-- [ ] Object Storage 버킷 생성
+- [ ] Server 인스턴스 셋업 (2vCPU/4GB, ₩60,000/월)
+- [ ] 추가 디스크 50GB 마운트 (DB 데이터 + 첨부 파일)
+- [ ] Docker PostgreSQL 16-alpine 자체 설치 (Docker Compose)
+- [ ] Object Storage 50GB (백업 + 첨부 파일 임시 보관)
+- [ ] 자체 백업 자동화 (`pg_dump` + Object Storage Lifecycle, 일간 7 + 주간 4 + 월간 12)
 - [ ] HTTPS 인증서 적용 (Let's Encrypt 또는 NCloud 발급)
 - [ ] 도메인 연결
-- [ ] 배포 자동화 (선택)
+- [ ] 모니터링 자동화 (NCloud Cloud Insight 무료, 디스크 80% / 인스턴스 다운 알림)
+- [ ] 백업 복구 절차 문서화 (INFRA_BACKUP_RECOVERY.md 신규 작성)
+- [ ] V3 검증 시나리오 통과 (PROMPT 50)
+
+**Phase 2: 매니지드 전환 (외부 영업 시점, 미래)**
+
+- [ ] NCloud Cloud DB for PostgreSQL 16 신청 (HA 자동)
+- [ ] 데이터 마이그레이션 (`pg_dump` → restore, 약 30분 다운타임)
+- [ ] DATABASE_URL 환경변수 갱신 (1줄 변경)
+- [ ] HA 활성화 + Read Replica 추가 (Pro 사양)
+- [ ] 자동 백업 정책 검토 (NCloud 매니지드 + Object Storage Lifecycle 병행)
+- [ ] V3 검증 시나리오 재실행
+
+**매니지드 전환 호환성 유지 원칙 (Phase 1 운영 시 준수)**:
+
+1. **PostgreSQL 16 사용** — Phase 1·2 동일 버전, 호환성 보장
+2. **표준 SQL 기능만 사용** — Prisma ORM이 자동 보장. PostgreSQL-specific 확장 회피
+3. **`pg_dump --format=custom --no-owner --no-acl` 백업 사용** — 다른 환경 복원 시 권한 문제 회피
+4. **DATABASE_URL 환경변수화** — 코드 변경 없이 연결 대상 교체 가능
+5. **매니지드 마이그레이션 절차 문서화** — INFRA_MIGRATION_PLAN.md 향후 작성, 분기 1회 절차 검토
+
+**전환 시점 판단 기준**:
+
+다음 신호 중 2개 이상 발생 시 Phase 2 전환:
+- 외부 영업 1순위 고객사 등장 (HA·SLA 필요)
+- 동시 사용자 200명 초과 (단일 인스턴스 성능 한계)
+- DB 다운으로 분쟁 발생
+- 디스크 풀 위기 1회 이상
+- 백업 복구 실패 경험
+- 분기별 점검 부담 누적
 
 ### INFRA-3: 보안 강화
 - [x] .env 분리 (2026-05-13, PROMPT 34)
+- [ ] **본인 비밀번호 변경 기능** (우선순위 1, 단독 PROMPT)
+  - 현재 비밀번호 확인 + 새 비밀번호 입력
+  - 비밀번호 정책 (최소 길이, 복잡도)
+  - 변경 후 다른 세션 무효화 (재로그인)
+  - 감사 로그 기록 (PASSWORD_CHANGED)
+  - 관리자가 다른 사용자 비밀번호 초기화 기능은 별도 (후순위)
+- [ ] **TOTP 2단계 인증** (우선순위 3, 외부 본인인증 PASS/NICE 대신 채택)
+  - 라이브러리: speakeasy + qrcode
+  - DB 컬럼 추가: totp_secret(암호화), totp_enabled, totp_backup_codes(해시)
+  - API: setup / verify / disable
+  - 백업 코드 10개 (1회용)
+  - 인사팀 비상 해제 기능
+  - Phase 1: 선택적 (사용자가 활성화 선택)
+  - Phase 2: 역할별 차등 또는 필수 (외부 영업 시점)
 - [ ] AES-256-CBC → AES-256-GCM 마이그레이션
-  - 기존 데이터 재암호화 필요 (마이그레이션 스크립트)
+  - 기존 데이터 재암호화 필요
   - 신규 데이터부터 GCM 적용
   - 호환 기간 동안 두 알고리즘 모두 복호화 지원
 - [ ] JWT_SECRET, ENC_SECRET을 docker-compose.yml의 평문 → .env로 분리 (`${VAR}` 참조)
 - [ ] JWT 키 로테이션 정책 (선택)
-- [ ] 비밀번호 변경 기능 구현 (현재 미완성)
-  - 본인 비밀번호 변경 API
-  - 관리자가 다른 사용자 비밀번호 초기화 API
-  - 비밀번호 정책 (최소 길이, 복잡도)
-  - 비밀번호 변경 시 감사 로그
 
 ### INFRA-4: 법무·계약·운영 문서
 - [x] 개인정보 보호 원칙 (HRPRIVACY_PRINCIPLES.md) 작성 — 2026-05-21
-- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~006 등록)
+- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~007 등록)
 - [ ] 개인정보처리방침 (HRPRIVACY 기반 작성, 인프라 안정화 후)
 - [ ] 표준약관
 - [ ] DPA (데이터 처리 위탁 계약, B2B 표준)
