@@ -15,6 +15,7 @@ services:
       - ./server:/app/server
       - ./public:/app/public
       - ./prisma:/app/prisma
+      - ./scripts:/app/scripts
     environment:
       - PORT=3000
       - DATABASE_URL=file:/app/data/hrmanage.db

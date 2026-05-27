@@ -758,7 +758,10 @@ function closePasswordChangeModal() {
 
 // ── 전체 조직 분석 (PROMPT 58) ────────────────────────────
 function renderOrgViewHTML(periods) {
-  const sp = Array.isArray(periods) ? [...periods].sort((a,b) => a.id - b.id) : [];
+  const sp = Array.isArray(periods) ? [...periods].sort((a,b) => {
+    if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
+    return a.period_label < b.period_label ? -1 : 1;
+  }) : [];
   const defFromId = sp.length > 8 ? sp[sp.length - 8].id : (sp[0]?.id || '');
   const defToId   = sp[sp.length - 1]?.id || '';
   const opts = p => sp.map(q => `<option value="${q.id}"${q.id == p?' selected':''}>${q.period_label}</option>`).join('');
@@ -794,11 +797,17 @@ async function loadOrgAnalysis() {
   if (!fromEl || !toEl || !resEl) return;
   const fromId = parseInt(fromEl.value), toId = parseInt(toEl.value);
   const maxDep = parseInt(depEl?.value) || 999;
-  if (fromId > toId) {
+  const allPeriods = [...(window._perfData?.evalPeriods || [])].sort((a,b) => {
+    if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
+    return a.period_label < b.period_label ? -1 : 1;
+  });
+  const fromIdx = allPeriods.findIndex(p => p.id === fromId);
+  const toIdx   = allPeriods.findIndex(p => p.id === toId);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx > toIdx) {
     resEl.innerHTML = '<div class="card"><div class="alert alert-red">시작 기간이 종료 기간보다 늦습니다.</div></div>';
     return;
   }
-  const ep = (window._perfData?.evalPeriods || []).filter(p => p.id >= fromId && p.id <= toId);
+  const ep = allPeriods.slice(fromIdx, toIdx + 1);
   if (ep.length > 8) {
     resEl.innerHTML = '<div class="card"><div class="alert alert-red">최대 8개 기간까지 선택 가능합니다. 범위를 좁혀주세요.</div></div>';
     return;
@@ -812,9 +821,9 @@ async function loadOrgAnalysis() {
     const pIds = ep.map(p => p.id).join(',');
     const [orgTree, trend] = await Promise.all([
       API.get(`/perf/org-tree?period_ids=${pIds}&max_depth=${maxDep}`),
-      API.get(`/perf/quarterly-trend?period_id_from=${fromId}&period_id_to=${toId}`)
+      API.get(`/perf/quarterly-trend?period_ids=${pIds}`)
     ]);
-    window._orgData = { orgTree, trend, fromId, toId };
+    window._orgData = { orgTree, trend, fromId, toId, pIds };
     renderOrgAnalysisResult(orgTree, trend);
   } catch(err) {
     resEl.innerHTML = `<div class="card"><div class="alert alert-red">오류: ${err.message}</div></div>`;
@@ -962,7 +971,7 @@ async function renderOrgHeatmap() {
   if (!d) return;
   container.innerHTML = '<div class="spinner" style="font-size:12px;padding:10px">히트맵 로드 중...</div>';
   try {
-    const data = await API.get(`/perf/grade-distribution?period_id_from=${d.fromId}&period_id_to=${d.toId}`);
+    const data = await API.get(`/perf/grade-distribution?period_ids=${d.pIds}`);
     const maxCnt = Math.max(...data.matrix.flat(), 1);
     const gradeRgb = [[45,164,78],[87,171,90],[240,120,32],[240,180,41],[229,57,53],[198,40,40]];
     let html = `<div style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px;min-width:300px">
@@ -1002,8 +1011,7 @@ async function generateOrgAISummary() {
   resEl.innerHTML = '<div class="spinner" style="font-size:13px">AI 분석 중...</div>';
   try {
     const r = await API.post('/perf/org-ai-summary', {
-      period_id_from: parseInt(fromEl.value),
-      period_id_to: parseInt(toEl.value)
+      period_ids: window._orgData?.pIds || `${fromEl.value},${toEl.value}`
     });
     if (r.structured) {
       const s = r.structured;

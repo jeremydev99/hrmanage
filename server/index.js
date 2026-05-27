@@ -2106,13 +2106,13 @@ app.get('/api/perf/quarterly-trend', auth, (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { org_id, period_id_from, period_id_to } = req.query;
-    if (!period_id_from || !period_id_to)
-      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
-    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
-    if (fromId > toId) return res.status(400).json({ error: '시작 기간이 종료 기간보다 큽니다.' });
-    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
-    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const { org_id, period_ids } = req.query;
+    if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
+    const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+    if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
+    if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const pPh = pIdList.map(() => '?').join(',');
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
     const gm = buildGradeMap();
     let userIds, orgName = '회사 전체';
     if (org_id) {
@@ -2149,12 +2149,13 @@ app.get('/api/perf/grade-distribution', auth, (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { org_id, period_id_from, period_id_to } = req.query;
-    if (!period_id_from || !period_id_to)
-      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
-    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
-    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
-    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const { org_id, period_ids } = req.query;
+    if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
+    const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+    if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
+    if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const pPh = pIdList.map(() => '?').join(',');
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
     const gm = buildGradeMap();
     let userIds;
     if (org_id) {
@@ -2198,12 +2199,13 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
-    const { period_id_from, period_id_to } = req.body;
-    if (!period_id_from || !period_id_to)
-      return res.status(400).json({ error: 'period_id_from, period_id_to는 필수입니다.' });
-    const fromId = parseInt(period_id_from), toId = parseInt(period_id_to);
-    const periods = db.prepare('SELECT * FROM eval_periods WHERE id >= ? AND id <= ? ORDER BY id').all(fromId, toId);
-    if (periods.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const { period_ids } = req.body;
+    if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
+    const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
+    if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
+    if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
+    const pPh = pIdList.map(() => '?').join(',');
+    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ORDER BY eval_year, period_label`).all(...pIdList);
     const periodLabels = periods.map(p => p.period_label);
     const periodStr = periods.length
       ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';

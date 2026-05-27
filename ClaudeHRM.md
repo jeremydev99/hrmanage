@@ -62,6 +62,8 @@ C:\claudeprojects\hrmanage\
 ├── prisma/
 │   ├── schema.prisma          ← Prisma 스키마 정의 (20개 테이블)
 │   └── migrations/            ← 추후 마이그레이션 파일들
+├── scripts/
+│   └── seed-eval-data.js      ← 시드 데이터 생성 (8명×9분기, AI 분석 검증용)
 └── data/hrmanage.db
 ```
 
@@ -382,6 +384,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 시드 데이터 생성 스크립트 (8명×9분기=72사이클, 64최종평가, 시나리오별 등급 분포, period_ids 기반 크로스년도 수정) (PROMPT 59) | Claude Code |
 | 2026-05-27 | 전체 조직 AI 요약 + 평가 통계 (회사/본부/팀 3단계, 8기간 추이, 차트 3종, AI 10줄 구조화) (PROMPT 58) | Claude Code |
 | 2026-05-27 | 본인 비밀번호 변경 기능 (validatePassword + change-password API + 모달 UI, INFRA-3 일부) (PROMPT 57) | Claude Code |
 | 2026-05-27 | TOTP 2단계 인증 보류 결정 반영 (사용자 정정, 소수 조직 관리자 승인으로 충분) (PROMPT 56B) | Claude Code |
