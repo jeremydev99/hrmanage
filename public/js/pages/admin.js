@@ -240,6 +240,24 @@ let _adminDirty = false;
 // ── 평가 정책 임시 상태 ──────────────────────────────────
 let _policyState = {};
 let _policyDirty = false;
+let _sessionPolicyCache = { close_on_browser_close: false, timeout_minutes: 480 };
+
+function setSessionPref(key, val, btn) {
+  _sessionPolicyCache[key] = val;
+  _policyState['session_policy'] = Object.assign({}, _sessionPolicyCache);
+  _policyDirty = true;
+  if (btn) {
+    const group = btn.closest('[data-policy-group]');
+    if (group) {
+      group.querySelectorAll('button').forEach(function(b) { b.classList.remove('btn-primary'); b.classList.add('btn-ghost'); });
+      btn.classList.remove('btn-ghost'); btn.classList.add('btn-primary');
+    }
+  }
+  document.querySelectorAll('.policy-save-btn').forEach(function(b) {
+    b.classList.remove('btn-ghost'); b.classList.add('btn-primary');
+    b.innerHTML = '💾 저장하기 <span style="font-size:11px">(변경사항 있음)</span>';
+  });
+}
 
 function setPolicyState(key, value, btn) {
   _policyState[key] = value;
@@ -1500,15 +1518,7 @@ async function renderAdmPolicy() {
       API.get('/settings/dashboard-depth').catch(() => ({ depth: 2 })),
     ]);
 
-    const limitOptions = [
-      { value:0,  label:'무제한' },
-      { value:1,  label:'1회' },
-      { value:2,  label:'2회' },
-      { value:3,  label:'3회' },
-      { value:5,  label:'5회' },
-      { value:10, label:'10회' },
-      { value:20, label:'20회' },
-    ];
+    _sessionPolicyCache = Object.assign({}, sessionPolicy);
 
     el.innerHTML = `<div class="card">
       <div class="card-header"><div>
@@ -1537,195 +1547,182 @@ async function renderAdmPolicy() {
         <div style="font-size:11px;color:var(--muted);margin-top:4px">공지 내용이 없으면 로그인 화면에 공지 영역이 표시되지 않습니다.</div>
       </div>
 
-      <!-- 세션 보안 정책 -->
-      <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:2px solid var(--o100)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div style="font-size:14px;font-weight:600">🔐 세션 보안 정책</div>
-          <button class="btn btn-primary btn-sm" onclick="saveSessionPolicy()">세션 정책 저장</button>
-        </div>
+      <!-- 4개 정책 그룹 -->
+      <div class="policy-tab">
 
-        <div class="srow">
-          <div>
-            <div style="font-size:13px;font-weight:500">브라우저 종료 시 자동 로그아웃</div>
-            <div style="font-size:12px;color:var(--muted)">탭/브라우저 닫으면 즉시 세션 만료</div>
+        <!-- 🛡️ 보안 설정 -->
+        <div class="policy-group">
+          <div class="policy-group-header">🛡️ 보안 설정</div>
+
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">🚪</span>브라우저 종료 시 자동 로그아웃</div>
+            <div class="policy-options" data-policy-group="close_on_browser_close">
+              <button class="btn-policy-option ${sessionPolicy.close_on_browser_close ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setSessionPref('close_on_browser_close',true,this)">켜짐</button>
+              <button class="btn-policy-option ${!sessionPolicy.close_on_browser_close ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setSessionPref('close_on_browser_close',false,this)">꺼짐</button>
+            </div>
+            <div class="policy-description">탭/브라우저 닫으면 즉시 세션 만료</div>
           </div>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="session-close-on-browser"
-              ${sessionPolicy.close_on_browser_close ? 'checked' : ''}
-              style="width:16px;height:16px">
-            <span style="font-size:13px">${sessionPolicy.close_on_browser_close ? '켜짐' : '꺼짐'}</span>
-          </label>
+
+          <div class="policy-item policy-item-multi">
+            <div class="policy-title"><span class="policy-emoji">⏱️</span>세션 유지 시간</div>
+            <div class="policy-options-row" data-policy-group="session_timeout">
+              ${[5,10,30,60].map(m =>
+                `<button class="btn-policy-option ${sessionPolicy.timeout_minutes===m ? 'btn-primary' : 'btn-ghost'}"
+                         onclick="setSessionPref('timeout_minutes',${m},this)">${m>=60?m/60+'시간':m+'분'}</button>`
+              ).join('')}
+              <span style="display:inline-flex;align-items:center;gap:4px">
+                <input id="session-custom-hours" type="number" min="1" max="8" placeholder="직접"
+                  style="width:60px;height:32px;font-size:12px;text-align:center;border:1px solid #ddd;border-radius:4px"
+                  onchange="if(this.value){var m=Math.min(Math.round(parseFloat(this.value)*60),480);setSessionPref('timeout_minutes',m,null)}">
+                <span style="font-size:12px;color:var(--muted)">시간</span>
+              </span>
+            </div>
+            <div class="policy-description">최대 8시간 · 현재: ${sessionPolicy.timeout_minutes>=60?Math.round(sessionPolicy.timeout_minutes/60)+'시간':sessionPolicy.timeout_minutes+'분'}</div>
+          </div>
         </div>
 
-        <div style="margin-top:12px">
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px">세션 유지 시간</div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-            ${[5,10,30,60].map(m => `
-              <button class="btn btn-sm session-timeout-btn ${sessionPolicy.timeout_minutes===m?'btn-primary':'btn-ghost'}"
-                onclick="selectSessionTimeout(${m},this)" style="font-size:12px">
-                ${m>=60?m/60+'시간':m+'분'}
-              </button>`).join('')}
-            <div style="display:flex;align-items:center;gap:4px">
-              <input id="session-custom-hours" type="number" min="1" max="8"
-                placeholder="직접입력"
-                value="${![5,10,30,60].includes(sessionPolicy.timeout_minutes)&&sessionPolicy.timeout_minutes<480
-                  ? Math.round(sessionPolicy.timeout_minutes/60) : ''}"
-                style="width:70px;height:32px;font-size:12px;text-align:center">
-              <span style="font-size:12px;color:var(--muted)">시간 (최대 8시간)</span>
+        <!-- 📊 표시 및 권한 -->
+        <div class="policy-group">
+          <div class="policy-group-header">📊 표시 및 권한</div>
+
+          <div class="policy-item policy-item-multi">
+            <div class="policy-title"><span class="policy-emoji">🏢</span>대시보드 표시 계층</div>
+            <div class="policy-options-row" data-policy-group="dashboard_depth">
+              ${[1,2,3].map(d =>
+                `<button class="btn-policy-option ${dashDepth.depth===d ? 'btn-primary' : 'btn-ghost'}"
+                         onclick="setPolicyState('dashboard_depth',${d},this)">${d}단계${d===2?' (기본)':d===3?' (옵션)':''}</button>`
+              ).join('')}
+              <button class="btn-policy-option" disabled style="opacity:.4;cursor:default">4단계 이상 미지원</button>
+            </div>
+            <div class="policy-description">성과관리 홈에서 조직 성과를 몇 단계까지 표시할지 설정</div>
+          </div>
+
+          <div class="policy-item policy-item-multi">
+            <div class="policy-title"><span class="policy-emoji">🔒</span>최종 평가 잠금</div>
+            <div class="policy-options-row">
+              <span class="bd bd-locked" style="padding:5px 10px;font-size:12px">항상 잠금</span>
+            </div>
+            <div class="policy-description">확정 후 인사팀 외 수정 불가</div>
+          </div>
+
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">📋</span>직원 목표승인 이력 공개</div>
+            <div class="policy-options" data-policy-group="history_visibility">
+              <button class="btn-policy-option ${histVis.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('history_visibility',true,this)">켜짐</button>
+              <button class="btn-policy-option ${!histVis.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('history_visibility',false,this)">꺼짐</button>
+            </div>
+            <div class="policy-description">직원이 본인의 과거 승인/반려 이력 열람 허용</div>
+            <div class="policy-sub-item" style="grid-column:1/-1;${!histVis.enabled?'opacity:.4;pointer-events:none':''}">
+              <div class="policy-item-single">
+                <div class="policy-title"><span class="policy-emoji">📂</span>비활성 기간 이력도 공개</div>
+                <div class="policy-options" data-policy-group="history_inactive">
+                  <button class="btn-policy-option ${histInactive.enabled ? 'btn-primary' : 'btn-ghost'}"
+                          onclick="setPolicyState('history_inactive',true,this)">켜짐 (전체)</button>
+                  <button class="btn-policy-option ${!histInactive.enabled ? 'btn-primary' : 'btn-ghost'}"
+                          onclick="setPolicyState('history_inactive',false,this)">꺼짐 (활성만)</button>
+                </div>
+                <div class="policy-description">켜짐: 활성/비활성 기간 모두 · 꺼짐: 활성 기간만</div>
+              </div>
             </div>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-top:6px">
-            ⚠ 최대 8시간을 초과할 수 없습니다.
-            현재: ${sessionPolicy.timeout_minutes>=60
-              ? Math.round(sessionPolicy.timeout_minutes/60)+'시간'
-              : sessionPolicy.timeout_minutes+'분'}
+        </div>
+
+        <!-- 📝 평가 워크플로우 -->
+        <div class="policy-group">
+          <div class="policy-group-header">📝 평가 워크플로우</div>
+
+          <div class="policy-item policy-item-multi">
+            <div class="policy-title"><span class="policy-emoji">💬</span>중간 피드백 횟수 제한</div>
+            <div class="policy-options-row" data-policy-group="fb_limit">
+              ${[{value:0,label:'무제한'},{value:1,label:'1회'},{value:2,label:'2회'},{value:3,label:'3회'},{value:5,label:'5회'},{value:10,label:'10회'},{value:20,label:'20회'}].map(o =>
+                `<button class="btn-policy-option ${fbLimit.limit===o.value ? 'btn-primary' : 'btn-ghost'}"
+                         onclick="setPolicyState('fb_limit',${o.value},this)">${o.label}</button>`
+              ).join('')}
+            </div>
+            <div class="policy-description">승인자별 피드백 제출 가능 횟수</div>
+          </div>
+
+          <div class="policy-item policy-item-multi">
+            <div class="policy-title"><span class="policy-emoji">👥</span>1차 상사 피드백</div>
+            <div class="policy-options-row">
+              <span class="bd bd-approved" style="padding:5px 10px;font-size:12px">의무/선택 분리 적용 중</span>
+            </div>
+            <div class="policy-description">1차 직속 상사 의무 · 2차 이상 선택</div>
+          </div>
+
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">✏️</span>승인자 승인 수정/취소 허용</div>
+            <div class="policy-options" data-policy-group="approver_edit">
+              <button class="btn-policy-option ${apprEdit.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('approver_edit',true,this)">켜짐</button>
+              <button class="btn-policy-option ${!apprEdit.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('approver_edit',false,this)">꺼짐</button>
+            </div>
+            <div class="policy-description">켜짐: 승인자가 본인의 승인을 수정/취소 가능</div>
+          </div>
+
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">⭐</span>2차 최종평가 허용</div>
+            <div class="policy-options" data-policy-group="second_final">
+              <button class="btn-policy-option ${secondFinal.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('second_final',true,this)">켜짐</button>
+              <button class="btn-policy-option ${!secondFinal.enabled ? 'btn-primary' : 'btn-ghost'}"
+                      onclick="setPolicyState('second_final',false,this)">꺼짐</button>
+            </div>
+            <div class="policy-description">켜짐: 1차 위 상위 승인자도 최종평가 가능 · 꺼짐: 1차(직속 상사)만 평가</div>
           </div>
         </div>
-      </div>
 
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">대시보드 표시 계층</div>
-          <div style="font-size:12px;color:var(--muted)">성과관리 홈에서 조직 성과를 몇 단계까지 표시할지 설정 (4단계 이상 미지원)</div>
-        </div>
-        <div style="display:flex;gap:6px;align-items:center">
-          <div data-policy-group="dashboard_depth" style="display:flex;gap:6px">
-          ${[1,2,3].map(d => `
-            <button class="btn btn-sm ${dashDepth.depth===d?'btn-primary':'btn-ghost'}"
-              onclick="setPolicyState('dashboard_depth',${d},this)" style="font-size:12px">
-              ${d}단계${d===2?' (기본)':d===3?' (옵션)':''}
-            </button>`).join('')}
+        <!-- 🔧 평가 운영 -->
+        <div class="policy-group">
+          <div class="policy-group-header">🔧 평가 운영</div>
+
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">📊</span>평가 방식 설정</div>
+            <div class="policy-options">
+              <button class="btn-policy-option btn-ghost" onclick="switchAdmTab('adm-periods')">평가기간 관리 →</button>
+            </div>
+            <div class="policy-description">평가방식은 <strong>평가기간 관리</strong> 탭에서 기간별/조직별로 설정하세요</div>
           </div>
-          <span style="font-size:11px;color:var(--muted)">4단계 이상 미지원</span>
-        </div>
-      </div>
 
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">최종 평가 잠금</div>
-          <div style="font-size:12px;color:var(--muted)">확정 후 인사팀 외 수정 불가</div>
-        </div>
-        <span class="bd bd-locked">항상 잠금</span>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">중간 피드백 횟수 제한</div>
-          <div style="font-size:12px;color:var(--muted)">승인자별 피드백 제출 가능 횟수</div>
-        </div>
-        <div data-policy-group="fb_limit" style="display:flex;gap:6px;flex-wrap:wrap">
-          ${limitOptions.map(o =>
-            `<button class="btn btn-sm ${fbLimit.limit===o.value?'btn-primary':'btn-ghost'}"
-              onclick="setPolicyState('fb_limit',${o.value},this)">${o.label}</button>`
-          ).join('')}
-        </div>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">1차 상사 피드백</div>
-          <div style="font-size:12px;color:var(--muted)">1차 직속 상사 의무 · 2차 이상 선택</div>
-        </div>
-        <span class="bd bd-approved">의무/선택 분리 적용 중</span>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">승인자 승인 수정/취소 허용</div>
-          <div style="font-size:12px;color:var(--muted)">켜짐: 승인자가 본인의 승인을 수정·취소 가능</div>
-        </div>
-        <div data-policy-group="approver_edit" style="display:flex;gap:6px">
-          <button class="btn btn-sm ${apprEdit.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('approver_edit',true,this)">켜짐</button>
-          <button class="btn btn-sm ${!apprEdit.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('approver_edit',false,this)">꺼짐</button>
-        </div>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">2차 최종평가 허용</div>
-          <div style="font-size:12px;color:var(--muted)">켜짐: 1차 평가자 위 상위 승인자도 최종평가 가능 · 꺼짐: 1차(직속 상사)만 평가</div>
-        </div>
-        <div data-policy-group="second_final" style="display:flex;gap:6px">
-          <button class="btn btn-sm ${secondFinal.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('second_final',true,this)">켜짐</button>
-          <button class="btn btn-sm ${!secondFinal.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('second_final',false,this)">꺼짐</button>
-        </div>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">직원 목표승인 이력 공개</div>
-          <div style="font-size:12px;color:var(--muted)">직원이 본인의 과거 승인/반려 이력 열람 허용</div>
-        </div>
-        <div data-policy-group="history_visibility" style="display:flex;gap:6px">
-          <button class="btn btn-sm ${histVis.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('history_visibility',true,this)">켜짐</button>
-          <button class="btn btn-sm ${!histVis.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('history_visibility',false,this)">꺼짐</button>
-        </div>
-      </div>
-
-      <div class="srow" style="${!histVis.enabled?'opacity:.4;pointer-events:none':''}">
-        <div style="padding-left:16px">
-          <div style="font-size:13px;font-weight:500">↳ 비활성 기간 이력도 공개</div>
-          <div style="font-size:12px;color:var(--muted)">켜짐: 활성/비활성 기간 모두 · 꺼짐: 활성 기간만</div>
-        </div>
-        <div data-policy-group="history_inactive" style="display:flex;gap:6px">
-          <button class="btn btn-sm ${histInactive.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('history_inactive',true,this)">켜짐 (전체)</button>
-          <button class="btn btn-sm ${!histInactive.enabled?'btn-primary':'btn-ghost'}"
-            onclick="setPolicyState('history_inactive',false,this)">꺼짐 (활성만)</button>
-        </div>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">평가 방식 설정</div>
-          <div style="font-size:12px;color:var(--muted)">
-            평가방식은 <strong>평가기간 관리</strong> 탭에서 기간별/조직별로 설정하세요.
+          <div class="policy-item policy-item-single">
+            <div class="policy-title"><span class="policy-emoji">🌐</span>시스템 시간대</div>
+            <div class="policy-options">
+              <select id="tz-select" class="btn-policy-option btn-ghost" style="height:34px;font-size:13px;padding:4px 8px"
+                      onchange="setPolicyState('timezone',this.value,null)">
+                <optgroup label="아시아">
+                  <option value="Asia/Seoul"     ${timezone.timezone==='Asia/Seoul'    ?'selected':''}>한국 (KST, UTC+9)</option>
+                  <option value="Asia/Tokyo"     ${timezone.timezone==='Asia/Tokyo'    ?'selected':''}>일본 (JST, UTC+9)</option>
+                  <option value="Asia/Shanghai"  ${timezone.timezone==='Asia/Shanghai' ?'selected':''}>중국 (CST, UTC+8)</option>
+                  <option value="Asia/Singapore" ${timezone.timezone==='Asia/Singapore'?'selected':''}>싱가포르 (SGT, UTC+8)</option>
+                  <option value="Asia/Bangkok"   ${timezone.timezone==='Asia/Bangkok'  ?'selected':''}>태국 (ICT, UTC+7)</option>
+                  <option value="Asia/Dubai"     ${timezone.timezone==='Asia/Dubai'    ?'selected':''}>UAE (GST, UTC+4)</option>
+                </optgroup>
+                <optgroup label="유럽">
+                  <option value="Europe/London"  ${timezone.timezone==='Europe/London' ?'selected':''}>영국 (GMT, UTC+0)</option>
+                  <option value="Europe/Paris"   ${timezone.timezone==='Europe/Paris'  ?'selected':''}>프랑스 (CET, UTC+1)</option>
+                  <option value="Europe/Berlin"  ${timezone.timezone==='Europe/Berlin' ?'selected':''}>독일 (CET, UTC+1)</option>
+                </optgroup>
+                <optgroup label="아메리카">
+                  <option value="America/New_York"    ${timezone.timezone==='America/New_York'    ?'selected':''}>미국 동부 (EST, UTC-5)</option>
+                  <option value="America/Chicago"     ${timezone.timezone==='America/Chicago'     ?'selected':''}>미국 중부 (CST, UTC-6)</option>
+                  <option value="America/Los_Angeles" ${timezone.timezone==='America/Los_Angeles' ?'selected':''}>미국 서부 (PST, UTC-8)</option>
+                </optgroup>
+                <optgroup label="오세아니아">
+                  <option value="Australia/Sydney"  ${timezone.timezone==='Australia/Sydney' ?'selected':''}>호주 시드니 (AEST, UTC+10)</option>
+                  <option value="Pacific/Auckland"  ${timezone.timezone==='Pacific/Auckland' ?'selected':''}>뉴질랜드 (NZST, UTC+12)</option>
+                </optgroup>
+                <optgroup label="기타">
+                  <option value="UTC" ${timezone.timezone==='UTC'?'selected':''}>UTC (협정세계시, UTC+0)</option>
+                </optgroup>
+              </select>
+            </div>
+            <div class="policy-description">로그 및 기록 시간의 기준 시간대 (운영 주체 기준)</div>
           </div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="switchAdmTab('adm-periods')">
-          평가기간 관리 →
-        </button>
-      </div>
-
-      <div class="srow">
-        <div>
-          <div style="font-size:14px;font-weight:500">시스템 시간대</div>
-          <div style="font-size:12px;color:var(--muted)">로그 및 기록 시간의 기준 시간대 (운영 주체 기준)</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px">
-          <select id="tz-select" style="height:34px;font-size:13px" onchange="setPolicyState('timezone',this.value,null)">
-            <optgroup label="아시아">
-              <option value="Asia/Seoul"     ${timezone.timezone==='Asia/Seoul'    ?'selected':''}>한국 (KST, UTC+9)</option>
-              <option value="Asia/Tokyo"     ${timezone.timezone==='Asia/Tokyo'    ?'selected':''}>일본 (JST, UTC+9)</option>
-              <option value="Asia/Shanghai"  ${timezone.timezone==='Asia/Shanghai' ?'selected':''}>중국 (CST, UTC+8)</option>
-              <option value="Asia/Singapore" ${timezone.timezone==='Asia/Singapore'?'selected':''}>싱가포르 (SGT, UTC+8)</option>
-              <option value="Asia/Bangkok"   ${timezone.timezone==='Asia/Bangkok'  ?'selected':''}>태국 (ICT, UTC+7)</option>
-              <option value="Asia/Dubai"     ${timezone.timezone==='Asia/Dubai'    ?'selected':''}>UAE (GST, UTC+4)</option>
-            </optgroup>
-            <optgroup label="유럽">
-              <option value="Europe/London"  ${timezone.timezone==='Europe/London' ?'selected':''}>영국 (GMT, UTC+0)</option>
-              <option value="Europe/Paris"   ${timezone.timezone==='Europe/Paris'  ?'selected':''}>프랑스 (CET, UTC+1)</option>
-              <option value="Europe/Berlin"  ${timezone.timezone==='Europe/Berlin' ?'selected':''}>독일 (CET, UTC+1)</option>
-            </optgroup>
-            <optgroup label="아메리카">
-              <option value="America/New_York"    ${timezone.timezone==='America/New_York'    ?'selected':''}>미국 동부 (EST, UTC-5)</option>
-              <option value="America/Chicago"     ${timezone.timezone==='America/Chicago'     ?'selected':''}>미국 중부 (CST, UTC-6)</option>
-              <option value="America/Los_Angeles" ${timezone.timezone==='America/Los_Angeles' ?'selected':''}>미국 서부 (PST, UTC-8)</option>
-            </optgroup>
-            <optgroup label="오세아니아">
-              <option value="Australia/Sydney"  ${timezone.timezone==='Australia/Sydney' ?'selected':''}>호주 시드니 (AEST, UTC+10)</option>
-              <option value="Pacific/Auckland"  ${timezone.timezone==='Pacific/Auckland' ?'selected':''}>뉴질랜드 (NZST, UTC+12)</option>
-            </optgroup>
-            <optgroup label="기타">
-              <option value="UTC" ${timezone.timezone==='UTC'?'selected':''}>UTC (협정세계시, UTC+0)</option>
-            </optgroup>
-          </select>
         </div>
       </div>
 

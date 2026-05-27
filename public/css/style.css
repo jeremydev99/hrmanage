@@ -663,3 +663,118 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .checkbox-inline input[type="checkbox"] {
   flex-shrink: 0;
 }
+
+/* ── 평가 정책 탭 ── */
+.policy-tab {
+  width: 100%;
+}
+.policy-group {
+  margin-bottom: 28px;
+}
+.policy-group-header {
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+  padding: 10px 0;
+  margin-bottom: 0;
+}
+.policy-group-header::after {
+  content: '';
+  display: block;
+  height: 1px;
+  margin-top: 10px;
+  background: linear-gradient(to right, transparent, rgba(217,119,6,0.3), transparent);
+}
+.policy-item {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e5e5e5;
+  transition: background 0.15s;
+}
+.policy-item:hover {
+  background: #fafafa;
+}
+.policy-item:last-child {
+  border-bottom: none;
+}
+.policy-item-single {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  row-gap: 6px;
+}
+.policy-item-single .policy-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+}
+.policy-item-single .policy-options {
+  display: flex;
+  gap: 6px;
+}
+.policy-item-single .policy-description {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  color: #666;
+}
+.policy-item-multi {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.policy-item-multi .policy-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+}
+.policy-item-multi .policy-options-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.policy-item-multi .policy-description {
+  font-size: 12px;
+  color: #666;
+}
+.policy-emoji {
+  font-size: 16px;
+  margin-right: 8px;
+  display: inline-block;
+  width: 22px;
+  text-align: center;
+}
+.policy-sub-item {
+  margin-top: 10px;
+  margin-left: 32px;
+  padding: 10px 14px;
+  border-left: 3px solid #e5e5e5;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.btn-policy-option {
+  padding: 5px 11px;
+  border: 1px solid #ddd;
+  background: white;
+  color: #555;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+.btn-policy-option:hover:not(:disabled) {
+  background: #f5f5f5;
+  border-color: #bbb;
+}
+.btn-policy-option.btn-primary,
+.btn-policy-option.active {
+  background: #d97706;
+  color: white;
+  border-color: #d97706;
+  font-weight: 500;
+}
+.btn-policy-option.btn-ghost {
+  background: white;
+  color: #555;
+  border-color: #ddd;
+  font-weight: normal;
+}
