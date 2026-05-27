@@ -1,5 +1,6 @@
 const ProgressReportRepository = require('../../repositories/ProgressReportRepository');
 const crypto = require('crypto');
+const { _toStr } = require('./_helpers');
 
 class PrismaProgressReportRepository extends ProgressReportRepository {
   constructor(prismaClient, encSecret) {
@@ -29,40 +30,43 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     } catch { return '[복호화 오류]'; }
   }
 
-  // ProgressReport row를 snake_case로 평탄화 + content 복호화
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flatten(report, authorName, files) {
     if (!report) return null;
-    const { evalId, authorId, content, ...rest } = report;
     return {
-      ...rest,
-      eval_id:     evalId,
-      author_id:   authorId,
+      id:          report.id,
+      eval_id:     report.evalId,
+      author_id:   report.authorId,
+      content:     report.content ? this._decrypt(report.content) : '',
+      created_at:  _toStr(report.createdAt ?? report.created_at),
+      updated_at:  _toStr(report.updatedAt ?? report.updated_at),
       author_name: authorName || null,
-      content:     content ? this._decrypt(content) : '',
       files:       files || [],
     };
   }
 
-  // ReportFile row를 snake_case로 평탄화 (메타데이터만, file_data 제외)
+  // 첨부파일 메타데이터 평탄화 (file_data 제외)
   _flattenFileMeta(f) {
     if (!f) return null;
-    const { fileName, fileData, ...rest } = f;
     return {
-      ...rest,
-      file_name: fileName,
-      // file_type, file_size는 schema에서 이미 snake_case (필드명 그대로)
+      id:            f.id,
+      report_id:     f.reportId,
+      feedback_id:   f.feedbackId,
+      final_eval_id: f.finalEvalId,
+      file_name:     f.fileName,
+      file_type:     f.fileType  ?? f.file_type,
+      file_size:     f.fileSize  ?? f.file_size,
+      created_at:    _toStr(f.createdAt ?? f.created_at),
     };
   }
 
   async findByEvalId(evalId) {
-    // 1. 보고서 목록 조회
     const reports = await this.prisma.progressReport.findMany({
       where: { evalId: Number(evalId) },
       orderBy: { created_at: 'desc' }
     });
     if (!reports.length) return [];
 
-    // 2. 작성자 이름 한 번에 조회
     const authorIds = [...new Set(reports.map(r => r.authorId))];
     const authors = await this.prisma.user.findMany({
       where: { id: { in: authorIds } },
@@ -70,7 +74,6 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     });
     const authorMap = Object.fromEntries(authors.map(u => [u.id, u.name]));
 
-    // 3. 첨부파일 메타데이터 한 번에 조회 (file_data 제외)
     const reportIds = reports.map(r => r.id);
     const allFiles = await this.prisma.reportFile.findMany({
       where: { reportId: { in: reportIds } },
@@ -84,20 +87,17 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
       }
     });
 
-    // 4. 보고서별 파일 그룹핑
     const filesByReport = {};
     allFiles.forEach(f => {
       if (!filesByReport[f.reportId]) filesByReport[f.reportId] = [];
       filesByReport[f.reportId].push(this._flattenFileMeta(f));
     });
 
-    // 5. 평탄화 + 결합
     return reports.map(r => this._flatten(r, authorMap[r.authorId], filesByReport[r.id] || []));
   }
 
   async create(data) {
     return await this.prisma.$transaction(async (tx) => {
-      // 1. 보고서 생성 (content 암호화)
       const created = await tx.progressReport.create({
         data: {
           evalId:   Number(data.eval_id),
@@ -106,7 +106,6 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
         }
       });
 
-      // 2. 첨부파일 일괄 저장
       for (const f of (data.files || [])) {
         await tx.reportFile.create({
           data: {
@@ -131,7 +130,7 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     return {
       file_name: f.fileName,
       file_data: f.fileData,
-      file_type: f.file_type,
+      file_type: f.fileType ?? f.file_type,
     };
   }
 }

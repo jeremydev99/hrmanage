@@ -1,5 +1,6 @@
 const FinalEvaluationRepository = require('../../repositories/FinalEvaluationRepository');
 const crypto = require('crypto');
+const { _toStr } = require('./_helpers');
 
 class PrismaFinalEvaluationRepository extends FinalEvaluationRepository {
   constructor(prismaClient, encSecret) {
@@ -33,50 +34,45 @@ class PrismaFinalEvaluationRepository extends FinalEvaluationRepository {
     } catch { return '[복호화 오류]'; }
   }
 
-  // 실제 schema.prisma의 필드명(일부 snake_case 혼재)에 맞춰 평탄화
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flatten(fe) {
     if (!fe) return null;
-    const {
-      scores, evalId, selfNote, selfDone, self_done_at,
-      mgrNote, mgrDone, mgr_done_at, mgrApproverId,
-      finalScore, finalGrade, selectedGrade,
-      secondMgrDone, second_mgr_done_at, secondMgrNote, secondMgrId,
-      second_selected_grade, locked_at, evalCycle,
-      ...rest
-    } = fe;
     return {
-      ...rest,
-      eval_id: evalId,
-      self_note: selfNote ? this._decrypt(selfNote) : '',
-      self_done: selfDone,
-      self_done_at,
-      mgr_note: mgrNote ? this._decrypt(mgrNote) : '',
-      mgr_done: mgrDone,
-      mgr_done_at,
-      mgr_approver_id: mgrApproverId,
-      final_score: finalScore,
-      final_grade: finalGrade,
-      selected_grade: selectedGrade,
-      second_mgr_done: secondMgrDone,
-      second_mgr_done_at,
-      second_mgr_note: secondMgrNote ? this._decrypt(secondMgrNote) : '',
-      second_mgr_id: secondMgrId,
-      second_selected_grade,
-      locked_at,
-      scores: (scores || []).map(s => this._flattenScore(s))
+      id:                    fe.id,
+      eval_id:               fe.evalId,
+      self_note:             fe.selfNote ? this._decrypt(fe.selfNote) : '',
+      self_done:             fe.selfDone,
+      self_done_at:          _toStr(fe.selfDoneAt ?? fe.self_done_at),
+      mgr_note:              fe.mgrNote ? this._decrypt(fe.mgrNote) : '',
+      mgr_done:              fe.mgrDone,
+      mgr_done_at:           _toStr(fe.mgrDoneAt ?? fe.mgr_done_at),
+      mgr_approver_id:       fe.mgrApproverId,
+      final_score:           fe.finalScore,
+      final_grade:           fe.finalGrade,
+      locked:                fe.locked,
+      locked_at:             _toStr(fe.lockedAt ?? fe.locked_at),
+      created_at:            _toStr(fe.createdAt ?? fe.created_at),
+      updated_at:            _toStr(fe.updatedAt ?? fe.updated_at),
+      second_mgr_done:       fe.secondMgrDone,
+      second_mgr_done_at:    _toStr(fe.secondMgrDoneAt ?? fe.second_mgr_done_at),
+      second_mgr_note:       fe.secondMgrNote ? this._decrypt(fe.secondMgrNote) : '',
+      second_mgr_id:         fe.secondMgrId,
+      selected_grade:        fe.selectedGrade,
+      second_selected_grade: fe.secondSelectedGrade ?? fe.second_selected_grade,
+      scores:                (fe.scores || []).map(s => this._flattenScore(s)),
     };
   }
 
   _flattenScore(s) {
     if (!s) return null;
-    const { finalId, goalId, selfScore, mgrScore, secondMgrScore, ...rest } = s;
     return {
-      ...rest,
-      final_id: finalId,
-      goal_id: goalId,
-      self_score: selfScore,
-      mgr_score: mgrScore,
-      second_mgr_score: secondMgrScore
+      id:               s.id,
+      final_id:         s.finalId,
+      goal_id:          s.goalId,
+      self_score:       s.selfScore,
+      mgr_score:        s.mgrScore,
+      second_mgr_score: s.secondMgrScore,
+      created_at:       _toStr(s.createdAt ?? s.created_at),
     };
   }
 
@@ -154,7 +150,6 @@ class PrismaFinalEvaluationRepository extends FinalEvaluationRepository {
 
   async resetForUnlock(finalId) {
     await this.prisma.$transaction(async (tx) => {
-      // final_evaluations 완전 초기화
       await tx.finalEvaluation.update({
         where: { id: Number(finalId) },
         data: {
@@ -173,7 +168,6 @@ class PrismaFinalEvaluationRepository extends FinalEvaluationRepository {
           selectedGrade: null,
         }
       });
-      // 별점 초기화 (mgr_score, second_mgr_score만 NULL — self_score는 보존)
       await tx.finalEvalScore.updateMany({
         where: { finalId: Number(finalId) },
         data: { mgrScore: null, secondMgrScore: null }

@@ -1,5 +1,6 @@
 const GoalRepository = require('../../repositories/GoalRepository');
 const crypto = require('crypto');
+const { _toStr } = require('./_helpers');
 
 class PrismaGoalRepository extends GoalRepository {
   constructor(prismaClient, encSecret) {
@@ -33,19 +34,22 @@ class PrismaGoalRepository extends GoalRepository {
     } catch { return '[복호화 오류]'; }
   }
 
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flatten(g) {
     if (!g) return null;
-    const { category, evalCycle, evalId, categoryId, sortOrder, name, kpi, ...rest } = g;
     return {
-      ...rest,
-      eval_id: evalId,
-      category_id: categoryId,
-      sort_order: sortOrder,
-      name: name ? this._decrypt(name) : '',
-      kpi: kpi ? this._decrypt(kpi) : '',
-      cat_name: category?.name || null,
-      color: category?.color || null,
-      text_color: category?.textColor || null
+      id:          g.id,
+      eval_id:     g.evalId,
+      category_id: g.categoryId,
+      name:        g.name ? this._decrypt(g.name) : '',
+      kpi:         g.kpi  ? this._decrypt(g.kpi)  : '',
+      weight:      g.weight,
+      sort_order:  g.sortOrder,
+      status:      g.status,
+      created_at:  _toStr(g.createdAt ?? g.created_at),
+      cat_name:    g.category?.name      || null,
+      color:       g.category?.color     || null,
+      text_color:  g.category?.textColor || null,
     };
   }
 

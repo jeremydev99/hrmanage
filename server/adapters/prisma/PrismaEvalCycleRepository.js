@@ -1,5 +1,6 @@
 const EvalCycleRepository = require('../../repositories/EvalCycleRepository');
 const crypto = require('crypto');
+const { _toStr } = require('./_helpers');
 
 /**
  * Prisma 기반 EvalCycleRepository 구현체
@@ -34,19 +35,26 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
     } catch { return '[복호화 오류]'; }
   }
 
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flatten(ev) {
     if (!ev) return null;
-    const { user, userId, periodType, periodLabel, evalYear, selfReason, rejectReason, ...rest } = ev;
     return {
-      ...rest,
-      user_id:       userId,
-      period_type:   periodType,
-      period_label:  periodLabel,
-      eval_year:     evalYear,
-      self_reason:   selfReason   ? this._decrypt(selfReason)   : '',
-      reject_reason: rejectReason ? this._decrypt(rejectReason) : '',
-      user_name:     user?.name || null,
-      dept:          user?.dept || null,
+      id:            ev.id,
+      user_id:       ev.userId,
+      period_type:   ev.periodType,
+      period_label:  ev.periodLabel,
+      eval_year:     ev.evalYear,
+      phase:         ev.phase,
+      locked:        ev.locked,
+      phase2:        ev.phase2,
+      self_reason:   ev.selfReason   ? this._decrypt(ev.selfReason)   : '',
+      reject_reason: ev.rejectReason ? this._decrypt(ev.rejectReason) : '',
+      submitted_at:  _toStr(ev.submittedAt ?? ev.submitted_at),
+      approved_at:   _toStr(ev.approvedAt  ?? ev.approved_at),
+      created_at:    _toStr(ev.createdAt   ?? ev.created_at),
+      updated_at:    _toStr(ev.updatedAt   ?? ev.updated_at),
+      user_name:     ev.user?.name || null,
+      dept:          ev.user?.dept || null,
     };
   }
 
@@ -99,7 +107,7 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
   async updatePhaseAndReason(id, data) {
     const updateData = {
       phase:      data.phase,
-      updated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      updated_at: new Date().toISOString(),
     };
     if (data.self_reason !== undefined) {
       updateData.selfReason = this._encrypt(data.self_reason || '');
@@ -119,7 +127,7 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       data: {
         phase:        'draft',
         rejectReason: null,
-        updated_at:   new Date().toISOString().slice(0, 19).replace('T', ' '),
+        updated_at:   new Date().toISOString(),
       }
     });
   }
@@ -130,7 +138,7 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       data: {
         phase,
         locked:     Number(locked),
-        updated_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        updated_at: new Date().toISOString(),
       }
     });
   }

@@ -1,16 +1,18 @@
 const GradeCriteriaRepository = require('../../repositories/GradeCriteriaRepository');
+const { _toStr } = require('./_helpers');
 
 function toSnakeCase(item) {
   if (!item) return item;
   return {
-    id: item.id,
-    grade_code: item.gradeCode,
-    grade_name: item.gradeName,
+    id:          item.id,
+    grade_code:  item.gradeCode,
+    grade_name:  item.gradeName,
     description: item.description,
-    note: item.note,
-    sort_order: item.sortOrder,
-    is_active: item.isActive,
-    created_at: item.created_at,
+    note:        item.note,
+    sort_order:  item.sortOrder,
+    is_active:   item.isActive,
+    // SQLite: created_at String? (snake_case 필드) / PG: createdAt DateTime? @map("created_at")
+    created_at:  _toStr(item.createdAt ?? item.created_at),
   };
 }
 

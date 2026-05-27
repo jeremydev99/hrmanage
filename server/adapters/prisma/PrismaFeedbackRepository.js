@@ -1,5 +1,6 @@
 const FeedbackRepository = require('../../repositories/FeedbackRepository');
 const crypto = require('crypto');
+const { _toStr } = require('./_helpers');
 
 class PrismaFeedbackRepository extends FeedbackRepository {
   constructor(prismaClient, encSecret) {
@@ -33,28 +34,30 @@ class PrismaFeedbackRepository extends FeedbackRepository {
     } catch { return '[복호화 오류]'; }
   }
 
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flattenFeedback(fb) {
     if (!fb) return null;
-    const { author, items, evalId, authorId, overallNote, ...rest } = fb;
     return {
-      ...rest,
-      eval_id: evalId,
-      author_id: authorId,
-      author_name: author?.name || null,
-      overall_note: overallNote ? this._decrypt(overallNote) : '',
-      items: (items || []).map(it => this._flattenItem(it))
+      id:           fb.id,
+      eval_id:      fb.evalId,
+      author_id:    fb.authorId,
+      overall_note: fb.overallNote ? this._decrypt(fb.overallNote) : '',
+      created_at:   _toStr(fb.createdAt ?? fb.created_at),
+      author_name:  fb.author?.name || null,
+      items:        (fb.items || []).map(it => this._flattenItem(it)),
     };
   }
 
   _flattenItem(it) {
     if (!it) return null;
-    const { goal, feedbackId, goalId, note, ...rest } = it;
     return {
-      ...rest,
-      feedback_id: feedbackId,
-      goal_id: goalId,
-      note: note ? this._decrypt(note) : '',
-      goal_name: goal?.name ? this._decrypt(goal.name) : null
+      id:          it.id,
+      feedback_id: it.feedbackId,
+      goal_id:     it.goalId,
+      score:       it.score,
+      note:        it.note ? this._decrypt(it.note) : '',
+      created_at:  _toStr(it.createdAt ?? it.created_at),
+      goal_name:   it.goal?.name ? this._decrypt(it.goal.name) : null,
     };
   }
 

@@ -1,4 +1,5 @@
 const GoalCategoryRepository = require('../../repositories/GoalCategoryRepository');
+const { _toStr } = require('./_helpers');
 
 /**
  * Prisma의 camelCase 응답을 기존 server/index.js와 호환되는 snake_case로 변환
@@ -6,16 +7,18 @@ const GoalCategoryRepository = require('../../repositories/GoalCategoryRepositor
 function toSnakeCase(cat) {
   if (!cat) return cat;
   return {
-    id: cat.id,
-    name: cat.name,
+    id:          cat.id,
+    name:        cat.name,
     description: cat.description,
-    weight: cat.weight,
-    color: cat.color,
-    text_color: cat.textColor,
-    sort_order: cat.sortOrder,
-    is_active: cat.isActive,
-    created_by: cat.created_by,
-    created_at: cat.created_at,
+    weight:      cat.weight,
+    color:       cat.color,
+    text_color:  cat.textColor,
+    sort_order:  cat.sortOrder,
+    is_active:   cat.isActive,
+    // SQLite: created_by Int? (snake_case 필드) / PG: createdBy Int? @map("created_by")
+    created_by:  cat.createdBy ?? cat.created_by,
+    // SQLite: created_at String? (snake_case 필드) / PG: createdAt DateTime? @map("created_at")
+    created_at:  _toStr(cat.createdAt ?? cat.created_at),
   };
 }
 

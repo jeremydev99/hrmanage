@@ -1,4 +1,5 @@
 const UserRepository = require('../../repositories/UserRepository');
+const { _toStr } = require('./_helpers');
 
 /**
  * Prisma의 camelCase 응답을 기존 server/index.js와 호환되는 snake_case로 변환
@@ -8,21 +9,22 @@ const UserRepository = require('../../repositories/UserRepository');
 function toSnakeCase(user) {
   if (!user) return user;
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    password_hash: user.passwordHash,
-    role: user.role,
-    dept: user.dept,
-    title: user.title,
-    manager_id: user.managerId,
-    is_active: user.isActive,
+    id:             user.id,
+    name:           user.name,
+    email:          user.email,
+    password_hash:  user.passwordHash,
+    role:           user.role,
+    dept:           user.dept,
+    title:          user.title,
+    manager_id:     user.managerId,
+    is_active:      user.isActive,
     account_status: user.accountStatus,
-    signup_note: user.signupNote,
-    grade: user.grade,
-    eval_mode: user.evalMode,
-    org_id: user.orgId,
-    created_at: user.created_at,
+    signup_note:    user.signupNote,
+    grade:          user.grade,
+    eval_mode:      user.evalMode,
+    org_id:         user.orgId,
+    // SQLite: created_at String? (snake_case 필드) / PG: createdAt DateTime? @map("created_at")
+    created_at:     _toStr(user.createdAt ?? user.created_at),
   };
 }
 
@@ -70,7 +72,6 @@ class PrismaUserRepository extends UserRepository {
   }
 
   async isInApproverChain(approverId, targetUserId) {
-    // manager_id 체인을 최대 10단계까지 재귀 탐색
     const approverIdStr = String(approverId);
     let currentUserId = Number(targetUserId);
 

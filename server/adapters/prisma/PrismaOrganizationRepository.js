@@ -1,4 +1,5 @@
 const OrganizationRepository = require('../../repositories/OrganizationRepository');
+const { _toStr } = require('./_helpers');
 
 /**
  * Prisma 기반 OrganizationRepository 구현체
@@ -14,22 +15,21 @@ class PrismaOrganizationRepository extends OrganizationRepository {
     this.prisma = prismaClient;
   }
 
-  /**
-   * Prisma 응답을 기존 SQL 결과 형태로 평탄화
-   * 클라이언트가 기대하는 snake_case 필드명 유지
-   */
+  // 명시적 매핑 — SQLite(snake_case 필드) / PostgreSQL(camelCase 필드) 양쪽 호환
   _flatten(org) {
     if (!org) return null;
-    const { leader, parent, leaderId, parentId, sortOrder, isActive, ...rest } = org;
     return {
-      ...rest,
-      leader_id: leaderId,
-      parent_id: parentId,
-      sort_order: sortOrder,
-      is_active: isActive,
-      leader_name: leader?.name || null,
-      leader_title: leader?.title || null,
-      parent_name: parent?.name || null,
+      id:           org.id,
+      name:         org.name,
+      description:  org.description,
+      leader_id:    org.leaderId,
+      parent_id:    org.parentId,
+      sort_order:   org.sortOrder,
+      is_active:    org.isActive,
+      created_at:   _toStr(org.createdAt ?? org.created_at),
+      leader_name:  org.leader?.name  || null,
+      leader_title: org.leader?.title || null,
+      parent_name:  org.parent?.name  || null,
     };
   }
 
