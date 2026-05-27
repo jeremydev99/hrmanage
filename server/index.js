@@ -1200,6 +1200,31 @@ app.get('/api/eval-periods/active', auth, (req, res) => {
   }
 });
 
+// 평가 기간이 존재하는 연도 목록 (드롭다운용)
+app.get('/api/eval-periods/available-years', auth, (req, res) => {
+  try {
+    const includeInactive = String(req.query.include_inactive) === 'true';
+    const isAdmin = ['master', 'admin'].includes(req.user?.role);
+    const effective = isAdmin && includeInactive;
+
+    const filter = effective ? '' : 'WHERE is_active = 1';
+    const rows = db.prepare(
+      `SELECT DISTINCT eval_year FROM eval_periods ${filter} ORDER BY eval_year DESC`
+    ).all();
+
+    const years = rows
+      .map(r => {
+        const match = String(r.eval_year).match(/(\d{4})/);
+        return match ? parseInt(match[1]) : null;
+      })
+      .filter(y => y !== null);
+
+    res.json({ years });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 평가 기간 추가 (admin+)
 app.post('/api/eval-periods', auth, adminOnly, (req, res) => {
   try {

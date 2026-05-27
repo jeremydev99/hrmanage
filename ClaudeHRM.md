@@ -243,6 +243,7 @@ GET    /api/files/:fileId               파일 다운로드
 
 GET    /api/eval-periods                평가 기간 목록 (?year_from,?year_to — 최근 2개년 기본, 최대 10년)
 GET    /api/eval-periods/active         활성 기간
+GET    /api/eval-periods/available-years  평가 기간 데이터 존재 연도 목록 (?include_inactive, admin+)
 GET    /api/eval-periods/my-modes       활성 기간별 내 평가방식
 POST   /api/eval-periods                기간 추가 (admin+)
 PATCH  /api/eval-periods/:id/toggle     활성/비활성 토글 (admin+)
@@ -452,6 +453,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | nodemon 도입 + 평가 기간 UI 보정(한 줄 배치, 데이터 연도만, 체크박스 한 줄) (PROMPT 60B-fix) | Claude Code |
 | 2026-05-27 | 전직원 평가 현황 기간 선택 + 평가 기간 관리 접기/조회 범위 (PROMPT 60B) | Claude Code |
 | 2026-05-27 | 개발 백로그 섹션 신규 + OKR 평가 정책 결정 (운영 도구로 유지, Phase 2 재검토 등록) (PROMPT 60) | Claude Code |
 | 2026-05-27 | 평가완료 표시 보정(사이클 단위) + comprehensive AI 렌더링 수정 + 목표 미입력 차단 (PROMPT 58D) | Claude Code |

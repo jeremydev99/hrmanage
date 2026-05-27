@@ -2023,6 +2023,25 @@ async function addGrade() {
 
 
 /* ── 평가 기간 관리 ── */
+let _availableYears = null;
+
+async function loadAvailableYears(includeInactive) {
+  try {
+    const result = await API.get('/eval-periods/available-years?include_inactive=' + (includeInactive ? 'true' : 'false'));
+    _availableYears = (result.years && result.years.length > 0) ? result.years : [new Date().getFullYear()];
+    return _availableYears;
+  } catch(err) {
+    console.error('연도 목록 로드 실패:', err);
+    return [new Date().getFullYear()];
+  }
+}
+
+function renderYearOptions(years, selectedYear) {
+  return years.map(function(y) {
+    return '<option value="' + y + '"' + (selectedYear === y ? ' selected' : '') + '>' + y + '년</option>';
+  }).join('');
+}
+
 async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
   if (yearFrom === undefined) yearFrom = null;
   if (yearTo === undefined) yearTo = null;
@@ -2032,11 +2051,14 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
 
-  const currentYear = new Date().getFullYear();
-  const effFrom = yearFrom !== null ? yearFrom : (currentYear - 1);
-  const effTo   = yearTo   !== null ? yearTo   : currentYear;
-
   try {
+    const years = await loadAvailableYears(includeInactive);
+    const maxYear = Math.max.apply(null, years);
+    const minYear = years.length >= 2 ? years[years.length - 1] : maxYear;
+
+    const effFrom = yearFrom !== null ? yearFrom : (years.length >= 2 ? years[1] : minYear);
+    const effTo   = yearTo   !== null ? yearTo   : maxYear;
+
     const periods = await API.get('/eval-periods?year_from=' + effFrom + '&year_to=' + effTo);
 
     el.innerHTML = '';
@@ -2046,11 +2068,9 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
     ctrlDiv.className = 'period-mgr-controls';
     ctrlDiv.style.marginBottom = '12px';
 
-    let fromOptHtml = '', toOptHtml = '';
-    for (let y = currentYear + 1; y >= currentYear - 10; y--) {
-      fromOptHtml += '<option value="' + y + '"' + (effFrom === y ? ' selected' : '') + '>' + y + '년</option>';
-      toOptHtml   += '<option value="' + y + '"' + (effTo   === y ? ' selected' : '') + '>' + y + '년</option>';
-    }
+    const fromOptHtml = renderYearOptions(years, effFrom);
+    const toOptHtml   = renderYearOptions(years, effTo);
+
     ctrlDiv.innerHTML = '<label style="font-size:13px;color:var(--muted)">조회 범위:</label>'
       + '<select id="periodYearFrom" onchange="reloadEvalPeriods()" style="height:32px;font-size:13px">' + fromOptHtml + '</select>'
       + '<span style="font-size:13px;padding:0 4px">~</span>'

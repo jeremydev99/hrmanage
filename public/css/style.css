@@ -577,16 +577,49 @@ textarea:focus{outline:none;border-color:var(--o400)}
   border-radius: 8px;
 }
 
+/* ── 전직원 평가 현황 컨트롤 ── */
+.admin-status-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--o50);
+  border: 1px solid var(--o100);
+  border-radius: 8px;
+}
+.admin-status-controls select {
+  min-width: 200px;
+  flex-shrink: 0;
+}
+.admin-status-controls .checkbox-inline {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.admin-status-controls .checkbox-inline span {
+  white-space: nowrap;
+}
+
 /* ── 평가 기간 관리 컨트롤 ── */
 .period-mgr-controls {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 10px 14px;
   background: var(--o50);
   border: 1px solid var(--o100);
   border-radius: 8px;
+}
+.period-mgr-controls select {
+  min-width: 120px;
+  flex-shrink: 0;
+}
+@media (max-width: 768px) {
+  .period-mgr-controls {
+    flex-wrap: wrap;
+  }
 }
 
 /* ── 평가 기간 접기/펼치기 카드 ── */
@@ -624,4 +657,9 @@ textarea:focus{outline:none;border-color:var(--o400)}
   align-items: center;
   gap: 5px;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.checkbox-inline input[type="checkbox"] {
+  flex-shrink: 0;
 }

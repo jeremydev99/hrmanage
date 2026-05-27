@@ -5,6 +5,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
+    "dev": "nodemon -L server/index.js",
     "install-deps": "npm install",
     "db:generate": "prisma generate",
     "db:pull": "prisma db pull",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@prisma/client": "^5.22.0",
+    "nodemon": "^3.0.0",
     "prisma": "^5.22.0"
   }
 }

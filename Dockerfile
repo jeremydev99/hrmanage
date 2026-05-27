@@ -38,4 +38,4 @@ ENV TZ=Asia/Seoul
 EXPOSE 3000
 
 # 실행 명령
-CMD ["node", "server/index.js"]
+CMD ["npm", "run", "dev"]
