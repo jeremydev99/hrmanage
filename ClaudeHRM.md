@@ -377,6 +377,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-27 | 개인정보·보안 이슈 트래커 신규 작성 (PRIVACY_ISSUES.md, ISSUE-001~006 등록) (PROMPT 54) | Claude Code |
 | 2026-05-27 | INFRA-2A-2 영향 분석 (DateTime/Boolean/Naming 패턴, INFRA-2A-2_ANALYSIS.md) (PROMPT 53) | Claude Code |
 | 2026-05-22 | 자동 푸시 정책 도입 (일반 수정 자동, 중대 변경 수동) (PROMPT 53A) | Claude Code |
 | 2026-05-22 | 개인정보 보호 원칙 신규 작성 (HRPRIVACY_PRINCIPLES.md, B-1~B-4+C 결정 반영) (PROMPT 52) | Claude Code |
@@ -606,17 +607,19 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### INFRA-4: 법무·계약·운영 문서
 - [x] 개인정보 보호 원칙 (HRPRIVACY_PRINCIPLES.md) 작성 — 2026-05-21
-- [ ] 개인정보처리방침 (HRPRIVACY_PRINCIPLES.md 기반 작성)
+- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~006 등록)
+- [ ] 개인정보처리방침 (HRPRIVACY 기반 작성, 인프라 안정화 후)
 - [ ] 표준약관
 - [ ] DPA (데이터 처리 위탁 계약, B2B 표준)
-- [ ] 개인정보 관리 백서 (외부 감사·조사 대응, 향후 작성)
-- [ ] 사용자 매뉴얼 (페이지별 도움말, 향후 작성)
-- [ ] FAQ 페이지 (향후 작성)
-- [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇, 정식 출시 이후)
-- [ ] 평가 기간 한정 열람 정책 옵션 점검 및 보완 (HRPRIVACY 원칙 4 기준)
-- [ ] 평가 기간 비활성화 시 부하·상사 열람 차단 점검 (HRPRIVACY 원칙 4 기준)
-- [ ] 퇴사자 데이터 5년 자동 삭제 스케줄러 (HRPRIVACY 원칙 3 기준)
-- [ ] 본인 평가 데이터 ZIP/PDF 내보내기 기능 (HRPRIVACY 원칙 3 기준)
+- [ ] PRIVACY_INVENTORY.md — 개인정보 처리 인벤토리 (인프라 안정화 후, 단계 1 진입 직전)
+- [ ] SECURITY_INVENTORY.md — 보안 통제 인벤토리 (인프라 안정화 후, 단계 1 진입 직전)
+- [ ] INCIDENT_RESPONSE.md — 사고 대응 절차 (단계 1 진입 직전)
+- [ ] SECURITY_WHITEPAPER.md — 보안 솔루션 백서 (외부 영업용, 단계 2 진입 직전)
+- [ ] 개인정보 관리 백서 (PRIVACY_INVENTORY와 별도, 외부 감사·조사 대응)
+- [ ] 사용자 매뉴얼 (페이지별 우측 위치)
+- [ ] FAQ 페이지
+- [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇)
+- [ ] ISSUE-001~006 해결 (PRIVACY_ISSUES.md 참조)
 
 ---
 
@@ -731,17 +734,19 @@ PostgreSQL 마이그레이션(INFRA-2A-4) 같이 DB 종류가 바뀌는 경우 V
 
 ### INFRA-4: 법무·계약·운영 문서
 - [x] 개인정보 보호 원칙 (HRPRIVACY_PRINCIPLES.md) 작성 — 2026-05-21
-- [ ] 개인정보처리방침 (HRPRIVACY_PRINCIPLES.md 기반 작성)
+- [x] 개인정보·보안 이슈 트래커 (PRIVACY_ISSUES.md) 작성 — 2026-05-27 (ISSUE-001~006 등록)
+- [ ] 개인정보처리방침 (HRPRIVACY 기반 작성, 인프라 안정화 후)
 - [ ] 표준약관
 - [ ] DPA (데이터 처리 위탁 계약, B2B 표준)
-- [ ] 개인정보 관리 백서 (외부 감사·조사 대응, 향후 작성)
-- [ ] 사용자 매뉴얼 (페이지별 도움말, 향후 작성)
-- [ ] FAQ 페이지 (향후 작성)
-- [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇, 정식 출시 이후)
-- [ ] 평가 기간 한정 열람 정책 옵션 점검 및 보완 (HRPRIVACY 원칙 4 기준)
-- [ ] 평가 기간 비활성화 시 부하·상사 열람 차단 점검 (HRPRIVACY 원칙 4 기준)
-- [ ] 퇴사자 데이터 5년 자동 삭제 스케줄러 (HRPRIVACY 원칙 3 기준)
-- [ ] 본인 평가 데이터 ZIP/PDF 내보내기 기능 (HRPRIVACY 원칙 3 기준)
+- [ ] PRIVACY_INVENTORY.md — 개인정보 처리 인벤토리 (인프라 안정화 후, 단계 1 진입 직전)
+- [ ] SECURITY_INVENTORY.md — 보안 통제 인벤토리 (인프라 안정화 후, 단계 1 진입 직전)
+- [ ] INCIDENT_RESPONSE.md — 사고 대응 절차 (단계 1 진입 직전)
+- [ ] SECURITY_WHITEPAPER.md — 보안 솔루션 백서 (외부 영업용, 단계 2 진입 직전)
+- [ ] 개인정보 관리 백서 (PRIVACY_INVENTORY와 별도, 외부 감사·조사 대응)
+- [ ] 사용자 매뉴얼 (페이지별 우측 위치)
+- [ ] FAQ 페이지
+- [ ] 고객센터 페이지 (FAQ + 향후 AI 챗봇)
+- [ ] ISSUE-001~006 해결 (PRIVACY_ISSUES.md 참조)
 | 2026-05-12 | PC 드롭다운 슬라이드 애니, 성과관리 메뉴, 세션 보안 정책 추가 | Claude Code |
 | 2026-05-12 | organizations 테이블 추가, org_id 기반 평가방식 조회, 조직 관리 탭 추가 | Claude Code |
 | 2026-05-12 | 반응형 UI 추가 (모바일 햄버거 메뉴, 768px/480px 미디어쿼리) | Claude Code |
