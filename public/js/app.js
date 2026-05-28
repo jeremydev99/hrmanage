@@ -763,7 +763,7 @@ function renderOrgViewHTML(periods) {
     if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
     return a.period_label < b.period_label ? -1 : 1;
   }) : [];
-  const sp = allSorted.filter(p => p.is_active);
+  const sp = allSorted;
   const defFromId = sp.length > 8 ? sp[sp.length - 8].id : (sp[0]?.id || '');
   const defToId   = sp[sp.length - 1]?.id || '';
   const opts = (arr, selId) => arr.map(q =>
@@ -806,7 +806,6 @@ function reloadOrgPeriods() {
   const includeInactive = document.getElementById('include-inactive-check')?.checked || false;
   const allPeriods = window._perfData?.evalPeriods || [];
   const sorted = [...allPeriods]
-    .filter(p => includeInactive || p.is_active)
     .sort((a,b) => {
       if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
       return a.period_label < b.period_label ? -1 : 1;
@@ -835,7 +834,6 @@ async function loadOrgAnalysis() {
   const maxDep = parseInt(depEl?.value) || 999;
   const includeInactive = document.getElementById('include-inactive-check')?.checked || false;
   const allPeriods = [...(window._perfData?.evalPeriods || [])]
-    .filter(p => includeInactive || p.is_active)
     .sort((a,b) => {
       if (a.eval_year !== b.eval_year) return a.eval_year < b.eval_year ? -1 : 1;
       return a.period_label < b.period_label ? -1 : 1;

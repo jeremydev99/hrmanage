@@ -468,6 +468,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | 기간 조회 범위 회귀 버그 수정 — 전체 조직 분석·평가 기간 관리 디폴트 전체 조회 복원 (PROMPT 60E) | Claude Code |
 | 2026-05-28 | weight 카테고리 내 100% 통일 — 검증·점수 계산 로직 변경 (calcFinalScore 헬퍼) (PROMPT 61A) | Claude Code |
 | 2026-05-28 | PROMPT 작성 원칙 명문화 — 코드 읽기 가이드·실행 트리거·컨텍스트 효율 (CLAUDE.md) | Claude Code |
 | 2026-05-28 | 평가 정책 탭 모든 항목 1행 통일 (policy-item-multi 제거, grid 레이아웃) (PROMPT 60C-fix) | Claude Code |

@@ -2049,14 +2049,19 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
 
   try {
-    const years = await loadAvailableYears(includeInactive);
-    const maxYear = Math.max.apply(null, years);
-    const minYear = years.length >= 2 ? years[years.length - 1] : maxYear;
+    // 드롭다운 연도 옵션은 항상 전체 연도 (비활성 포함)
+    const years = await loadAvailableYears(true);
+    const maxYear = years.length > 0 ? years[0] : new Date().getFullYear();
+    const minYear = years.length > 0 ? years[years.length - 1] : maxYear;
+    const selFrom = yearFrom !== null ? yearFrom : minYear;
+    const selTo   = yearTo   !== null ? yearTo   : maxYear;
 
-    const effFrom = yearFrom !== null ? yearFrom : (years.length >= 2 ? years[1] : minYear);
-    const effTo   = yearTo   !== null ? yearTo   : maxYear;
-
-    const periods = await API.get('/eval-periods?year_from=' + effFrom + '&year_to=' + effTo);
+    // 기간 목록: year 인자 없으면 전체 반환
+    const qParts = [];
+    if (yearFrom !== null) qParts.push('year_from=' + yearFrom);
+    if (yearTo   !== null) qParts.push('year_to='   + yearTo);
+    if (includeInactive)   qParts.push('include_inactive=true');
+    const periods = await API.get('/eval-periods' + (qParts.length ? '?' + qParts.join('&') : ''));
 
     el.innerHTML = '';
 
@@ -2065,8 +2070,8 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
     ctrlDiv.className = 'period-mgr-controls';
     ctrlDiv.style.marginBottom = '12px';
 
-    const fromOptHtml = renderYearOptions(years, effFrom);
-    const toOptHtml   = renderYearOptions(years, effTo);
+    const fromOptHtml = renderYearOptions(years, selFrom);
+    const toOptHtml   = renderYearOptions(years, selTo);
 
     ctrlDiv.innerHTML = '<label style="font-size:13px;color:var(--muted)">조회 범위:</label>'
       + '<select id="periodYearFrom" onchange="reloadEvalPeriods()" style="height:32px;font-size:13px">' + fromOptHtml + '</select>'
@@ -2075,7 +2080,7 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
       + '<button class="btn btn-ghost btn-sm" onclick="reloadEvalPeriods()">조회</button>'
       + '<button class="btn btn-ghost btn-sm" onclick="toggleAllPeriods(\'expand\')" style="margin-left:8px">전체 펼치기</button>'
       + '<button class="btn btn-ghost btn-sm" onclick="toggleAllPeriods(\'collapse\')">전체 접기</button>'
-      + '<small style="color:var(--muted);font-size:11px;margin-left:4px">최근 2개년 기본 표시. 최대 10년.</small>';
+      + '<small style="color:var(--muted);font-size:11px;margin-left:4px">기본 전체 표시. 최대 10년.</small>';
     el.appendChild(ctrlDiv);
 
     // 새 기간 추가 카드
