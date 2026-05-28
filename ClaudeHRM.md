@@ -353,7 +353,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - `goalRepo.updateStatusByEvalId(evalId, status)` — reopen/submit 시 goals 상태 일괄 변경
     - category 관계 `include`로 `cat_name`, `color`, `text_color` 평탄화 (`_flatten()`)
 20. **개인정보 보호 원칙** (2026-05-22, PROMPT 52): 모든 PROMPT 작업 시 `HRPRIVACY_PRINCIPLES.md`의 점검 체크리스트 통과 필수. 위반 우려 시 작업 중단 + 사용자(대표) 협의.
-21. **목표 미입력 차단** (2026-05-27, PROMPT 58D): 평가 제출(`/api/evals/:id/submit`) 및 1차 승인(`/api/approvals/:evalId/approve`) 시 `validateEvalGoals(evalId)` 헬퍼로 검증. 규칙: 목표 ≥ 1개, 가중치 합 = 100 (오차 ±0.01), name 필수, weight > 0. kpi는 선택적 (정성 목표 허용).
+21. **목표 입력 검증** (2026-05-27 PROMPT 58D → 2026-05-28 PROMPT 61A 보강): 평가 제출(`/api/evals/:id/submit`) 및 1차 승인(`/api/approvals/:evalId/approve`) 시 `validateEvalGoals(evalId)` 헬퍼로 검증. 규칙: 활성 카테고리당 목표 ≥ 1개, 카테고리별 가중치 합 = 100 (오차 ±0.01, **카테고리 내 비중 의미**), name 필수, weight > 0. kpi는 선택적 (정성 목표 허용).
 22. **평가 방식별 운영 정책** (2026-05-27, PROMPT 60):
     - **MBO** (Management by Objectives): 현재 운영 가능. draft → submit → pending → approved → final_done 워크플로우. PROMPT 58D 목표 검증 적용 (개수≥1, 가중치합=100±0.01, name 필수, weight>0).
     - **OKR** (Objectives and Key Results): 운영 관리 도구로만 동작 (저장·진행률 추적). 평가 점수 미통합, 승인 워크플로우 없음. `okr_key_results.weight` 컬럼은 미사용. 향후 Phase 2 재검토 (개발 백로그 BL-001).
@@ -366,6 +366,14 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - 강조 색상: 오렌지(#d97706), 옅은 주황 그라데이션(linear-gradient with rgba(217,119,6,0.3))은 섹션 구분에 사용
     - 모든 UI 작업 PROMPT의 사전 점검 단계에 기존 CSS 패턴 검색 포함
     - 협업 시 메타 원칙은 CLAUDE.md 참조
+
+24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
+    - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
+    - 헬퍼: `calcFinalScore(evalId, scoreField)` (scoreField: mgr_score | self_score | second_mgr_score)
+    - 0-100 스케일, 소수점 2자리 반올림 (표시 시 Math.round × 10 / 10)
+    - 부분 평가 시 평가된 카테고리 가중치 합으로 정규화 (usedCatW < 100)
+    - 등급 매핑: 90+:S, 80+:A, 70+:B, 60+:C, else:D
+    - `goal_categories.weight`(50/30/20)와 `goals.weight`(카테고리 내 100%)는 의미가 다름에 주의
 
 ---
 
@@ -460,6 +468,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | weight 카테고리 내 100% 통일 — 검증·점수 계산 로직 변경 (calcFinalScore 헬퍼) (PROMPT 61A) | Claude Code |
 | 2026-05-28 | PROMPT 작성 원칙 명문화 — 코드 읽기 가이드·실행 트리거·컨텍스트 효율 (CLAUDE.md) | Claude Code |
 | 2026-05-28 | 평가 정책 탭 모든 항목 1행 통일 (policy-item-multi 제거, grid 레이아웃) (PROMPT 60C-fix) | Claude Code |
 | 2026-05-28 | 평가 기간 관리 조회 범위 UI 시각적 버그 보정 (small/btn/label 압축 방지) (PROMPT 60B-fix2) | Claude Code |

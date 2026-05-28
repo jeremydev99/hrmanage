@@ -471,12 +471,14 @@ async function submitGoals() {
 
   for (const cat of App.categories) {
     const cg = (_goals[cat.id] || []).filter(g => g.name && g.name.trim());
-    if (cg.length > 0) {
-      const tw = cg.reduce((a, g) => a + Number(g.weight), 0);
-      if (tw !== 100) {
-        showAlert(`[${cat.name}] 가중치 합이 100%여야 합니다. 현재: ${tw}%`, 'orange');
-        return;
-      }
+    if (cg.length === 0) {
+      showAlert(`[${cat.name}] 카테고리에 최소 1개의 목표를 입력해야 합니다.`, 'orange');
+      return;
+    }
+    const tw = cg.reduce((a, g) => a + Number(g.weight), 0);
+    if (tw !== 100) {
+      showAlert(`[${cat.name}] 가중치 합이 100%여야 합니다. 현재: ${tw}%`, 'orange');
+      return;
     }
   }
 
@@ -595,8 +597,19 @@ function renderApprovedView(ev) {
       const scores = {};
       (fe.scores||[]).forEach(s => scores[s.goal_id] = s);
       API.get(`/evals/${ev.id}/goals`).then(goals => {
-        const totalW = goals.reduce((a,g)=>a+g.weight,0)||1;
-        const sc = goals.reduce((a,g)=>a+((scores[g.id]?.mgr_score||0)/5*100)*(g.weight/totalW),0);
+        // 카테고리 가중치 기반 점수 계산 (PROMPT 61A)
+        const catMap = {};
+        (App.categories||[]).forEach(c => { catMap[c.id] = Number(c.weight)||0; });
+        const gByCat = {};
+        goals.forEach(g => { if(!gByCat[g.category_id]) gByCat[g.category_id]=[]; gByCat[g.category_id].push(g); });
+        let sc = 0, usedCatW = 0;
+        Object.entries(gByCat).forEach(([catId, cgs]) => {
+          const catW = catMap[catId]||0; if (!catW) return;
+          const innerW = cgs.reduce((a,g)=>a+Number(g.weight||0),0)||1;
+          const catSc = cgs.reduce((a,g)=>a+((scores[g.id]?.mgr_score||0)/5*100)*(Number(g.weight)/innerW),0);
+          sc += catSc*(catW/100); usedCatW += catW;
+        });
+        if (usedCatW>0 && usedCatW<100) sc = sc*(100/usedCatW);
         const finalScore = Math.round(sc*10)/10;
         const grade = finalScore>=90?'S':finalScore>=80?'A':finalScore>=70?'B':finalScore>=60?'C':'D';
         const res = document.createElement('div');

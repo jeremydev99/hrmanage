@@ -593,18 +593,80 @@ async function validateEvalGoals(evalId) {
   const goals = await goalRepo.findByEvalId(evalId);
   if (!goals || goals.length === 0)
     return { valid: false, error: '최소 1개 이상의 목표를 입력해주세요.' };
-  const totalWeight = goals.reduce((sum, g) => sum + (Number(g.weight) || 0), 0);
-  if (Math.abs(totalWeight - 100) > 0.01)
-    return { valid: false, error: `목표 가중치 합이 100이 되어야 합니다. (현재: ${totalWeight.toFixed(2)})` };
-  for (let i = 0; i < goals.length; i++) {
-    const g = goals[i];
+
+  // 활성 카테고리 조회
+  const activeCats = db.prepare(
+    'SELECT id, name, weight FROM goal_categories WHERE is_active=1 ORDER BY id'
+  ).all();
+  if (activeCats.length === 0)
+    return { valid: false, error: '활성 카테고리가 없습니다.' };
+
+  // 카테고리별 그룹화
+  const goalsByCat = new Map();
+  for (const g of goals) {
+    if (!g.category_id)
+      return { valid: false, error: `목표 "${g.name || '(이름 없음)'}"에 카테고리가 지정되지 않았습니다.` };
+    if (!goalsByCat.has(g.category_id)) goalsByCat.set(g.category_id, []);
+    goalsByCat.get(g.category_id).push(g);
+  }
+
+  // 활성 카테고리별 검증: 최소 1개 + 카테고리 내 가중치 합 = 100
+  for (const cat of activeCats) {
+    const catGoals = goalsByCat.get(cat.id) || [];
+    if (catGoals.length === 0)
+      return { valid: false, error: `"${cat.name}" 카테고리에 최소 1개의 목표를 입력해야 합니다.` };
+    const catSum = catGoals.reduce((a, g) => a + (Number(g.weight) || 0), 0);
+    if (Math.abs(catSum - 100) > 0.01)
+      return { valid: false, error: `"${cat.name}" 카테고리의 가중치 합이 100이 되어야 합니다. (현재: ${catSum.toFixed(2)})` };
+  }
+
+  // name 필수, weight > 0
+  for (const g of goals) {
     const name = decrypt(g.name || '');
     if (!name || name.trim().length === 0)
-      return { valid: false, error: `${i+1}번째 목표의 제목이 비어있습니다.` };
-    if (!g.weight || g.weight <= 0)
-      return { valid: false, error: `${i+1}번째 목표의 가중치는 0보다 커야 합니다.` };
+      return { valid: false, error: '목표 이름이 비어 있는 항목이 있습니다.' };
+    if (!(Number(g.weight) > 0))
+      return { valid: false, error: `목표 "${g.name}"의 가중치가 0 또는 음수입니다.` };
   }
   return { valid: true };
+}
+
+// 공식: Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))
+function calcFinalScore(evalId, scoreField = 'mgr_score') {
+  const valid = ['mgr_score', 'self_score', 'second_mgr_score'];
+  if (!valid.includes(scoreField)) throw new Error(`Invalid scoreField: ${scoreField}`);
+  const rows = db.prepare(
+    `SELECT g.weight, g.category_id, fes.${scoreField} AS score
+     FROM goals g
+     JOIN final_eval_scores fes ON fes.goal_id = g.id
+     WHERE g.eval_id = ? AND fes.${scoreField} IS NOT NULL`
+  ).all(evalId);
+  if (rows.length === 0) return null;
+
+  const catWeightMap = new Map(
+    db.prepare('SELECT id, weight FROM goal_categories WHERE is_active=1').all()
+      .map(c => [c.id, Number(c.weight) || 0])
+  );
+
+  const byCat = new Map();
+  for (const r of rows) {
+    if (!byCat.has(r.category_id)) byCat.set(r.category_id, []);
+    byCat.get(r.category_id).push(r);
+  }
+
+  let finalScore = 0, usedCatW = 0;
+  for (const [catId, catGoals] of byCat) {
+    const catW = catWeightMap.get(catId);
+    if (!catW) continue;
+    const totalInnerW = catGoals.reduce((a, g) => a + (Number(g.weight) || 0), 0) || 1;
+    const catScore = catGoals.reduce(
+      (a, g) => a + (Number(g.score) / 5 * 100) * (Number(g.weight) / totalInnerW), 0
+    );
+    finalScore += catScore * (catW / 100);
+    usedCatW += catW;
+  }
+  if (usedCatW > 0 && usedCatW < 100) finalScore = finalScore * (100 / usedCatW);
+  return Math.round(finalScore * 100) / 100;
 }
 
 // [PROMPT_40-A] Repository Pattern 적용
@@ -1100,16 +1162,12 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
       // ── 1차 평가자 제출 ──────────────────────────────────
       await finalEvalRepo.upsertScores(fe.id, scores, 'mgrScore');
 
-      // 최종 점수 계산 (가중치 기반, goals raw SQL 임시 유지)
-      const goals = db.prepare(
-        `SELECT g.weight, fes.mgr_score
-         FROM goals g
-         JOIN final_eval_scores fes ON fes.goal_id=g.id
-         WHERE g.eval_id=? AND fes.mgr_score IS NOT NULL`
-      ).all(ev.id);
-      const totalW     = goals.reduce((a, g) => a + g.weight, 0) || 1;
-      const score      = goals.reduce((a, g) => a + (g.mgr_score / 5 * 100) * (g.weight / totalW), 0);
-      const finalScore = Math.round(score * 10) / 10;
+      // 최종 점수 계산 (카테고리 가중치 기반 — PROMPT 61A)
+      const rawScore = calcFinalScore(ev.id, 'mgr_score');
+      if (rawScore === null) {
+        return res.status(400).json({ error: '관리자 점수가 입력되지 않았습니다.' });
+      }
+      const finalScore = Math.round(rawScore * 10) / 10;
       const grade      = finalScore >= 90 ? 'S' : finalScore >= 80 ? 'A' : finalScore >= 70 ? 'B' : finalScore >= 60 ? 'C' : 'D';
       const finalGradeCode = selected_grade || grade;
 
