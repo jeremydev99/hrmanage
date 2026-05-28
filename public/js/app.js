@@ -771,9 +771,9 @@ function renderOrgViewHTML(periods) {
   ).join('');
   const inactiveRow = isAdmin ? `
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none">
+        <label style="display:flex;align-items:center;gap:5px;font-size:13px;cursor:pointer;user-select:none;flex-shrink:0;white-space:nowrap">
           <input type="checkbox" id="include-inactive-check" onchange="reloadOrgPeriods()">
-          <span>비활성 기간 포함</span>
+          <span style="white-space:nowrap">비활성 기간 포함</span>
         </label>
         <span style="font-size:11px;color:var(--muted)">관리자 전용 — 비활성 기간 통계 분석</span>
       </div>` : '';
@@ -880,7 +880,7 @@ function renderOrgAnalysisResult(orgTree, trend) {
       <div style="width:50px;background:var(--o100);border-radius:6px;height:5px">
         <div style="background:${col};border-radius:6px;height:100%;width:${pct}%"></div>
       </div>
-      <span style="font-size:12px;font-weight:600;color:${col}">${avg}/${max}</span>
+      <span style="font-size:12px;font-weight:600;color:${col}">${(+avg).toFixed(2)}점</span>
     </div>`;
   };
 
@@ -901,8 +901,8 @@ function renderOrgAnalysisResult(orgTree, trend) {
             <div style="font-size:11px;color:var(--muted)">평균 등급</div>
           </div>
           <div style="text-align:center">
-            <div style="font-size:18px;font-weight:700;color:var(--o600)">${company.avg_score}/${company.avg_score_max}</div>
-            <div style="font-size:11px;color:var(--muted)">평균 점수</div>
+            <div style="font-size:18px;font-weight:700;color:var(--o600)">${(+company.avg_score).toFixed(2)}점</div>
+            <div style="font-size:11px;color:var(--muted)">평균 점수 (100점)</div>
           </div>
         </div>` : '<span style="color:var(--muted);font-size:13px">평가 데이터 없음</span>'}
       </div>
@@ -993,7 +993,7 @@ function renderOrgChart(trendData, type) {
   if (window._orgChart) { try { window._orgChart.destroy(); } catch(e) {} window._orgChart = null; }
   const labels  = trendData.periods.map(p => p.label);
   const scores  = trendData.periods.map(p => p.avg_score);
-  const maxScore = trendData.max_score || 6;
+  const maxScore = trendData.max_score || 100;
   window._orgChart = new Chart(canvas, {
     type,
     data: {

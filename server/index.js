@@ -2127,16 +2127,14 @@ function buildGradeMap() {
   const n = grades.length;
   const codeToScore = {};
   grades.forEach(g => { codeToScore[g.grade_code] = n - (g.sort_order - 1); });
+  // 0-100 스케일 avg_score → 등급 코드 (seed-eval-data.js scoreToGrade와 동일 공식)
   const scoreToGrade = avg => {
     if (avg === null) return null;
-    let best = grades[grades.length - 1].grade_code, bestDiff = Infinity;
-    grades.forEach(g => {
-      const d = Math.abs(avg - (n - (g.sort_order - 1)));
-      if (d < bestDiff) { bestDiff = d; best = g.grade_code; }
-    });
-    return best;
+    const s1n = avg * (n - 1) / 100 + 1;
+    const sortOrder = Math.max(1, Math.min(n, Math.round(n + 1 - s1n)));
+    return grades.find(g => g.sort_order === sortOrder)?.grade_code || grades[grades.length - 1].grade_code;
   };
-  return { gradeCodes: grades.map(g => g.grade_code), maxScore: n, codeToScore, scoreToGrade };
+  return { gradeCodes: grades.map(g => g.grade_code), maxScore: 100, codeToScore, scoreToGrade };
 }
 
 function getLeaderOrgIds(userId) {
@@ -2161,22 +2159,26 @@ function getSubtreeUserIds(orgId) {
   `).all(orgId).map(r => r.id);
 }
 
-function calcGradeStats(userIds, periodLabels, { codeToScore, maxScore, scoreToGrade }) {
+function calcGradeStats(userIds, periodLabels, { maxScore, scoreToGrade }) {
   const empty = { total: userIds.length, evaluated: 0, avg_score: null, avg_grade: null, dist: {}, avg_score_max: maxScore };
   if (!userIds.length || !periodLabels.length) return empty;
   const uPh = userIds.map(() => '?').join(',');
   const pPh = periodLabels.map(() => '?').join(',');
   const rows = db.prepare(`
-    SELECT fe.selected_grade FROM final_evaluations fe
+    SELECT fe.selected_grade, fe.final_score FROM final_evaluations fe
     JOIN eval_cycles ec ON fe.eval_id=ec.id
     WHERE ec.user_id IN (${uPh}) AND ec.period_label IN (${pPh})
       AND fe.selected_grade IS NOT NULL AND fe.selected_grade != 'NC'
   `).all(...userIds, ...periodLabels);
   const dist = {};
-  let sum = 0;
-  rows.forEach(r => { dist[r.selected_grade] = (dist[r.selected_grade] || 0) + 1; sum += codeToScore[r.selected_grade] || 0; });
+  let sum = 0, cnt = 0;
+  rows.forEach(r => {
+    dist[r.selected_grade] = (dist[r.selected_grade] || 0) + 1;
+    if (r.final_score !== null) { sum += r.final_score; cnt++; }
+  });
   const ev = rows.length;
-  const avg = ev > 0 ? Math.round(sum / ev * 10) / 10 : null;
+  // 내부 계산 4자리 정밀, 표시는 프론트에서 2자리
+  const avg = cnt > 0 ? Math.round((sum / cnt) * 10000) / 10000 : null;
   return { total: userIds.length, evaluated: ev, avg_score: avg, avg_score_max: maxScore, avg_grade: scoreToGrade(avg), dist };
 }
 

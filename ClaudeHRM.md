@@ -368,6 +368,14 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - 모든 UI 작업 PROMPT의 사전 점검 단계에 기존 CSS 패턴 검색 포함
     - 협업 시 메타 원칙은 CLAUDE.md 참조
 
+25. **조직 평균 산출** (2026-05-28, PROMPT 62):
+    - 조직(회사/본부/팀) 평균 = 개인별 `final_score`(0-100) 직접 평균 (등급 이산화 경로 제거)
+    - 사유: `selected_grade→codeToScore(1-6)` 경로는 등급 경계에서 ±10점대 왜곡 발생
+    - 등급 분포 통계(grade-distribution)와 개인 등급 라벨은 유지 — 평균 계산에서만 등급 경로 제외
+    - 내부 계산 4자리 정밀(`Math.round(sum/cnt*10000)/10000`), 화면 표시 100점 만점 소수점 2자리
+    - NC(평가 제외)는 평균에서 제외 유지
+    - `GET /api/perf/org-tree`, `GET /api/perf/quarterly-trend` 모두 `avg_score` 0-100 스케일 반환
+
 24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
     - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
     - 헬퍼: `calcFinalScore(evalId, scoreField)` (scoreField: mgr_score | self_score | second_mgr_score)
@@ -469,6 +477,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | 조직 평균 산출 등급기반→final_score 가중평균 전환 + 100점 스케일 2자리 표시 + 체크박스 라벨 CSS (PROMPT 62) | Claude Code |
 | 2026-05-28 | 시드 weight·점수 스케일 통일 + 운영 데이터 재계산 + 자동 백업 (PROMPT 61B) | Claude Code |
 | 2026-05-28 | 기간 조회 범위 회귀 버그 수정 — 전체 조직 분석·평가 기간 관리 디폴트 전체 조회 복원 (PROMPT 60E) | Claude Code |
 | 2026-05-28 | weight 카테고리 내 100% 통일 — 검증·점수 계산 로직 변경 (calcFinalScore 헬퍼) (PROMPT 61A) | Claude Code |
