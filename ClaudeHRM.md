@@ -460,6 +460,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | 평가 기간 관리 조회 범위 UI 시각적 버그 보정 (small/btn/label 압축 방지) (PROMPT 60B-fix2) | Claude Code |
 | 2026-05-27 | 평가 정책 탭 UX 개선 (4그룹화, 이모지, 1줄/2줄 카드형, 옵션 우측 정렬) (PROMPT 60C) | Claude Code |
 | 2026-05-27 | 메타 원칙 명문화 — 자동 갱신·효율적 협업·UI 일관성 (CLAUDE.md + ClaudeHRM.md 23번) (PROMPT 60D) | Claude Code |
 | 2026-05-27 | nodemon 도입 + 평가 기간 UI 보정(한 줄 배치, 데이터 연도만, 체크박스 한 줄) (PROMPT 60B-fix) | Claude Code |
