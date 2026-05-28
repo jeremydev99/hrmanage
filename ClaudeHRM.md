@@ -460,6 +460,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | PROMPT 작성 원칙 명문화 — 코드 읽기 가이드·실행 트리거·컨텍스트 효율 (CLAUDE.md) | Claude Code |
 | 2026-05-28 | 평가 정책 탭 모든 항목 1행 통일 (policy-item-multi 제거, grid 레이아웃) (PROMPT 60C-fix) | Claude Code |
 | 2026-05-28 | 평가 기간 관리 조회 범위 UI 시각적 버그 보정 (small/btn/label 압축 방지) (PROMPT 60B-fix2) | Claude Code |
 | 2026-05-27 | 평가 정책 탭 UX 개선 (4그룹화, 이모지, 1줄/2줄 카드형, 옵션 우측 정렬) (PROMPT 60C) | Claude Code |

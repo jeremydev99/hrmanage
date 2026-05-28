@@ -105,6 +105,49 @@ prisma/schema.prisma     Prisma 스키마 (DB 종류 추상화)
 - 강조 색상: 오렌지(#d97706), 옅은 주황 그라데이션은 섹션 구분에 사용
 - 모든 UI 작업 PROMPT의 사전 점검 단계에 기존 CSS 패턴 검색 포함
 
+### PROMPT 작성 원칙 (2026-05-28 결정)
+
+모든 신규 PROMPT 파일은 다음 패턴을 필수 포함:
+
+#### 1. 코드 읽기 가이드 (압축 방지)
+
+PROMPT 본문에 다음 형식의 절을 명시:
+
+```
+## 코드 읽기 가이드 (압축 방지)
+
+본 작업은 다음 영역만 읽고 진행:
+- server/index.js: line A~B (XX 함수)
+- public/js/pages/admin.js: line C~D (XX 렌더링)
+
+전체 파일 읽지 말 것. view tool의 view_range 활용.
+grep/findstr은 사전 점검 단계에서 명시된 키워드만 사용.
+```
+
+- line 번호는 직전 PROMPT의 분석 결과 또는 ClaudeHRM.md에서 가져와 명시
+- 불확실하면 "예상 line A~B" 표기 후 Claude Code가 첫 view 호출로 확정
+- "Repository 어댑터 전체 확인" 같은 막연한 지시 금지 — 구체 파일·라인 지정
+
+#### 2. 실행 트리거 명시
+
+PROMPT 파일 상단에 다음 절 포함:
+
+```
+## 실행 트리거
+
+사용자가 "PROMPT XX 진행해줘" 발언 시 본 PROMPT 시작.
+완료 후 "PROMPT XX 완료" 보고 + 다음 PROMPT 번호 안내.
+```
+
+- 사용자가 채팅에 "PROMPT XX 진행해줘" 명시한 시점만 시작 트리거
+- 완료 보고는 채팅 컨텍스트에 작업 종료 마커로 남아 작업 추적성 확보
+
+#### 3. 컨텍스트 효율 원칙
+
+- 같은 정보를 두 번 적지 않음 (이미 분석 보고서에 있는 line 번호를 PROMPT에서 grep으로 재탐색 지시 금지)
+- view_range로 함수 단위 읽기 우선, 파일 전체 view는 200줄 이하 작은 파일만 허용
+- 사전 점검 단계의 grep은 PROMPT 작성 시 미리 결과를 인용하고 Claude Code에는 검증 수준만 시킴
+
 ---
 
 ## 현재 진행 상황
