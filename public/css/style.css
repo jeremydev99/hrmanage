@@ -718,8 +718,14 @@ textarea:focus{outline:none;border-color:var(--o400)}
   margin-top: 10px;
   background: linear-gradient(to right, transparent, rgba(217,119,6,0.3), transparent);
 }
+/* 통일 grid 레이아웃: 제목 좌측 1fr, 옵션 우측 auto */
 .policy-item {
-  padding: 14px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 6px;
+  padding: 16px 20px;
   border-bottom: 1px solid #e5e5e5;
   transition: background 0.15s;
 }
@@ -729,43 +735,22 @@ textarea:focus{outline:none;border-color:var(--o400)}
 .policy-item:last-child {
   border-bottom: none;
 }
-.policy-item-single {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.policy-item .policy-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #222;
+  display: flex;
   align-items: center;
-  row-gap: 6px;
 }
-.policy-item-single .policy-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222;
-}
-.policy-item-single .policy-options {
+.policy-item .policy-options {
   display: flex;
   gap: 6px;
-}
-.policy-item-single .policy-description {
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: #666;
-}
-.policy-item-multi {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.policy-item-multi .policy-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #222;
-}
-.policy-item-multi .policy-options-row {
-  display: flex;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
   justify-content: flex-end;
-  gap: 6px;
-  flex-wrap: wrap;
 }
-.policy-item-multi .policy-description {
+.policy-item .policy-description {
+  grid-column: 1 / -1;
   font-size: 12px;
   color: #666;
 }
@@ -775,6 +760,7 @@ textarea:focus{outline:none;border-color:var(--o400)}
   display: inline-block;
   width: 22px;
   text-align: center;
+  flex-shrink: 0;
 }
 .policy-sub-item {
   margin-top: 10px;
@@ -783,6 +769,14 @@ textarea:focus{outline:none;border-color:var(--o400)}
   border-left: 3px solid #e5e5e5;
   background: #fafafa;
   border-radius: 4px;
+  grid-column: 1 / -1;
+}
+.policy-sub-item .policy-item {
+  padding: 0;
+  border-bottom: none;
+}
+.policy-sub-item .policy-item:hover {
+  background: transparent;
 }
 .btn-policy-option {
   padding: 5px 11px;
@@ -792,6 +786,8 @@ textarea:focus{outline:none;border-color:var(--o400)}
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: all 0.15s;
 }
 .btn-policy-option:hover:not(:disabled) {
@@ -810,4 +806,14 @@ textarea:focus{outline:none;border-color:var(--o400)}
   color: #555;
   border-color: #ddd;
   font-weight: normal;
+}
+@media (max-width: 768px) {
+  .policy-item {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+  }
+  .policy-item .policy-options {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }

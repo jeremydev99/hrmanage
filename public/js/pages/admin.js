@@ -1554,7 +1554,7 @@ async function renderAdmPolicy() {
         <div class="policy-group">
           <div class="policy-group-header">🛡️ 보안 설정</div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">🚪</span>브라우저 종료 시 자동 로그아웃</div>
             <div class="policy-options" data-policy-group="close_on_browser_close">
               <button class="btn-policy-option ${sessionPolicy.close_on_browser_close ? 'btn-primary' : 'btn-ghost'}"
@@ -1565,9 +1565,9 @@ async function renderAdmPolicy() {
             <div class="policy-description">탭/브라우저 닫으면 즉시 세션 만료</div>
           </div>
 
-          <div class="policy-item policy-item-multi">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">⏱️</span>세션 유지 시간</div>
-            <div class="policy-options-row" data-policy-group="session_timeout">
+            <div class="policy-options" data-policy-group="session_timeout">
               ${[5,10,30,60].map(m =>
                 `<button class="btn-policy-option ${sessionPolicy.timeout_minutes===m ? 'btn-primary' : 'btn-ghost'}"
                          onclick="setSessionPref('timeout_minutes',${m},this)">${m>=60?m/60+'시간':m+'분'}</button>`
@@ -1587,9 +1587,9 @@ async function renderAdmPolicy() {
         <div class="policy-group">
           <div class="policy-group-header">📊 표시 및 권한</div>
 
-          <div class="policy-item policy-item-multi">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">🏢</span>대시보드 표시 계층</div>
-            <div class="policy-options-row" data-policy-group="dashboard_depth">
+            <div class="policy-options" data-policy-group="dashboard_depth">
               ${[1,2,3].map(d =>
                 `<button class="btn-policy-option ${dashDepth.depth===d ? 'btn-primary' : 'btn-ghost'}"
                          onclick="setPolicyState('dashboard_depth',${d},this)">${d}단계${d===2?' (기본)':d===3?' (옵션)':''}</button>`
@@ -1599,15 +1599,15 @@ async function renderAdmPolicy() {
             <div class="policy-description">성과관리 홈에서 조직 성과를 몇 단계까지 표시할지 설정</div>
           </div>
 
-          <div class="policy-item policy-item-multi">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">🔒</span>최종 평가 잠금</div>
-            <div class="policy-options-row">
+            <div class="policy-options">
               <span class="bd bd-locked" style="padding:5px 10px;font-size:12px">항상 잠금</span>
             </div>
             <div class="policy-description">확정 후 인사팀 외 수정 불가</div>
           </div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">📋</span>직원 목표승인 이력 공개</div>
             <div class="policy-options" data-policy-group="history_visibility">
               <button class="btn-policy-option ${histVis.enabled ? 'btn-primary' : 'btn-ghost'}"
@@ -1617,7 +1617,7 @@ async function renderAdmPolicy() {
             </div>
             <div class="policy-description">직원이 본인의 과거 승인/반려 이력 열람 허용</div>
             <div class="policy-sub-item" style="grid-column:1/-1;${!histVis.enabled?'opacity:.4;pointer-events:none':''}">
-              <div class="policy-item-single">
+              <div class="policy-item">
                 <div class="policy-title"><span class="policy-emoji">📂</span>비활성 기간 이력도 공개</div>
                 <div class="policy-options" data-policy-group="history_inactive">
                   <button class="btn-policy-option ${histInactive.enabled ? 'btn-primary' : 'btn-ghost'}"
@@ -1635,9 +1635,9 @@ async function renderAdmPolicy() {
         <div class="policy-group">
           <div class="policy-group-header">📝 평가 워크플로우</div>
 
-          <div class="policy-item policy-item-multi">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">💬</span>중간 피드백 횟수 제한</div>
-            <div class="policy-options-row" data-policy-group="fb_limit">
+            <div class="policy-options" data-policy-group="fb_limit">
               ${[{value:0,label:'무제한'},{value:1,label:'1회'},{value:2,label:'2회'},{value:3,label:'3회'},{value:5,label:'5회'},{value:10,label:'10회'},{value:20,label:'20회'}].map(o =>
                 `<button class="btn-policy-option ${fbLimit.limit===o.value ? 'btn-primary' : 'btn-ghost'}"
                          onclick="setPolicyState('fb_limit',${o.value},this)">${o.label}</button>`
@@ -1646,15 +1646,15 @@ async function renderAdmPolicy() {
             <div class="policy-description">승인자별 피드백 제출 가능 횟수</div>
           </div>
 
-          <div class="policy-item policy-item-multi">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">👥</span>1차 상사 피드백</div>
-            <div class="policy-options-row">
+            <div class="policy-options">
               <span class="bd bd-approved" style="padding:5px 10px;font-size:12px">의무/선택 분리 적용 중</span>
             </div>
             <div class="policy-description">1차 직속 상사 의무 · 2차 이상 선택</div>
           </div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">✏️</span>승인자 승인 수정/취소 허용</div>
             <div class="policy-options" data-policy-group="approver_edit">
               <button class="btn-policy-option ${apprEdit.enabled ? 'btn-primary' : 'btn-ghost'}"
@@ -1665,7 +1665,7 @@ async function renderAdmPolicy() {
             <div class="policy-description">켜짐: 승인자가 본인의 승인을 수정/취소 가능</div>
           </div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">⭐</span>2차 최종평가 허용</div>
             <div class="policy-options" data-policy-group="second_final">
               <button class="btn-policy-option ${secondFinal.enabled ? 'btn-primary' : 'btn-ghost'}"
@@ -1681,7 +1681,7 @@ async function renderAdmPolicy() {
         <div class="policy-group">
           <div class="policy-group-header">🔧 평가 운영</div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">📊</span>평가 방식 설정</div>
             <div class="policy-options">
               <button class="btn-policy-option btn-ghost" onclick="switchAdmTab('adm-periods')">평가기간 관리 →</button>
@@ -1689,7 +1689,7 @@ async function renderAdmPolicy() {
             <div class="policy-description">평가방식은 <strong>평가기간 관리</strong> 탭에서 기간별/조직별로 설정하세요</div>
           </div>
 
-          <div class="policy-item policy-item-single">
+          <div class="policy-item">
             <div class="policy-title"><span class="policy-emoji">🌐</span>시스템 시간대</div>
             <div class="policy-options">
               <select id="tz-select" class="btn-policy-option btn-ghost" style="height:34px;font-size:13px;padding:4px 8px"
