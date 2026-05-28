@@ -63,7 +63,8 @@ C:\claudeprojects\hrmanage\
 │   ├── schema.prisma          ← Prisma 스키마 정의 (20개 테이블)
 │   └── migrations/            ← 추후 마이그레이션 파일들
 ├── scripts/
-│   └── seed-eval-data.js      ← 시드 데이터 생성 (8명×9분기, AI 분석 검증용)
+│   ├── seed-eval-data.js      ← 시드 데이터 생성 (8명×9분기, AI 분석 검증용, weight=카테고리 내 비중, final_score 0-100)
+│   └── recalc-final-scores.js ← 운영 데이터 final_score 재계산 (PROMPT 61B)
 └── data/hrmanage.db
 ```
 
@@ -468,6 +469,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | 시드 weight·점수 스케일 통일 + 운영 데이터 재계산 + 자동 백업 (PROMPT 61B) | Claude Code |
 | 2026-05-28 | 기간 조회 범위 회귀 버그 수정 — 전체 조직 분석·평가 기간 관리 디폴트 전체 조회 복원 (PROMPT 60E) | Claude Code |
 | 2026-05-28 | weight 카테고리 내 100% 통일 — 검증·점수 계산 로직 변경 (calcFinalScore 헬퍼) (PROMPT 61A) | Claude Code |
 | 2026-05-28 | PROMPT 작성 원칙 명문화 — 코드 읽기 가이드·실행 트리거·컨텍스트 효율 (CLAUDE.md) | Claude Code |

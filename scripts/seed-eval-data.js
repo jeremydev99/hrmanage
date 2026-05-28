@@ -33,12 +33,46 @@ function encrypt(text) {
   return iv.toString('hex') + ':' + enc.toString('hex');
 }
 
+// ── 시드용 final_score 계산 (server/index.js calcFinalScore와 동일 공식) ──
+function calcSeedFinalScore(goalScores, cats) {
+  const catWeightMap = new Map(cats.map(c => [c.id, Number(c.weight) || 0]));
+  const byCat = new Map();
+  for (const g of goalScores) {
+    if (!byCat.has(g.category_id)) byCat.set(g.category_id, []);
+    byCat.get(g.category_id).push(g);
+  }
+  let finalScore = 0, usedCatW = 0;
+  for (const [catId, gs] of byCat) {
+    const catW = catWeightMap.get(catId);
+    if (!catW) continue;
+    const totalInner = gs.reduce((a, g) => a + g.weight, 0) || 1;
+    const catScore = gs.reduce(
+      (a, g) => a + (g.mgr_score / 5 * 100) * (g.weight / totalInner), 0
+    );
+    finalScore += catScore * (catW / 100);
+    usedCatW += catW;
+  }
+  if (usedCatW > 0 && usedCatW < 100) finalScore = finalScore * (100 / usedCatW);
+  return Math.round(finalScore * 100) / 100;
+}
+
 // ── 백업 ────────────────────────────────────────────────────
-function backup() {
-  const ts      = new Date().toISOString().replace(/[:.]/g, '-');
-  const bakPath = `${DB_PATH}.bak.before-seed-${ts}`;
+function backupDb() {
+  const backupDir = path.join(__dirname, '..', 'data', 'backups');
+  if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  const bakPath = path.join(backupDir, `hrmanage.${ts}.db`);
   fs.copyFileSync(DB_PATH, bakPath);
-  console.log(`✅ 백업 완료: ${path.basename(bakPath)}`);
+  // 1주 이상 된 백업 정리
+  const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  for (const f of fs.readdirSync(backupDir)) {
+    const fp = path.join(backupDir, f);
+    if (fs.statSync(fp).mtimeMs < oneWeekAgo) {
+      fs.unlinkSync(fp);
+      console.log(`  ↳ 오래된 백업 제거: ${f}`);
+    }
+  }
+  console.log(`✅ 백업 완료: ${bakPath}`);
   return bakPath;
 }
 
@@ -46,7 +80,7 @@ function backup() {
 function main() {
   console.log('🌱 시드 데이터 생성 시작\n');
 
-  const bakPath = backup();
+  const bakPath = backupDb();
   const db = new Database(DB_PATH);
   db.pragma('foreign_keys = ON');
 
@@ -306,12 +340,12 @@ function createEvalForUser(db, user, period, categories, grades, isCurrent) {
 
     for (let i = 0; i < 2; i++) {
       const g      = shuffled[i] || pool[i % pool.length];
-      const weight = Math.round((cat.weight * ratios[i]) / 100);
+      const weight = ratios[i];  // 카테고리 내 비중 (합=100)
       const res = db.prepare(`
         INSERT INTO goals (eval_id, category_id, name, kpi, weight, sort_order, status, created_at)
         VALUES (?, ?, ?, ?, ?, ?, 'approved', datetime('now'))
       `).run(evalId, cat.id, encrypt(g.name), encrypt(g.kpi), weight, goalOrder++);
-      goalRecs.push({ id: res.lastInsertRowid, name: g.name });
+      goalRecs.push({ id: res.lastInsertRowid, name: g.name, category_id: cat.id, weight });
     }
   }
 
@@ -378,23 +412,35 @@ function createEvalForUser(db, user, period, categories, grades, isCurrent) {
 
 // ── 최종 평가 생성 ───────────────────────────────────────────
 function createFinal(db, user, evalId, goalRecs, scenario, period, grades, yr, endMon) {
-  const selfDoneAt     = `${yr}-${endMon}-25 18:00:00`;
-  const mgrDoneAt      = `${yr}-${endMon}-27 18:00:00`;
-  const secondDoneAt   = `${yr}-${endMon}-29 18:00:00`;
-
-  const base    = getBaseScore(scenario);
-  const boost   = getTrendBoost(scenario, period);
-  const noise   = (Math.random() - 0.5) * 0.6;
-  const score   = Math.max(1, Math.min(6, base + boost + noise));
-  const rounded = Math.round(score * 10) / 10;
-  const activeGrades = grades.filter(g => g.grade_code !== 'NC');
-  const grade   = scoreToGrade(rounded, activeGrades);
+  const selfDoneAt   = `${yr}-${endMon}-25 18:00:00`;
+  const mgrDoneAt    = `${yr}-${endMon}-27 18:00:00`;
+  const secondDoneAt = `${yr}-${endMon}-29 18:00:00`;
 
   let secondMgrId = null;
   if (user.manager_id) {
     const mgr = db.prepare('SELECT manager_id FROM users WHERE id=?').get(user.manager_id);
     secondMgrId = mgr?.manager_id || null;
   }
+
+  const base  = getBaseScore(scenario);
+  const boost = getTrendBoost(scenario, period);
+
+  // 목표별 점수 계산 (1-5 스케일)
+  const goalScores   = [];
+  const perGoalScores = [];
+  for (const goal of goalRecs) {
+    const selfSc = Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4))));
+    const mgrSc  = Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4))));
+    const sec2Sc = secondMgrId ? Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4)))) : null;
+    goalScores.push({ category_id: goal.category_id, weight: goal.weight, mgr_score: mgrSc });
+    perGoalScores.push({ goal, selfSc, mgrSc, sec2Sc });
+  }
+
+  // final_score 0-100 스케일 계산
+  const activeCats   = db.prepare('SELECT id, weight FROM goal_categories WHERE is_active=1').all();
+  const activeGrades = grades.filter(g => g.grade_code !== 'NC');
+  const finalScore   = calcSeedFinalScore(goalScores, activeCats);
+  const finalGrade   = scoreToGrade(finalScore, activeGrades);
 
   const feRes = db.prepare(`
     INSERT INTO final_evaluations
@@ -409,8 +455,8 @@ function createFinal(db, user, evalId, goalRecs, scenario, period, grades, yr, e
     evalId,
     encrypt(selfReviewText(scenario)), selfDoneAt,
     encrypt(mgrReviewText(scenario)),  mgrDoneAt, user.manager_id,
-    rounded, grade, grade,
-    secondMgrId ? grade : null,
+    finalScore, finalGrade, finalGrade,
+    secondMgrId ? finalGrade : null,
     secondDoneAt,
     secondMgrId ? 1 : 0,
     secondMgrId ? encrypt(secondMgrReviewText(scenario)) : null,
@@ -419,11 +465,7 @@ function createFinal(db, user, evalId, goalRecs, scenario, period, grades, yr, e
   );
   const feId = feRes.lastInsertRowid;
 
-  // 목표별 점수 (INTEGER 타입)
-  for (const goal of goalRecs) {
-    const selfSc = Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4))));
-    const mgrSc  = Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4))));
-    const sec2Sc = secondMgrId ? Math.round(Math.max(1, Math.min(5, base + boost + (Math.random() - 0.4)))) : null;
+  for (const { goal, selfSc, mgrSc, sec2Sc } of perGoalScores) {
     db.prepare(`
       INSERT INTO final_eval_scores
         (final_id, goal_id, self_score, mgr_score, second_mgr_score, created_at)
@@ -433,25 +475,27 @@ function createFinal(db, user, evalId, goalRecs, scenario, period, grades, yr, e
   return true;
 }
 
-// ── 점수 → 등급 (1-6점 → OI/EE/SC/ME/PB/IR) ────────────────
+// ── 점수 → 등급 (0-100점 → OI/EE/SC/ME/PB/IR) ───────────────
 function scoreToGrade(score, activeGrades) {
-  const n = activeGrades.length; // 6
-  const sortOrder = Math.max(1, Math.min(n, Math.round(n + 1 - score)));
+  const n = activeGrades.length || 6;
+  // 0-100 → 1-n 선형 변환 후 sort_order 결정 (높은 점수 = 낮은 sort_order = 좋은 등급)
+  const s1n = score * (n - 1) / 100 + 1;
+  const sortOrder = Math.max(1, Math.min(n, Math.round(n + 1 - s1n)));
   return activeGrades.find(g => g.sort_order === sortOrder)?.grade_code || 'ME';
 }
 
-// ── 기본 점수 (1-6 스케일) ───────────────────────────────────
+// ── 기본 점수 (1-5 스케일, 목표 mgr_score 기준) ──────────────
 function getBaseScore(scenario) {
   switch (scenario) {
-    case 'development': return 4.3;   // SC ~ EE
-    case 'sales':       return 3.3;   // ME ~ SC (상승 예정)
-    case 'hr':          return 4.6;   // EE
-    case 'executive':   return 5.1;   // EE ~ OI
+    case 'development': return 4.3;   // 고성과
+    case 'sales':       return 3.3;   // 중간 (상승 추세)
+    case 'hr':          return 4.6;   // 고성과
+    case 'executive':   return 5.1;   // 최고 (clamp → 5)
     default:            return 3.8;
   }
 }
 
-// ── 분기별 트렌드 보정 (1-6 스케일) ─────────────────────────
+// ── 분기별 트렌드 보정 (1-5 스케일 기준 소폭 조정) ───────────
 function getTrendBoost(scenario, period) {
   const idx = periodIndex(period); // 0(2024-1Q) ~ 8(2026-1Q)
   switch (scenario) {
