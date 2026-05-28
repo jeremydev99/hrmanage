@@ -895,15 +895,9 @@ function renderOrgAnalysisResult(orgTree, trend) {
           </div>
         </div>
         ${company.avg_score !== null ? `
-        <div style="display:flex;gap:16px;align-items:center">
-          <div style="text-align:center">
-            <div style="font-size:28px;font-weight:900;color:var(--o500)">${company.avg_grade||'-'}</div>
-            <div style="font-size:11px;color:var(--muted)">평균 등급</div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-size:18px;font-weight:700;color:var(--o600)">${(+company.avg_score).toFixed(2)}점</div>
-            <div style="font-size:11px;color:var(--muted)">평균 점수 (100점)</div>
-          </div>
+        <div style="text-align:center">
+          <div style="font-size:22px;font-weight:800;color:var(--o600)">${(+company.avg_score).toFixed(2)}점</div>
+          <div style="font-size:11px;color:var(--muted)">평균 점수 (100점)</div>
         </div>` : '<span style="color:var(--muted);font-size:13px">평가 데이터 없음</span>'}
       </div>
       ${Object.keys(company.grade_distribution||{}).length ? `
@@ -922,8 +916,7 @@ function renderOrgAnalysisResult(orgTree, trend) {
           <th style="text-align:left;padding:6px 8px;color:var(--muted)">조직</th>
           <th style="text-align:center;padding:6px 8px;color:var(--muted)">직접 인원</th>
           <th style="text-align:center;padding:6px 8px;color:var(--muted)">평가완료</th>
-          <th style="text-align:center;padding:6px 8px;color:var(--muted)">등급</th>
-          <th style="text-align:left;padding:6px 8px;color:var(--muted)">점수</th>
+          <th style="text-align:left;padding:6px 8px;color:var(--muted)">평균 점수</th>
         </tr></thead>
         <tbody>${orgs.map(o => `
           <tr style="border-bottom:1px solid var(--o100)">
@@ -934,7 +927,6 @@ function renderOrgAnalysisResult(orgTree, trend) {
             </td>
             <td style="text-align:center;padding:6px 8px">${o.direct_members}</td>
             <td style="text-align:center;padding:6px 8px">${o.evaluated_members}/${o.expected_total}<span style="font-size:10px;color:var(--muted)"> (${o.completion_rate ?? 0}%)</span></td>
-            <td style="text-align:center;padding:6px 8px">${o.avg_grade ? `<span class="bd bd-approved" style="font-size:11px">${o.avg_grade}</span>` : '-'}</td>
             <td style="padding:6px 8px">${scoreBar(o.avg_score, o.avg_score_max)}</td>
           </tr>`).join('')}
         </tbody>

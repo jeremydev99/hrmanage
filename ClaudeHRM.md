@@ -477,6 +477,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-28 | 조직 평균 영역 대표 등급 표시 제거 — 점수만 표시 (PROMPT 62 후속) | Claude Code |
 | 2026-05-28 | 조직 평균 산출 등급기반→final_score 가중평균 전환 + 100점 스케일 2자리 표시 + 체크박스 라벨 CSS (PROMPT 62) | Claude Code |
 | 2026-05-28 | 시드 weight·점수 스케일 통일 + 운영 데이터 재계산 + 자동 백업 (PROMPT 61B) | Claude Code |
 | 2026-05-28 | 기간 조회 범위 회귀 버그 수정 — 전체 조직 분석·평가 기간 관리 디폴트 전체 조회 복원 (PROMPT 60E) | Claude Code |
