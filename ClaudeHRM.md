@@ -265,7 +265,10 @@ POST   /api/grade-criteria              [410 Gone] 폐기
 PUT    /api/grade-criteria/:id          [410 Gone] 폐기
 DELETE /api/grade-criteria/:id          [410 Gone] 폐기
 
-GET    /api/grade-policies              등급 정책 목록 (id, name, description, criteria[] 포함)
+GET    /api/grade-policies              등급 정책 목록 + criteria[] + applied_periods[] (admin+)
+POST   /api/grade-policies              정책 신규 생성 (admin+, name 중복→409, criteria 검증 필수)
+PUT    /api/grade-policies/:id          정책 수정 (admin+, criteria 변경은 applied_periods 0개일 때만→409)
+DELETE /api/grade-policies/:id          정책 삭제 (admin+, applied_periods는 NULL 초기화+비활성화)
 
 GET    /api/organizations               조직 목록
 POST   /api/organizations               조직 추가 (admin+)
@@ -395,6 +398,10 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - S/A/B/C/D 하드코딩 제거 — 6등급 OI/EE/SC/ME/PB/IR 전환 (grade_code 기반 유연)
     - grade_criteria 테이블 폐기 (DROP), grade-criteria 4개 API 410 Gone 반환
     - 디폴트 정책 "사이냅 표준안": OI≥90, EE≥80, SC≥70, ME≥60, PB≥50, IR≥0
+    - 정책 수정 잠금: applied_periods ≥ 1인 정책은 criteria(cutoff) 수정 불가 (409), 이름·description은 항상 수정 가능
+    - 정책 삭제: applied_periods의 grade_policy_id NULL + is_active=0 강제 초기화, audit_log 기록
+    - 검증 규칙: criteria 최소 1건, min_score 0~100, sort_order 오름차순 → min_score 단조감소, grade_code·min_score·sort_order 중복 불가
+    - audit_log 액션: GRADE_POLICY_CREATED / GRADE_POLICY_UPDATED / GRADE_POLICY_CRITERIA_UPDATED / GRADE_POLICY_DELETED / EVAL_PERIOD_POLICY_DETACHED
 
 24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
     - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
@@ -497,6 +504,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-29 | 등급 정책 CRUD API 완성 — POST/PUT/DELETE + 검증(단조감소·범위·중복) + cutoff 잠금(applied_periods≥1) + 삭제 시 강제 초기화 + audit_log 5종 (PROMPT 63B) | Claude Code |
 | 2026-05-29 | 등급 정책 시점별 바인딩 도입 — grade_policies/grade_policy_criteria 신규, scoreToGrade 단일화, S/A/B/C/D 하드코딩 제거, eval_periods 활성화 게이트, grade-criteria API 폐기 (PROMPT 63A) | Claude Code |
 | 2026-05-29 | 내 평가 사이클 카드 진행 단계 표시 모바일 가로 오버플로 수정 (반응형 flex + 매우 좁은 화면 라벨 줄바꿈) (PROMPT 63-UI) | Claude Code |
 | 2026-05-28 | 조직 평균 영역 대표 등급 표시 제거 — 점수만 표시 (PROMPT 62 후속) | Claude Code |

@@ -2181,6 +2181,51 @@ function buildGradeMap(policyId) {
   return { gradeCodes, maxScore: 100, scoreToGrade: (score) => scoreToGrade(score, criteria) };
 }
 
+function validateGradePolicyCriteria(criteria) {
+  if (!Array.isArray(criteria) || criteria.length === 0) {
+    return { ok: false, error: '최소 1개 이상의 등급이 필요합니다.' };
+  }
+  for (const c of criteria) {
+    if (!c.grade_code || typeof c.grade_code !== 'string' || !c.grade_code.trim()) {
+      return { ok: false, error: 'grade_code는 필수입니다.' };
+    }
+    if (!c.grade_name || typeof c.grade_name !== 'string' || !c.grade_name.trim()) {
+      return { ok: false, error: 'grade_name은 필수입니다.' };
+    }
+    if (typeof c.min_score !== 'number' || isNaN(c.min_score)) {
+      return { ok: false, error: `min_score는 숫자여야 합니다. (${c.grade_code})` };
+    }
+    if (c.min_score < 0 || c.min_score > 100) {
+      return { ok: false, error: `min_score는 0~100 범위여야 합니다. (${c.grade_code}=${c.min_score})` };
+    }
+    if (!Number.isInteger(c.sort_order) || c.sort_order < 1) {
+      return { ok: false, error: `sort_order는 1 이상 정수여야 합니다. (${c.grade_code})` };
+    }
+  }
+  const codes = criteria.map(c => c.grade_code);
+  if (new Set(codes).size !== codes.length) {
+    return { ok: false, error: 'grade_code는 중복될 수 없습니다.' };
+  }
+  const orders = criteria.map(c => c.sort_order);
+  if (new Set(orders).size !== orders.length) {
+    return { ok: false, error: 'sort_order는 중복될 수 없습니다.' };
+  }
+  const scores = criteria.map(c => c.min_score);
+  if (new Set(scores).size !== scores.length) {
+    return { ok: false, error: 'min_score는 중복될 수 없습니다. (동일 점수가 두 등급으로 매핑 불가)' };
+  }
+  const sorted = [...criteria].sort((a, b) => a.sort_order - b.sort_order);
+  for (let i = 0; i < sorted.length - 1; i++) {
+    if (sorted[i].min_score <= sorted[i + 1].min_score) {
+      return {
+        ok: false,
+        error: `sort_order 순서로 min_score가 단조감소해야 합니다. (${sorted[i].grade_code}=${sorted[i].min_score} <= ${sorted[i + 1].grade_code}=${sorted[i + 1].min_score})`
+      };
+    }
+  }
+  return { ok: true };
+}
+
 function getLeaderOrgIds(userId) {
   return db.prepare(`
     WITH RECURSIVE t AS (
@@ -2742,6 +2787,157 @@ app.get('/api/grade-policies', auth, adminOnly, (req, res) => {
     }
     res.json(policies);
   } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/grade-policies — 신규 정책 생성
+app.post('/api/grade-policies', auth, adminOnly, (req, res) => {
+  const { name, description, criteria } = req.body;
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: '정책 이름은 필수입니다.' });
+  }
+  const existing = db.prepare('SELECT id FROM grade_policies WHERE name = ?').get(name.trim());
+  if (existing) {
+    return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
+  }
+  const validation = validateGradePolicyCriteria(criteria);
+  if (!validation.ok) {
+    return res.status(400).json({ error: validation.error });
+  }
+  const tx = db.transaction(() => {
+    const result = db.prepare(
+      'INSERT INTO grade_policies (name, description, created_by) VALUES (?, ?, ?)'
+    ).run(name.trim(), description || null, req.user.sub);
+    const policyId = result.lastInsertRowid;
+    const insertCriteria = db.prepare(
+      'INSERT INTO grade_policy_criteria (policy_id, grade_code, grade_name, min_score, sort_order, description, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    );
+    for (const c of criteria) {
+      insertCriteria.run(policyId, c.grade_code.trim(), c.grade_name.trim(), c.min_score, c.sort_order, c.description || null, c.note || null);
+    }
+    return policyId;
+  });
+  try {
+    const policyId = tx();
+    auditLog(req.user.sub, 'GRADE_POLICY_CREATED', policyId, name.trim(),
+      JSON.stringify({ criteria_count: criteria.length, criteria: criteria.map(c => ({ code: c.grade_code, min_score: c.min_score })) }), req.ip);
+    res.status(201).json({ id: policyId, name: name.trim() });
+  } catch (e) {
+    res.status(500).json({ error: '정책 생성 실패: ' + e.message });
+  }
+});
+
+// PUT /api/grade-policies/:id — 정책 수정 (이름·description은 항상 허용, criteria는 미바인딩 시에만)
+app.put('/api/grade-policies/:id', auth, adminOnly, (req, res) => {
+  const policyId = parseInt(req.params.id);
+  if (!Number.isInteger(policyId)) {
+    return res.status(400).json({ error: '유효하지 않은 정책 ID' });
+  }
+  const target = db.prepare('SELECT id, name, description FROM grade_policies WHERE id = ?').get(policyId);
+  if (!target) {
+    return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
+  }
+  const { name, description, criteria } = req.body;
+  const hasNameOrDesc = (name !== undefined) || (description !== undefined);
+  const hasCriteria = criteria !== undefined;
+  if (!hasNameOrDesc && !hasCriteria) {
+    return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+  }
+  if (hasCriteria) {
+    const appliedCount = db.prepare('SELECT COUNT(*) AS cnt FROM eval_periods WHERE grade_policy_id = ?').get(policyId).cnt;
+    if (appliedCount > 0) {
+      const appliedPeriods = db.prepare(
+        'SELECT id, eval_year, period_label FROM eval_periods WHERE grade_policy_id = ? ORDER BY eval_year DESC, id DESC'
+      ).all(policyId);
+      return res.status(409).json({
+        error: `이 정책은 ${appliedCount}개 평가 기간에 적용 중이므로 cutoff(등급 기준)를 수정할 수 없습니다. 신규 정책을 만들고 새 기간에 바인딩하세요.`,
+        applied_periods: appliedPeriods,
+        hint: '정책 이름·description은 수정 가능합니다.'
+      });
+    }
+    const validation = validateGradePolicyCriteria(criteria);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+  }
+  if (name !== undefined && name.trim() !== target.name) {
+    const dup = db.prepare('SELECT id FROM grade_policies WHERE name = ? AND id != ?').get(name.trim(), policyId);
+    if (dup) {
+      return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
+    }
+  }
+  const tx = db.transaction(() => {
+    const updates = [];
+    const params = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name.trim()); }
+    if (description !== undefined) { updates.push('description = ?'); params.push(description || null); }
+    if (updates.length > 0) {
+      params.push(policyId);
+      db.prepare(`UPDATE grade_policies SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    }
+    if (hasCriteria) {
+      db.prepare('DELETE FROM grade_policy_criteria WHERE policy_id = ?').run(policyId);
+      const insert = db.prepare(
+        'INSERT INTO grade_policy_criteria (policy_id, grade_code, grade_name, min_score, sort_order, description, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      );
+      for (const c of criteria) {
+        insert.run(policyId, c.grade_code.trim(), c.grade_name.trim(), c.min_score, c.sort_order, c.description || null, c.note || null);
+      }
+    }
+  });
+  try {
+    tx();
+    const resolvedName = name !== undefined ? name.trim() : target.name;
+    if (hasNameOrDesc) {
+      auditLog(req.user.sub, 'GRADE_POLICY_UPDATED', policyId, target.name,
+        JSON.stringify({ before: { name: target.name, description: target.description }, after: { name: resolvedName, description: description !== undefined ? description : target.description } }), req.ip);
+    }
+    if (hasCriteria) {
+      auditLog(req.user.sub, 'GRADE_POLICY_CRITERIA_UPDATED', policyId, resolvedName,
+        JSON.stringify({ new_criteria: criteria.map(c => ({ code: c.grade_code, min_score: c.min_score })) }), req.ip);
+    }
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: '정책 수정 실패: ' + e.message });
+  }
+});
+
+// DELETE /api/grade-policies/:id — 정책 삭제 (applied_periods 강제 초기화 + 비활성화)
+app.delete('/api/grade-policies/:id', auth, adminOnly, (req, res) => {
+  const policyId = parseInt(req.params.id);
+  if (!Number.isInteger(policyId)) {
+    return res.status(400).json({ error: '유효하지 않은 정책 ID' });
+  }
+  const target = db.prepare('SELECT id, name FROM grade_policies WHERE id = ?').get(policyId);
+  if (!target) {
+    return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
+  }
+  const appliedPeriods = db.prepare(
+    'SELECT id, eval_year, period_label, is_active FROM eval_periods WHERE grade_policy_id = ?'
+  ).all(policyId);
+  const tx = db.transaction(() => {
+    if (appliedPeriods.length > 0) {
+      db.prepare('UPDATE eval_periods SET grade_policy_id = NULL, is_active = 0 WHERE grade_policy_id = ?').run(policyId);
+    }
+    db.prepare('DELETE FROM grade_policies WHERE id = ?').run(policyId);
+  });
+  try {
+    tx();
+    auditLog(req.user.sub, 'GRADE_POLICY_DELETED', policyId, target.name,
+      JSON.stringify({ affected_period_count: appliedPeriods.length, affected_periods: appliedPeriods.map(p => ({ id: p.id, label: `${p.eval_year}년 ${p.period_label}`, was_active: p.is_active === 1 })) }), req.ip);
+    for (const p of appliedPeriods) {
+      auditLog(req.user.sub, 'EVAL_PERIOD_POLICY_DETACHED', p.id, `${p.eval_year}년 ${p.period_label}`,
+        JSON.stringify({ reason: `정책 삭제로 인한 강제 초기화 (deleted policy: ${target.name})`, was_active: p.is_active === 1, deactivated: p.is_active === 1 }), req.ip);
+    }
+    res.json({
+      ok: true,
+      affected_period_count: appliedPeriods.length,
+      message: appliedPeriods.length > 0
+        ? `정책이 삭제되었습니다. 영향받은 ${appliedPeriods.length}개 평가 기간은 비활성화되었습니다.`
+        : '정책이 삭제되었습니다.'
+    });
+  } catch (e) {
+    res.status(500).json({ error: '정책 삭제 실패: ' + e.message });
+  }
 });
 
 app.get('/api/settings/approval-edit', auth, (req, res) => {
