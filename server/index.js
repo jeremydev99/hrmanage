@@ -1138,6 +1138,14 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
       // ── 2차 평가자 제출 ──────────────────────────────────
       if (!fe.mgr_done) return res.status(400).json({ error: '1차 평가자가 먼저 평가를 완료해야 합니다.' });
 
+      if (selected_grade) {
+        const secPolicy = getPolicyForEval(ev.id);
+        const validCodes = secPolicy ? secPolicy.criteria.map(c => c.grade_code) : [];
+        if (validCodes.length && !validCodes.includes(selected_grade)) {
+          return res.status(400).json({ error: `유효하지 않은 등급 코드: ${selected_grade}` });
+        }
+      }
+
       await finalEvalRepo.upsertScores(fe.id, scores, 'secondMgrScore');
 
       await finalEvalRepo.upsert(ev.id, {
@@ -1168,7 +1176,11 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         return res.status(400).json({ error: '관리자 점수가 입력되지 않았습니다.' });
       }
       const finalScore = Math.round(rawScore * 10) / 10;
-      const grade      = finalScore >= 90 ? 'S' : finalScore >= 80 ? 'A' : finalScore >= 70 ? 'B' : finalScore >= 60 ? 'C' : 'D';
+      const evalPolicy = getPolicyForEval(ev.id);
+      const grade = scoreToGrade(finalScore, evalPolicy?.criteria || []);
+      if (!grade) {
+        return res.status(400).json({ error: '등급 산출 실패: 평가 기간에 등급 정책이 바인딩되지 않았거나 점수가 정책 범위 밖입니다.' });
+      }
       const finalGradeCode = selected_grade || grade;
 
       await finalEvalRepo.upsert(ev.id, {
@@ -1234,7 +1246,7 @@ app.get('/api/eval-periods', auth, (req, res) => {
 
     const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
     const periods = db.prepare(
-      `SELECT * FROM eval_periods ${where} ORDER BY eval_year DESC, period_label`
+      `SELECT ep.*, gp.name AS grade_policy_name FROM eval_periods ep LEFT JOIN grade_policies gp ON gp.id = ep.grade_policy_id ${where} ORDER BY ep.eval_year DESC, ep.period_label`
     ).all(...params);
 
     res.set('X-Periods-Year-From', yearFrom ?? '');
@@ -1286,16 +1298,20 @@ app.get('/api/eval-periods/available-years', auth, (req, res) => {
 // 평가 기간 추가 (admin+)
 app.post('/api/eval-periods', auth, adminOnly, (req, res) => {
   try {
-    const { period_type, period_label, eval_year, is_active } = req.body;
+    const { period_type, period_label, eval_year, is_active, grade_policy_id } = req.body;
     if (!period_type || !period_label || !eval_year)
       return res.status(400).json({ error: '필수 항목 누락' });
+    if (!grade_policy_id)
+      return res.status(400).json({ error: '등급의 100점환산 기준이 저장되지 않았습니다. 적용해 주세요.' });
+    const policy = db.prepare('SELECT id FROM grade_policies WHERE id=?').get(grade_policy_id);
+    if (!policy) return res.status(400).json({ error: '유효하지 않은 등급 정책입니다.' });
     const exists = db.prepare(
       'SELECT 1 FROM eval_periods WHERE period_label=? AND eval_year=?'
     ).get(period_label, eval_year);
     if (exists) return res.status(409).json({ error: '이미 존재하는 기간입니다.' });
     const r = db.prepare(
-      'INSERT INTO eval_periods(period_type,period_label,eval_year,is_active,created_by) VALUES(?,?,?,?,?)'
-    ).run(period_type, period_label, eval_year, is_active ?? 1, req.user.sub);
+      'INSERT INTO eval_periods(period_type,period_label,eval_year,is_active,created_by,grade_policy_id) VALUES(?,?,?,?,?,?)'
+    ).run(period_type, period_label, eval_year, is_active ?? 1, req.user.sub, grade_policy_id);
     res.json({ id: r.lastInsertRowid });
   } catch(err) {
     res.status(500).json({ error: err.message });
@@ -1308,6 +1324,9 @@ app.patch('/api/eval-periods/:id/toggle', auth, adminOnly, (req, res) => {
     const p = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
     if (!p) return res.status(404).json({ error: '없음' });
     const next = p.is_active ? 0 : 1;
+    if (next === 1 && !p.grade_policy_id) {
+      return res.status(400).json({ error: '등급의 100점환산 기준이 저장되지 않았습니다. 적용해 주세요.' });
+    }
     db.prepare('UPDATE eval_periods SET is_active=? WHERE id=?').run(next, req.params.id);
     res.json({ success: true, is_active: next });
   } catch(err) {
@@ -2120,21 +2139,46 @@ app.post('/api/perf/ai-summary', auth, async (req, res) => {
 
 // ── 전체 조직 분석 API (PROMPT 58) ─────────────────────────
 
-function buildGradeMap() {
-  const grades = db.prepare(
-    "SELECT grade_code, sort_order FROM grade_criteria WHERE is_active=1 AND grade_code != 'NC' ORDER BY sort_order"
-  ).all();
-  const n = grades.length;
-  const codeToScore = {};
-  grades.forEach(g => { codeToScore[g.grade_code] = n - (g.sort_order - 1); });
-  // 0-100 스케일 avg_score → 등급 코드 (seed-eval-data.js scoreToGrade와 동일 공식)
-  const scoreToGrade = avg => {
-    if (avg === null) return null;
-    const s1n = avg * (n - 1) / 100 + 1;
-    const sortOrder = Math.max(1, Math.min(n, Math.round(n + 1 - s1n)));
-    return grades.find(g => g.sort_order === sortOrder)?.grade_code || grades[grades.length - 1].grade_code;
-  };
-  return { gradeCodes: grades.map(g => g.grade_code), maxScore: 100, codeToScore, scoreToGrade };
+// 점수→등급 변환 단일 진실 함수 (정책 기반, PROMPT 63A)
+function scoreToGrade(score, criteria) {
+  if (score == null || isNaN(score)) return null;
+  if (!criteria || !criteria.length) return null;
+  for (const c of criteria) {  // min_score DESC 정렬 전제
+    if (score >= c.min_score) return c.grade_code;
+  }
+  return null;
+}
+
+// 평가 ID → 적용 등급 정책 조회
+function getPolicyForEval(evalId) {
+  const row = db.prepare(`
+    SELECT gp.id, gp.name
+    FROM eval_cycles ec
+    JOIN eval_periods ep ON ep.period_label = ec.period_label AND ep.eval_year = ec.eval_year
+    JOIN grade_policies gp ON gp.id = ep.grade_policy_id
+    WHERE ec.id = ?
+  `).get(evalId);
+  if (!row) return null;
+  const criteria = db.prepare(
+    'SELECT grade_code, grade_name, min_score, sort_order FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+  ).all(row.id);
+  return { id: row.id, name: row.name, criteria };
+}
+
+// 디폴트 정책 ID (fallback용)
+function getDefaultPolicyId() {
+  return db.prepare('SELECT id FROM grade_policies ORDER BY id LIMIT 1').get()?.id || null;
+}
+
+function buildGradeMap(policyId) {
+  const pid = policyId || getDefaultPolicyId();
+  if (!pid) return { gradeCodes: [], maxScore: 100, scoreToGrade: () => null };
+  const criteria = db.prepare(
+    'SELECT grade_code, min_score, sort_order FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+  ).all(pid);
+  if (!criteria.length) return { gradeCodes: [], maxScore: 100, scoreToGrade: () => null };
+  const gradeCodes = criteria.map(c => c.grade_code);
+  return { gradeCodes, maxScore: 100, scoreToGrade: (score) => scoreToGrade(score, criteria) };
 }
 
 function getLeaderOrgIds(userId) {
@@ -2229,7 +2273,7 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
     }
     const periodLabels = periodRows.map(p => p.period_label);
     const periodIds = periodRows.map(p => p.id);
-    const gm = buildGradeMap();
+    const gm = buildGradeMap(periodRows[0]?.grade_policy_id || null);
     let orgs = db.prepare(`
       SELECT o.id, o.name, o.parent_id, o.sort_order, u.name as leader_name
       FROM organizations o LEFT JOIN users u ON o.leader_id=u.id
@@ -2294,7 +2338,7 @@ app.get('/api/perf/quarterly-trend', auth, (req, res) => {
     const pPh = pIdList.map(() => '?').join(',');
     const activeFilter = effectiveInclInactive ? '' : 'AND is_active = 1';
     const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter} ORDER BY eval_year, period_label`).all(...pIdList);
-    const gm = buildGradeMap();
+    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds, orgName = '회사 전체';
     if (org_id) {
       const orgIdNum = parseInt(org_id);
@@ -2343,7 +2387,7 @@ app.get('/api/perf/grade-distribution', auth, (req, res) => {
     const pPh = pIdList.map(() => '?').join(',');
     const activeFilter2 = effectiveInclInactive ? '' : 'AND is_active = 1';
     const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter2} ORDER BY eval_year, period_label`).all(...pIdList);
-    const gm = buildGradeMap();
+    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds;
     if (org_id) {
       const orgIdNum = parseInt(org_id);
@@ -2423,7 +2467,7 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const periodLabels = periods.map(p => p.period_label);
     const periodStr = periods.length
       ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';
-    const gm = buildGradeMap();
+    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
     const baseIds = isAdmin
       ? db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id)
       : getSubtreeUserIds(allowedIds[0]);
@@ -2676,51 +2720,27 @@ app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
 //   res.json(grades);
 // });
 
-// [PROMPT_36-8] Repository Pattern 적용
-app.get('/api/grade-criteria', auth, async (req, res) => {
-  try {
-    const list = await gradeCriteriaRepo.findAll();
-    res.json(list);
-  } catch(err) { res.status(500).json({ error: err.message }); }
+// grade_criteria API 폐기 (PROMPT 63A) — /api/grade-policies 사용
+app.all('/api/grade-criteria', (req, res) => {
+  res.status(410).json({ error: 'grade_criteria API는 폐기되었습니다. /api/grade-policies를 사용하세요.' });
+});
+app.all('/api/grade-criteria/:id', (req, res) => {
+  res.status(410).json({ error: 'grade_criteria API는 폐기되었습니다.' });
 });
 
-// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
-// app.post('/api/grade-criteria', auth, adminOnly, (req, res) => { ... });
-
-// [PROMPT_36-8] Repository Pattern 적용
-app.post('/api/grade-criteria', auth, adminOnly, async (req, res) => {
+// GET /api/grade-policies — 등급 정책 목록 + criteria + applied_periods
+app.get('/api/grade-policies', auth, adminOnly, (req, res) => {
   try {
-    const { grade_code, grade_name, description, note, sort_order } = req.body;
-    if (!grade_code || !grade_name) return res.status(400).json({ error: '등급 코드와 명칭은 필수입니다.' });
-    const finalSort = sort_order || ((await gradeCriteriaRepo.getMaxSortOrder()) + 1);
-    const id = await gradeCriteriaRepo.create({ grade_code, grade_name, description, note, sort_order: finalSort });
-    res.json({ id });
-  } catch(err) { res.status(500).json({ error: err.message }); }
-});
-
-// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
-// app.put('/api/grade-criteria/:id', auth, adminOnly, (req, res) => { ... });
-
-// [PROMPT_36-8] Repository Pattern 적용
-app.put('/api/grade-criteria/:id', auth, adminOnly, async (req, res) => {
-  try {
-    const { grade_code, grade_name, description, note, sort_order } = req.body;
-    await gradeCriteriaRepo.update(req.params.id, { grade_code, grade_name, description, note, sort_order });
-    res.json({ success: true });
-  } catch(err) { res.status(500).json({ error: err.message }); }
-});
-
-// [PROMPT_36-8] Repository Pattern 전환 — 기존 코드 주석 처리
-// app.delete('/api/grade-criteria/:id', auth, adminOnly, (req, res) => { ... });
-
-// [PROMPT_36-8] Repository Pattern 적용
-app.delete('/api/grade-criteria/:id', auth, adminOnly, async (req, res) => {
-  try {
-    const total = await gradeCriteriaRepo.count();
-    if (total <= 2) return res.status(400).json({ error: '최소 2개 이상의 등급이 필요합니다.' });
-    await gradeCriteriaRepo.delete(req.params.id);
-    await gradeCriteriaRepo.resequenceSortOrder();
-    res.json({ success: true });
+    const policies = db.prepare('SELECT id, name, description, created_at, created_by FROM grade_policies ORDER BY id').all();
+    for (const p of policies) {
+      p.criteria = db.prepare(
+        'SELECT id, grade_code, grade_name, min_score, sort_order, description, note FROM grade_policy_criteria WHERE policy_id=? ORDER BY sort_order'
+      ).all(p.id);
+      p.applied_periods = db.prepare(
+        'SELECT id, eval_year, period_label, is_active FROM eval_periods WHERE grade_policy_id=? ORDER BY eval_year DESC, id DESC'
+      ).all(p.id);
+    }
+    res.json(policies);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -2928,16 +2948,28 @@ function initDB() {
       value TEXT
     )`,
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_done INTEGER DEFAULT 0",
-    `CREATE TABLE IF NOT EXISTS grade_criteria (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      grade_code TEXT NOT NULL,
-      grade_name TEXT NOT NULL,
+    `CREATE TABLE IF NOT EXISTS grade_policies (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL UNIQUE,
       description TEXT,
-      note TEXT,
-      sort_order INTEGER DEFAULT 0,
-      is_active INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at  TEXT DEFAULT (datetime('now')),
+      created_by  INTEGER REFERENCES users(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS grade_policy_criteria (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      policy_id   INTEGER NOT NULL REFERENCES grade_policies(id) ON DELETE CASCADE,
+      grade_code  TEXT NOT NULL,
+      grade_name  TEXT NOT NULL,
+      min_score   REAL NOT NULL CHECK (min_score >= 0 AND min_score <= 100),
+      sort_order  INTEGER NOT NULL,
+      description TEXT,
+      note        TEXT,
+      created_at  TEXT DEFAULT (datetime('now')),
+      UNIQUE(policy_id, grade_code),
+      UNIQUE(policy_id, sort_order)
+    )`,
+    "ALTER TABLE eval_periods ADD COLUMN grade_policy_id INTEGER REFERENCES grade_policies(id)",
+    "DROP TABLE IF EXISTS grade_criteria",
     "ALTER TABLE final_evaluations ADD COLUMN selected_grade TEXT",
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_note TEXT",
     "ALTER TABLE final_evaluations ADD COLUMN second_mgr_id INTEGER",
@@ -3008,24 +3040,29 @@ function initDB() {
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
-  // 기본 등급 기준 시드 (없을 때만)
+  // 등급 정책 시드 (없을 때만 — PROMPT 63A)
   try {
-    const gradeExists = db.prepare('SELECT 1 FROM grade_criteria LIMIT 1').get();
-    if (!gradeExists) {
-      const grades = [
-        { code:'OI', name:'OI (Outstanding Impact)',    desc:'조직 전체에 탁월한 영향을 미친 최고 수준의 성과를 달성하였습니다.',      note:'최상위 성과자', sort:1 },
-        { code:'EE', name:'EE (Exceeds Expectations)',  desc:'기대 수준을 명확히 초과하는 우수한 성과를 지속적으로 창출하였습니다.',    note:'우수 성과자',   sort:2 },
-        { code:'SC', name:'SC (Strong Contributor)',    desc:'핵심 목표를 달성하며 팀에 실질적인 기여를 한 성과를 보였습니다.',        note:'우량 기여자',   sort:3 },
-        { code:'ME', name:'ME (Meets Expectations)',    desc:'설정된 목표와 기대 수준을 충실히 달성한 안정적인 성과를 보였습니다.',     note:'기준 충족',     sort:4 },
-        { code:'PB', name:'PB (Performance Building)',  desc:'일부 목표를 달성하였으나 전반적인 역량 강화와 성과 개선이 필요합니다.',  note:'성과 개선 필요', sort:5 },
-        { code:'IR', name:'IR (Improvement Required)',  desc:'주요 목표 달성에 미흡하여 구체적인 개선 계획 수립과 실행이 요구됩니다.',note:'개선 요구',      sort:6 },
-        { code:'NC', name:'NC (No Contest)',            desc:'평가를 위한 충분한 활동 및 데이터가 확인되지 않아 등급 산정이 불가합니다.',note:'해당 없음',   sort:7 },
+    let policy = db.prepare("SELECT id FROM grade_policies WHERE name='사이냅 표준안'").get();
+    if (!policy) {
+      const r = db.prepare(
+        "INSERT INTO grade_policies(name,description,created_by) VALUES(?,?,?)"
+      ).run('사이냅 표준안', '운영 디폴트 등급 정책 (OI=90/EE=80/SC=70/ME=60/PB=50/IR=40)', 1);
+      policy = { id: r.lastInsertRowid };
+      const criteria = [
+        { code:'OI', name:'OI (Outstanding Impact)',    min:90, order:1 },
+        { code:'EE', name:'EE (Exceeds Expectations)',  min:80, order:2 },
+        { code:'SC', name:'SC (Strong Contributor)',    min:70, order:3 },
+        { code:'ME', name:'ME (Meets Expectations)',    min:60, order:4 },
+        { code:'PB', name:'PB (Performance Building)', min:50, order:5 },
+        { code:'IR', name:'IR (Improvement Required)', min: 0, order:6 },
       ];
-      const ins = db.prepare('INSERT INTO grade_criteria(grade_code,grade_name,description,note,sort_order) VALUES(?,?,?,?,?)');
-      grades.forEach(g => ins.run(g.code, g.name, g.desc, g.note, g.sort));
-      console.log('✅ 기본 등급 기준 생성 완료');
+      const ins = db.prepare('INSERT OR IGNORE INTO grade_policy_criteria(policy_id,grade_code,grade_name,min_score,sort_order) VALUES(?,?,?,?,?)');
+      criteria.forEach(c => ins.run(policy.id, c.code, c.name, c.min, c.order));
+      console.log('✅ 디폴트 등급 정책 "사이냅 표준안" 생성 완료');
     }
-  } catch(e) { console.log('[grade seed skip]', e.message); }
+    // 기존 eval_periods에 정책 자동 바인딩 (grade_policy_id NULL인 것만)
+    db.prepare('UPDATE eval_periods SET grade_policy_id=? WHERE grade_policy_id IS NULL').run(policy.id);
+  } catch(e) { console.log('[grade policy seed skip]', e.message); }
   // 기존 action 컬럼에 복합 문자열로 저장된 것들 정리 (action에 ':' 포함된 것)
   try {
     const oldRows = db.prepare("SELECT id, action FROM audit_logs WHERE action LIKE '%:%' OR action LIKE '%—%'").all();

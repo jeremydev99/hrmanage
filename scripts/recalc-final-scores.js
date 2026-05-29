@@ -58,15 +58,25 @@ function recalcScore(evalId) {
   return Math.round(finalScore * 100) / 100;
 }
 
-function scoreToGrade(score) {
-  if (score >= 90) return 'OI';
-  if (score >= 75) return 'EE';
-  if (score >= 60) return 'SC';
-  if (score >= 45) return 'ME';
-  if (score >= 30) return 'PB';
-  return 'IR';
+// 디폴트 정책 criteria 로드 (PROMPT 63A — grade_policy_criteria 기반)
+function loadDefaultCriteria() {
+  const policy = db.prepare("SELECT id FROM grade_policies WHERE name='사이냅 표준안'").get();
+  if (!policy) return [];
+  return db.prepare(
+    'SELECT grade_code, min_score FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+  ).all(policy.id);
 }
 
+function scoreToGrade(score, criteria) {
+  if (score == null || isNaN(score)) return null;
+  if (!criteria || !criteria.length) return null;
+  for (const c of criteria) {
+    if (score >= c.min_score) return c.grade_code;
+  }
+  return criteria[criteria.length - 1]?.grade_code || null;
+}
+
+const defaultCriteria = loadDefaultCriteria();
 const evals = db.prepare('SELECT eval_id FROM final_evaluations').all();
 let updated = 0;
 
@@ -74,7 +84,7 @@ const tx = db.transaction(() => {
   for (const ev of evals) {
     const newScore = recalcScore(ev.eval_id);
     if (newScore === null) continue;
-    const newGrade = scoreToGrade(newScore);
+    const newGrade = scoreToGrade(newScore, defaultCriteria);
     db.prepare(`
       UPDATE final_evaluations
       SET final_score = ?, final_grade = ?,

@@ -7,7 +7,7 @@
  *
  * 동작:
  * 1. 백업: data/hrmanage.db → data/hrmanage.db.bak.before-seed-{timestamp}
- * 2. 기존 평가 데이터 삭제 (users/organizations/grade_criteria/goal_categories 유지)
+ * 2. 기존 평가 데이터 삭제 (users/organizations/goal_categories/grade_policies 유지)
  * 3. 2024년 분기 평가 기간 4개 신규 생성 (2025·2026 기존 유지)
  * 4. 8명 × 9분기 = 72개 평가 사이클 생성
  * 5. 사이클당 6개 목표 (카테고리 3개 × 2개)
@@ -88,12 +88,13 @@ function main() {
   try {
     db.transaction(() => {
       cleanupOldData(db);
+      seedDefaultGradePolicy(db);   // 디폴트 등급 정책 먼저 시드 (PROMPT 63A)
       const periods    = ensurePeriods(db);
       const users      = loadUsers(db);
       const categories = loadCategories(db);
       const grades     = loadGrades(db);
 
-      console.log(`\n📋 사용자 ${users.length}명 · 카테고리 ${categories.length}개 · 등급 ${grades.filter(g=>g.grade_code!=='NC').length}개 (NC 제외)`);
+      console.log(`\n📋 사용자 ${users.length}명 · 카테고리 ${categories.length}개 · 등급 ${grades.length}개`);
       console.log(`📅 평가 기간 ${periods.length}개\n`);
 
       let totalCycles = 0, totalGoals = 0, totalApprovals = 0;
@@ -165,6 +166,10 @@ const TARGET_PERIODS = [
 ];
 
 function ensurePeriods(db) {
+  // 디폴트 정책 ID 확보 (시드 순서상 grade policy가 먼저 시드됨)
+  const defaultPolicy = db.prepare("SELECT id FROM grade_policies WHERE name='사이냅 표준안'").get();
+  const defaultPolicyId = defaultPolicy?.id || null;
+
   const results = [];
   for (const t of TARGET_PERIODS) {
     let p = db.prepare(
@@ -173,11 +178,13 @@ function ensurePeriods(db) {
 
     if (!p) {
       const res = db.prepare(`
-        INSERT INTO eval_periods (period_type, period_label, eval_year, is_active, created_by, eval_mode, locked)
-        VALUES ('quarter', ?, ?, 1, NULL, 'MBO', 0)
-      `).run(t.label, t.evalYear);
+        INSERT INTO eval_periods (period_type, period_label, eval_year, is_active, created_by, eval_mode, locked, grade_policy_id)
+        VALUES ('quarter', ?, ?, 1, NULL, 'MBO', 0, ?)
+      `).run(t.label, t.evalYear, defaultPolicyId);
       p = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(res.lastInsertRowid);
       console.log(`   📅 신규 생성: ${t.label}`);
+    } else if (defaultPolicyId && !p.grade_policy_id) {
+      db.prepare('UPDATE eval_periods SET grade_policy_id=? WHERE id=?').run(defaultPolicyId, p.id);
     }
     results.push(p);
   }
@@ -188,6 +195,28 @@ function ensurePeriods(db) {
 
 function isLatestPeriod(p, all) {
   return periodIndex(p) === Math.max(...all.map(periodIndex));
+}
+
+// ── 디폴트 등급 정책 시드 (PROMPT 63A) ───────────────────────
+function seedDefaultGradePolicy(db) {
+  let policy = db.prepare("SELECT id FROM grade_policies WHERE name='사이냅 표준안'").get();
+  if (!policy) {
+    const r = db.prepare(
+      "INSERT INTO grade_policies(name,description,created_by) VALUES(?,?,?)"
+    ).run('사이냅 표준안', '운영 디폴트 등급 정책 (OI=90/EE=80/SC=70/ME=60/PB=50/IR=40)', 1);
+    policy = { id: r.lastInsertRowid };
+    const criteria = [
+      { code:'OI', name:'OI (Outstanding Impact)',    min:90, order:1 },
+      { code:'EE', name:'EE (Exceeds Expectations)',  min:80, order:2 },
+      { code:'SC', name:'SC (Strong Contributor)',    min:70, order:3 },
+      { code:'ME', name:'ME (Meets Expectations)',    min:60, order:4 },
+      { code:'PB', name:'PB (Performance Building)', min:50, order:5 },
+      { code:'IR', name:'IR (Improvement Required)', min: 0, order:6 },
+    ];
+    const ins = db.prepare('INSERT OR IGNORE INTO grade_policy_criteria(policy_id,grade_code,grade_name,min_score,sort_order) VALUES(?,?,?,?,?)');
+    criteria.forEach(c => ins.run(policy.id, c.code, c.name, c.min, c.order));
+    console.log('  ✅ 디폴트 등급 정책 "사이냅 표준안" 생성');
+  }
 }
 
 // ── 사용자·카테고리·등급 로드 ────────────────────────────────
@@ -202,9 +231,12 @@ function loadCategories(db) {
   ).all();
 }
 function loadGrades(db) {
+  // 디폴트 정책(사이냅 표준안)의 criteria 로드 (PROMPT 63A)
+  const policy = db.prepare("SELECT id FROM grade_policies WHERE name='사이냅 표준안'").get();
+  if (!policy) return [];
   return db.prepare(
-    "SELECT id, grade_code, sort_order FROM grade_criteria WHERE is_active=1 ORDER BY sort_order"
-  ).all();
+    'SELECT grade_code, min_score, sort_order FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+  ).all(policy.id);
 }
 
 // ── 시나리오 매핑 ────────────────────────────────────────────
@@ -475,13 +507,14 @@ function createFinal(db, user, evalId, goalRecs, scenario, period, grades, yr, e
   return true;
 }
 
-// ── 점수 → 등급 (0-100점 → OI/EE/SC/ME/PB/IR) ───────────────
-function scoreToGrade(score, activeGrades) {
-  const n = activeGrades.length || 6;
-  // 0-100 → 1-n 선형 변환 후 sort_order 결정 (높은 점수 = 낮은 sort_order = 좋은 등급)
-  const s1n = score * (n - 1) / 100 + 1;
-  const sortOrder = Math.max(1, Math.min(n, Math.round(n + 1 - s1n)));
-  return activeGrades.find(g => g.sort_order === sortOrder)?.grade_code || 'ME';
+// 점수→등급 변환 (정책 criteria 기반, PROMPT 63A)
+function scoreToGrade(score, criteria) {
+  if (score == null || isNaN(score)) return null;
+  if (!criteria || !criteria.length) return 'ME';
+  for (const c of criteria) {  // min_score DESC 정렬 전제
+    if (score >= c.min_score) return c.grade_code;
+  }
+  return criteria[criteria.length - 1]?.grade_code || 'IR';
 }
 
 // ── 기본 점수 (1-5 스케일, 목표 mgr_score 기준) ──────────────

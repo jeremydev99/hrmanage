@@ -63,8 +63,9 @@ C:\claudeprojects\hrmanage\
 │   ├── schema.prisma          ← Prisma 스키마 정의 (20개 테이블)
 │   └── migrations/            ← 추후 마이그레이션 파일들
 ├── scripts/
-│   ├── seed-eval-data.js      ← 시드 데이터 생성 (8명×9분기, AI 분석 검증용, weight=카테고리 내 비중, final_score 0-100)
-│   └── recalc-final-scores.js ← 운영 데이터 final_score 재계산 (PROMPT 61B)
+│   ├── seed-eval-data.js        ← 시드 데이터 생성 (8명×9분기, AI 분석 검증용, weight=카테고리 내 비중, final_score 0-100)
+│   ├── recalc-final-scores.js   ← 운영 데이터 final_score 재계산 (PROMPT 61B)
+│   └── migrate-grade-policy.js  ← 등급 정책 마이그레이션 (PROMPT 63A, grade_criteria→grade_policies, 자동 백업)
 └── data/hrmanage.db
 ```
 
@@ -118,7 +119,7 @@ final_evaluations: self_note, mgr_note, second_mgr_note
 
 ## DB 스키마
 
-> 실제 DB 기반 (2026-05-14 prisma db pull 검증). 총 20개 사용 테이블 + 1개 시스템(sqlite_sequence).
+> 실제 DB 기반 (2026-05-29 PROMPT 63A 마이그레이션 후). 총 21개 사용 테이블 + 1개 시스템(sqlite_sequence).
 > Prisma 모델명은 PascalCase, DB 테이블명은 snake_case (`@@map`으로 매핑).
 
 ```sql
@@ -152,13 +153,17 @@ report_files       id, report_id, feedback_id, final_eval_id,
                    file_name, file_data, file_type, file_size, created_at
 app_settings       key(PK), value, updated_by, updated_at
 eval_periods       id, period_type, period_label, eval_year(TEXT),
-                   is_active, created_by, created_at, eval_mode, locked
+                   is_active, created_by, created_at, eval_mode, locked,
+                   grade_policy_id(FK→grade_policies.id)
 eval_period_modes  id, period_id, manager_id, eval_mode, locked, created_at
                    UNIQUE(period_id, manager_id)
 audit_logs         id, user_id, action, ip, created_at,
                    target_id, target_name, detail
-grade_criteria     id, grade_code, grade_name, description, note,
-                   sort_order, is_active, created_at
+grade_policies     id, name(UNIQUE), description, created_at, created_by
+grade_policy_criteria  id, policy_id(FK→grade_policies.id ON DELETE CASCADE),
+                   grade_code, grade_name, min_score(REAL 0-100), sort_order,
+                   description, note, created_at
+                   UNIQUE(policy_id, grade_code), UNIQUE(policy_id, sort_order)
 okr_cycles         id, user_id, period_label, eval_year(TEXT), phase,
                    created_at, updated_at
 okr_objectives     id, cycle_id, title, description, sort_order
@@ -246,8 +251,8 @@ GET    /api/eval-periods                평가 기간 목록 (?year_from,?year_t
 GET    /api/eval-periods/active         활성 기간
 GET    /api/eval-periods/available-years  평가 기간 데이터 존재 연도 목록 (?include_inactive, admin+)
 GET    /api/eval-periods/my-modes       활성 기간별 내 평가방식
-POST   /api/eval-periods                기간 추가 (admin+)
-PATCH  /api/eval-periods/:id/toggle     활성/비활성 토글 (admin+)
+POST   /api/eval-periods                기간 추가 (admin+, grade_policy_id 필수)
+PATCH  /api/eval-periods/:id/toggle     활성/비활성 토글 (admin+, grade_policy_id 없으면 활성화 불가 — 400)
 DELETE /api/eval-periods/:id            기간 삭제 (master, eval_period_modes도 삭제)
 GET    /api/eval-periods/:id/eval-mode  기간 전사 기본방식 조회 (admin+)
 POST   /api/eval-periods/:id/eval-mode  기간 전사 기본방식 설정 (admin+)
@@ -255,10 +260,12 @@ GET    /api/eval-periods/:id/org-modes  기간 조직별 방식 조회 (admin+)
 POST   /api/eval-periods/:id/org-modes  기간 조직별 방식 설정 (admin+)
 POST   /api/eval-periods/:id/lock       기간 방식 잠금 (admin+)
 
-GET    /api/grade-criteria              등급 기준 목록
-POST   /api/grade-criteria              등급 추가 (admin+)
-PUT    /api/grade-criteria/:id          등급 수정 (admin+)
-DELETE /api/grade-criteria/:id          등급 삭제 (admin+)
+GET    /api/grade-criteria              [410 Gone] 폐기 — GET /api/grade-policies 로 대체
+POST   /api/grade-criteria              [410 Gone] 폐기
+PUT    /api/grade-criteria/:id          [410 Gone] 폐기
+DELETE /api/grade-criteria/:id          [410 Gone] 폐기
+
+GET    /api/grade-policies              등급 정책 목록 (id, name, description, criteria[] 포함)
 
 GET    /api/organizations               조직 목록
 POST   /api/organizations               조직 추가 (admin+)
@@ -376,6 +383,19 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - NC(평가 제외)는 평균에서 제외 유지
     - `GET /api/perf/org-tree`, `GET /api/perf/quarterly-trend` 모두 `avg_score` 0-100 스케일 반환
 
+26. **등급 정책 시점별 바인딩** (2026-05-29, PROMPT 63A):
+    - `eval_periods.grade_policy_id` FK → `grade_policies` → `grade_policy_criteria` 테이블
+    - 기간별 독립 등급 기준 — 연도/시기가 달라도 기준이 다를 수 있음
+    - `scoreToGrade(score, criteria)`: min_score DESC 정렬 criteria 반복, 첫 충족 등급 반환 (단일 구현)
+    - `getPolicyForEval(evalId)`: eval_cycles↔eval_periods 조인(period_label+eval_year), 정책+criteria 반환
+    - `getDefaultPolicyId()`: grade_policies 첫 행 (id ASC) — fallback용
+    - `buildGradeMap(policyId)`: 통계 라우터용, policyId null 시 default 사용
+    - IR min_score=0 필수 (catch-all) — 미충족 score가 null 반환되면 평가 완료 불가
+    - 활성화 게이트: grade_policy_id 없는 기간 활성화 시 400 오류
+    - S/A/B/C/D 하드코딩 제거 — 6등급 OI/EE/SC/ME/PB/IR 전환 (grade_code 기반 유연)
+    - grade_criteria 테이블 폐기 (DROP), grade-criteria 4개 API 410 Gone 반환
+    - 디폴트 정책 "사이냅 표준안": OI≥90, EE≥80, SC≥70, ME≥60, PB≥50, IR≥0
+
 24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
     - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
     - 헬퍼: `calcFinalScore(evalId, scoreField)` (scoreField: mgr_score | self_score | second_mgr_score)
@@ -477,6 +497,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-29 | 등급 정책 시점별 바인딩 도입 — grade_policies/grade_policy_criteria 신규, scoreToGrade 단일화, S/A/B/C/D 하드코딩 제거, eval_periods 활성화 게이트, grade-criteria API 폐기 (PROMPT 63A) | Claude Code |
 | 2026-05-29 | 내 평가 사이클 카드 진행 단계 표시 모바일 가로 오버플로 수정 (반응형 flex + 매우 좁은 화면 라벨 줄바꿈) (PROMPT 63-UI) | Claude Code |
 | 2026-05-28 | 조직 평균 영역 대표 등급 표시 제거 — 점수만 표시 (PROMPT 62 후속) | Claude Code |
 | 2026-05-28 | 조직 평균 산출 등급기반→final_score 가중평균 전환 + 100점 스케일 2자리 표시 + 체크박스 라벨 CSS (PROMPT 62) | Claude Code |

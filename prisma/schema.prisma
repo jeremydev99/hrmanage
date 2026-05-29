@@ -243,15 +243,17 @@ model AppSetting {
 }
 
 model EvalPeriod {
-  id          Int     @id @default(autoincrement())
-  periodType  String  @map("period_type")
-  periodLabel String  @map("period_label")
-  evalYear    String  @map("eval_year")
-  isActive    Int?    @default(1) @map("is_active")
-  created_by  Int?
-  created_at  String?
-  evalMode    String? @default("MBO") @map("eval_mode")
-  locked      Int?    @default(0)
+  id              Int          @id @default(autoincrement())
+  periodType      String       @map("period_type")
+  periodLabel     String       @map("period_label")
+  evalYear        String       @map("eval_year")
+  isActive        Int?         @default(1) @map("is_active")
+  created_by      Int?
+  created_at      String?
+  evalMode        String?      @default("MBO") @map("eval_mode")
+  locked          Int?         @default(0)
+  gradePolicyId   Int?         @map("grade_policy_id")
+  gradePolicy     GradePolicy? @relation(fields: [gradePolicyId], references: [id])
 
   @@map("eval_periods")
 }
@@ -281,17 +283,33 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model GradeCriteria {
-  id          Int     @id @default(autoincrement())
-  gradeCode   String  @map("grade_code")
-  gradeName   String  @map("grade_name")
+model GradePolicy {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  created_at  String?
+  createdBy   Int?     @map("created_by")
+  criteria    GradePolicyCriteria[]
+  evalPeriods EvalPeriod[]
+
+  @@map("grade_policies")
+}
+
+model GradePolicyCriteria {
+  id          Int         @id @default(autoincrement())
+  policyId    Int         @map("policy_id")
+  policy      GradePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  gradeCode   String      @map("grade_code")
+  gradeName   String      @map("grade_name")
+  minScore    Float       @map("min_score")
+  sortOrder   Int         @map("sort_order")
   description String?
   note        String?
-  sortOrder   Int?    @default(0) @map("sort_order")
-  isActive    Int?    @default(1) @map("is_active")
   created_at  String?
 
-  @@map("grade_criteria")
+  @@unique([policyId, gradeCode])
+  @@unique([policyId, sortOrder])
+  @@map("grade_policy_criteria")
 }
 
 model OkrCycle {
