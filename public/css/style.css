@@ -562,6 +562,9 @@ textarea:focus{outline:none;border-color:var(--o400)}
     flex-wrap: wrap;
     gap: 6px;
   }
+  .flow { padding: 10px 6px; }
+  .fstep { min-width: 0; flex: 1 1 0; gap: 3px; }
+  .farrow { flex: 0 0 6px; min-width: 0; }
 }
 
 /* ── 전직원 평가 현황 컨트롤 ── */

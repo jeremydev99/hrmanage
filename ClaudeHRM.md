@@ -477,6 +477,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-05-29 | 내 평가 사이클 카드 진행 단계 표시 모바일 가로 오버플로 수정 (반응형 flex + 매우 좁은 화면 라벨 줄바꿈) (PROMPT 63-UI) | Claude Code |
 | 2026-05-28 | 조직 평균 영역 대표 등급 표시 제거 — 점수만 표시 (PROMPT 62 후속) | Claude Code |
 | 2026-05-28 | 조직 평균 산출 등급기반→final_score 가중평균 전환 + 100점 스케일 2자리 표시 + 체크박스 라벨 CSS (PROMPT 62) | Claude Code |
 | 2026-05-28 | 시드 weight·점수 스케일 통일 + 운영 데이터 재계산 + 자동 백업 (PROMPT 61B) | Claude Code |
