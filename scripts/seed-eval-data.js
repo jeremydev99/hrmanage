@@ -399,17 +399,23 @@ function createEvalForUser(db, user, period, categories, grades, isCurrent) {
     }
   }
 
-  // 중간보고
+  // 중간보고 (64A: goal_id + round 추가)
   let reports = 0;
-  for (const goal of goalRecs) {
-    const n = 2 + Math.floor(Math.random() * 4);
-    for (let r = 0; r < n; r++) {
+  const reportRounds = 2 + Math.floor(Math.random() * 3);  // 2~4 회차
+  for (let round = 1; round <= reportRounds; round++) {
+    for (const goal of goalRecs) {
       db.prepare(`
-        INSERT INTO progress_reports (eval_id, author_id, content, created_at, updated_at)
-        VALUES (?, ?, ?, datetime('now'), datetime('now'))
-      `).run(evalId, user.id, encrypt(reportText(scenario, goal.name, r + 1)));
+        INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+      `).run(evalId, user.id, encrypt(reportText(scenario, goal.name, round)), goal.id, round);
       reports++;
     }
+    // 종합 의견 (goal_id NULL)
+    db.prepare(`
+      INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round, created_at, updated_at)
+      VALUES (?, ?, ?, NULL, ?, datetime('now'), datetime('now'))
+    `).run(evalId, user.id, encrypt(`${round}회차 종합 진행 상황입니다.`), round);
+    reports++;
   }
 
   // 피드백 (manager 작성)

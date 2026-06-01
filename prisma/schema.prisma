@@ -213,6 +213,8 @@ model ProgressReport {
   evalId     Int     @map("eval_id")
   authorId   Int     @map("author_id")
   content    String?
+  goalId     Int?    @map("goal_id")
+  round      Int     @default(1)
   created_at String?
   updated_at String?
 

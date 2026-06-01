@@ -420,6 +420,17 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - `convertGradeWithPolicy(score, policyId)` 서버 헬퍼, `convertGradeClient(score, criteria)` 클라이언트 헬퍼
     - 전체 조직 분석 화면 컨트롤 영역에 토글+드롭다운 추가, `onConvToggle()` / `refreshConvTable()` 핸들러
 
+29. **목표별 보고/피드백 연동** (2026-06-01, PROMPT 64A):
+    - `progress_reports`에 `goal_id INTEGER NULL` + `round INTEGER DEFAULT 1` 컬럼 추가
+    - `goal_id=NULL` = 종합 의견 또는 레거시(기존 1,510행) 보존, `goal_id IS NOT NULL` = 목표별 보고
+    - `POST /api/reports/:evalId`: `items` 배열(신규) 또는 `content` 문자열(레거시 호환) 수신, 회차 자동 산출
+    - `GET /api/reports/:evalId`: `goal_id`, `round`, `goal_name`(복호화) 포함 — 클라이언트 그룹화 가능
+    - 회차 제한: `app_settings.feedback_limit` — 보고·피드백 양쪽 POST 라우터에서 강제 (64-PRE §6 버그 해결)
+    - 기존 1,510행은 `goal_id=NULL, round=1` 레거시로 보존 (재분류 없음)
+    - 시드: 목표별 `goal_id` + `round` 포함 INSERT, 종합 의견(NULL) 별도 행
+    - 마이그레이션: `scripts/migrate-progress-report-goals.js` (자동 백업 + idempotent)
+    - UI 통합은 PROMPT 64B 별도 작업
+
 27. **최종 등급 무결성 원칙** (2026-06-01, PROMPT 63D-FIX):
     - 최종 등급은 `scoreToGrade(final_score, period.policy.criteria)` 자동 산출값만 인정
     - 평가자(1차/2차)·관리자 모두 등급 수동 선택·덮어쓰기 불가
@@ -531,6 +542,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 목표별 보고/피드백 연동 데이터 모델 — progress_reports.goal_id/round 추가, POST/GET 라우터 재작성, 회차 제한 강제 (PROMPT 64A) | Claude Code |
 | 2026-06-01 | 성과관리 홈 UI 보정 — AI 요약 영역 최상단 이동(B 흐름 안내) + 기간 드롭다운 한 줄 가로 배치 (PROMPT UI-PERF-HOME) | Claude Code |
 | 2026-06-01 | 일반 사용자 로그인 401 회귀 수정 — api.js token()이 localStorage만 읽어 sessionStorage 토큰 누락 → sessionStorage도 읽도록 수정 (PROMPT LOGIN-FIX) | Claude Code |
 | 2026-06-01 | 분석 환산 옵션 도입 — 성과 분석 화면에 "현재 cutoff 기준 환산" 토글 + 정책 드롭다운 + 가상 산출 (PROMPT 63D, 63 시리즈 완료) | Claude Code |

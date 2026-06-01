@@ -1015,6 +1015,19 @@ app.post('/api/feedback/:evalId', auth, async (req, res) => {
     if (!ev || !['approved','final_self','final_mgr_pending'].includes(ev.phase))
       return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
 
+    // 64A: 피드백 회차 제한 강제
+    const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
+    if (feedbackLimit > 0) {
+      const currentCount = db.prepare(
+        'SELECT COUNT(*) AS cnt FROM feedbacks WHERE eval_id = ? AND author_id = ?'
+      ).get(req.params.evalId, req.user.sub).cnt;
+      if (currentCount >= feedbackLimit) {
+        return res.status(400).json({
+          error: `피드백 가능 횟수를 초과했습니다. (제한: ${feedbackLimit}회, 현재: ${currentCount}회)`
+        });
+      }
+    }
+
     const { overall_note, items } = req.body;
     const newId = await feedbackRepo.create({
       eval_id: req.params.evalId,
@@ -1514,7 +1527,7 @@ app.post('/api/eval-periods/:id/lock', auth, adminOnly, (req, res) => {
 // });
 
 // [PROMPT_45] Repository Pattern 적용
-app.get('/api/reports/:evalId', auth, async (req, res) => {
+app.get('/api/reports/:evalId', auth, (req, res) => {
   try {
     const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
     if (!ev) return res.status(404).json({ error: '없음' });
@@ -1530,8 +1543,34 @@ app.get('/api/reports/:evalId', auth, async (req, res) => {
     if (!isAdmin && !isOwner && !isApprover)
       return res.status(403).json({ error: '권한 없음' });
 
-    const reports = await progressReportRepo.findByEvalId(req.params.evalId);
-    res.json(reports);
+    const rows = db.prepare(`
+      SELECT pr.id, pr.eval_id, pr.author_id, pr.content,
+             pr.goal_id, pr.round, pr.created_at, pr.updated_at,
+             u.name AS author_name,
+             g.name AS goal_name
+      FROM progress_reports pr
+      LEFT JOIN users u ON u.id = pr.author_id
+      LEFT JOIN goals g ON g.id = pr.goal_id
+      WHERE pr.eval_id = ?
+      ORDER BY pr.round ASC, pr.goal_id ASC, pr.created_at ASC
+    `).all(req.params.evalId);
+
+    rows.forEach(r => {
+      if (r.content) r.content = decrypt(r.content);
+      if (r.goal_name) r.goal_name = decrypt(r.goal_name);
+    });
+
+    const reportIds = rows.map(r => r.id);
+    if (reportIds.length) {
+      const files = db.prepare(
+        `SELECT id, report_id, file_name, file_type, file_size FROM report_files WHERE report_id IN (${reportIds.map(() => '?').join(',')})`
+      ).all(...reportIds);
+      rows.forEach(r => { r.files = files.filter(f => f.report_id === r.id); });
+    } else {
+      rows.forEach(r => { r.files = []; });
+    }
+
+    res.json(rows);
   } catch(err) {
     console.error('[reports GET]', err);
     res.status(500).json({ error: err.message });
@@ -1564,25 +1603,75 @@ app.get('/api/reports/:evalId', auth, async (req, res) => {
 //   }
 // });
 
-// [PROMPT_45] Repository Pattern 적용
-app.post('/api/reports/:evalId', auth, async (req, res) => {
+// [PROMPT 64A] 목표별 보고 + 회차 제한 (신구 형식 호환)
+app.post('/api/reports/:evalId', auth, (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const evalId = req.params.evalId;
+    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(evalId);
     if (!ev || String(ev.user_id) !== String(req.user.sub))
       return res.status(403).json({ error: '본인만 작성 가능' });
     if (!['approved','final_self','final_mgr_pending','final_done'].includes(ev.phase))
       return res.status(400).json({ error: '목표 확정 후 작성 가능합니다.' });
 
-    const { content, files } = req.body;
-    const reportId = await progressReportRepo.create({
-      eval_id:   req.params.evalId,
-      author_id: req.user.sub,
-      content:   content || '',
-      files:     files || [],
+    // 회차 제한 확인
+    const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
+    const maxRoundRow = db.prepare(
+      'SELECT COALESCE(MAX(round), 0) AS max_round FROM progress_reports WHERE eval_id = ? AND author_id = ?'
+    ).get(evalId, req.user.sub);
+    const currentRound = maxRoundRow.max_round;
+    if (feedbackLimit > 0 && currentRound >= feedbackLimit) {
+      return res.status(400).json({
+        error: `보고 가능 횟수를 초과했습니다. (제한: ${feedbackLimit}회, 현재: ${currentRound}회)`
+      });
+    }
+    const newRound = currentRound + 1;
+
+    const { content, items, overall, files } = req.body;
+    const fileList = Array.isArray(files) ? files : [];
+
+    const tx = db.transaction(() => {
+      const insertedIds = [];
+
+      if (Array.isArray(items) && items.length) {
+        // 신규 형식: items 배열 (목표별)
+        for (const item of items) {
+          if (!item.content?.trim()) continue;
+          const r = db.prepare(
+            "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, ?, ?)"
+          ).run(evalId, req.user.sub, encrypt(item.content.trim()), item.goal_id || null, newRound);
+          insertedIds.push(r.lastInsertRowid);
+        }
+        if (overall?.trim()) {
+          const r = db.prepare(
+            "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, NULL, ?)"
+          ).run(evalId, req.user.sub, encrypt(overall.trim()), newRound);
+          insertedIds.push(r.lastInsertRowid);
+        }
+      } else if (content) {
+        // 레거시 형식: content 단일 문자열 (호환 처리)
+        const r = db.prepare(
+          "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, NULL, ?)"
+        ).run(evalId, req.user.sub, encrypt(content || ''), newRound);
+        insertedIds.push(r.lastInsertRowid);
+      } else {
+        throw new Error('보고 내용이 비어있습니다.');
+      }
+
+      if (fileList.length && insertedIds.length) {
+        for (const f of fileList) {
+          db.prepare(
+            'INSERT INTO report_files (report_id, file_name, file_data, file_type, file_size) VALUES (?, ?, ?, ?, ?)'
+          ).run(insertedIds[0], f.name, f.data, f.type, f.size);
+        }
+      }
+
+      return { insertedIds, round: newRound };
     });
+
+    const result = tx();
     auditLog(req.user.sub, 'REPORT_SUBMITTED', ev.user_id, null,
-      `중간 보고 작성 (${ev.period_label||''})`, req.ip);
-    res.json({ id: reportId });
+      `중간 보고 작성 (${ev.period_label||''}) round=${newRound}`, req.ip);
+    res.json({ ok: true, round: result.round, count: result.insertedIds.length });
   } catch(err) {
     console.error('[reports POST]', err);
     res.status(500).json({ error: err.message });
@@ -3247,6 +3336,8 @@ function initDB() {
       eval_id INTEGER NOT NULL,
       author_id INTEGER NOT NULL,
       content TEXT,
+      goal_id INTEGER,
+      round INTEGER DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     )`,
@@ -3357,6 +3448,13 @@ function initDB() {
     "ALTER TABLE app_settings ADD COLUMN updated_at TEXT",
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
+
+  // 64A: progress_reports goal_id/round 컬럼 자동 추가 (idempotent)
+  const prCols = db.prepare('PRAGMA table_info(progress_reports)').all();
+  if (!prCols.find(c => c.name === 'goal_id'))
+    db.exec('ALTER TABLE progress_reports ADD COLUMN goal_id INTEGER');
+  if (!prCols.find(c => c.name === 'round'))
+    db.exec('ALTER TABLE progress_reports ADD COLUMN round INTEGER DEFAULT 1');
 
   // 등급 정책 시드 (없을 때만 — PROMPT 63A)
   try {
