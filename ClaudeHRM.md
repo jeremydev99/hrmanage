@@ -409,6 +409,17 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - DB: eval_periods.activation_blocked_at 컬럼 — PATCH toggle 차단 시 기록, 정책 바인딩 시 클리어
     - audit_log 추가: EVAL_PERIOD_ACTIVATION_BLOCKED (미바인딩 기간 활성화 차단), EVAL_PERIOD_UPDATED (기간 수정)
 
+28. **분석 환산 옵션** (2026-06-01, PROMPT 63D):
+    - 저장된 final_grade는 영구 보존 — 산출 시점 정책 기준 단일 진실
+    - 분석 시 "현재 cutoff 기준 환산" 토글 제공 — 가상 산출, DB 저장 없음
+    - 환산 기준 정책: 드롭다운으로 임의 선택 (현재 활성 / 과거 정책 모두 포함)
+    - 디폴트 환산 기준: 가장 최근 활성 기간의 정책
+    - 차이 시각화: 저장값 ≠ 환산값이면 취소선 + 주황 → 표시
+    - 환율 원칙: 과거 거래 금액은 불변, 분석 시 환산 옵션 제공
+    - `GET /api/perf/employee-grades`: 직원별 final_score/grade + available_policies (criteria) + active_policy_id
+    - `convertGradeWithPolicy(score, policyId)` 서버 헬퍼, `convertGradeClient(score, criteria)` 클라이언트 헬퍼
+    - 전체 조직 분석 화면 컨트롤 영역에 토글+드롭다운 추가, `onConvToggle()` / `refreshConvTable()` 핸들러
+
 27. **최종 등급 무결성 원칙** (2026-06-01, PROMPT 63D-FIX):
     - 최종 등급은 `scoreToGrade(final_score, period.policy.criteria)` 자동 산출값만 인정
     - 평가자(1차/2차)·관리자 모두 등급 수동 선택·덮어쓰기 불가
@@ -520,6 +531,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 분석 환산 옵션 도입 — 성과 분석 화면에 "현재 cutoff 기준 환산" 토글 + 정책 드롭다운 + 가상 산출 (PROMPT 63D, 63 시리즈 완료) | Claude Code |
 | 2026-06-01 | 최종 등급 무결성 결함 수정 — 1차/2차 평가자 selected_grade 수동 선택 차단, 자동 산출 강제 (PROMPT 63D-FIX) | Claude Code |
 | 2026-06-01 | 등급 정책 관리 UI 완성 — 카드형 탭 + 모달 편집 + 평가 기간 폼 정책 드롭다운 + 미바인딩 배너 상단 고정 + activation_blocked_at 컬럼 (PROMPT 63C) | Claude Code |
 | 2026-05-29 | 등급 정책 CRUD API 완성 — POST/PUT/DELETE + 검증(단조감소·범위·중복) + cutoff 잠금(applied_periods≥1) + 삭제 시 강제 초기화 + audit_log 5종 (PROMPT 63B) | Claude Code |

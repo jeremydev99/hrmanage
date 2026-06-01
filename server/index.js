@@ -2229,6 +2229,20 @@ function buildGradeMap(policyId) {
   return { gradeCodes, maxScore: 100, scoreToGrade: (score) => scoreToGrade(score, criteria) };
 }
 
+// 점수를 임의 정책 cutoff로 가상 산출 (표시용, DB 저장 없음)
+function convertGradeWithPolicy(score, policyId) {
+  if (score == null || isNaN(score) || !policyId) return null;
+  const policy = db.prepare('SELECT id, name FROM grade_policies WHERE id = ?').get(policyId);
+  if (!policy) return null;
+  const criteria = db.prepare(
+    'SELECT grade_code, grade_name, min_score FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+  ).all(policyId);
+  for (const c of criteria) {
+    if (score >= c.min_score) return { grade_code: c.grade_code, grade_name: c.grade_name, policy_name: policy.name };
+  }
+  return null;
+}
+
 function validateGradePolicyCriteria(criteria) {
   if (!Array.isArray(criteria) || criteria.length === 0) {
     return { ok: false, error: '최소 1개 이상의 등급이 필요합니다.' };
@@ -2404,6 +2418,66 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
       grade_codes: gm.gradeCodes, company, orgs: result });
   } catch(err) {
     console.error('[GET /api/perf/org-tree]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 직원별 등급 환산 데이터 (분석 환산 옵션용, DB 저장 없는 가상 산출 지원)
+app.get('/api/perf/employee-grades', auth, (req, res) => {
+  try {
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const isLeader = !isAdmin ? getLeaderOrgIds(req.user.sub).length > 0 : true;
+    if (!isAdmin && !isLeader) return res.status(403).json({ error: '권한 없음' });
+
+    const { period_ids, include_inactive: inclInact } = req.query;
+    if (!period_ids) return res.status(400).json({ error: 'period_ids는 필수입니다.' });
+
+    const ids = period_ids.split(',').map(Number).filter(Boolean);
+    if (!ids.length) return res.status(400).json({ error: 'period_ids가 올바르지 않습니다.' });
+
+    const includeInactive = isAdmin && String(inclInact) === 'true';
+    const activeFilter = includeInactive ? '' : 'AND ep.is_active = 1';
+
+    const rows = db.prepare(`
+      SELECT
+        u.id AS user_id,
+        u.name AS employee_name,
+        u.dept,
+        ec.period_label,
+        ec.eval_year,
+        fe.id AS final_eval_id,
+        fe.final_score,
+        fe.final_grade,
+        ep.grade_policy_id AS stored_policy_id,
+        gp.name AS stored_policy_name
+      FROM final_evaluations fe
+      JOIN eval_cycles ec ON fe.eval_id = ec.id
+      JOIN users u ON ec.user_id = u.id
+      JOIN eval_periods ep ON ep.period_label = ec.period_label AND ep.eval_year = ec.eval_year
+        AND ep.id IN (${ids.map(() => '?').join(',')}) ${activeFilter}
+      LEFT JOIN grade_policies gp ON gp.id = ep.grade_policy_id
+      WHERE fe.final_grade IS NOT NULL
+      ORDER BY ec.eval_year DESC, ec.period_label DESC, u.name
+    `).all(...ids);
+
+    // 사용 가능한 모든 정책 + criteria (환산 드롭다운용)
+    const policies = db.prepare('SELECT id, name FROM grade_policies ORDER BY id').all();
+    const policiesWithCriteria = policies.map(p => ({
+      ...p,
+      criteria: db.prepare(
+        'SELECT grade_code, grade_name, min_score FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
+      ).all(p.id)
+    }));
+
+    // 디폴트 환산 기준: 가장 최근 활성 기간의 정책
+    const activePeriod = db.prepare(
+      'SELECT grade_policy_id FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, period_label DESC LIMIT 1'
+    ).get();
+    const activePolicyId = activePeriod?.grade_policy_id || (policies[0]?.id || null);
+
+    res.json({ rows, available_policies: policiesWithCriteria, active_policy_id: activePolicyId });
+  } catch(err) {
+    console.error('[GET /api/perf/employee-grades]', err);
     res.status(500).json({ error: err.message });
   }
 });

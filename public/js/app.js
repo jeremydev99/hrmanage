@@ -797,6 +797,18 @@ function renderOrgViewHTML(periods) {
         </select>
         <button class="btn btn-primary btn-sm" onclick="loadOrgAnalysis()">분석 로드</button>
       </div>
+      <!-- 환산 옵션 컨트롤 -->
+      <div style="margin-top:10px;padding:10px 12px;background:var(--o50);border:1px solid var(--o100);border-radius:6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="convToggle" onchange="onConvToggle()">
+          <strong>현재 cutoff 기준으로 환산 분석</strong>
+        </label>
+        <div id="convPolicySelect" style="display:none;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--muted)">환산 기준:</span>
+          <select id="convPolicyId" style="font-size:13px;padding:3px 6px;border:1px solid var(--o200);border-radius:4px" onchange="refreshConvTable()"></select>
+        </div>
+        <div style="margin-left:auto;font-size:11px;color:var(--muted)">📌 저장된 등급은 영구 보존됩니다. 환산은 표시용 가상 산출입니다.</div>
+      </div>
     </div>
     <div id="org-analysis-result">
       <div class="card"><div class="alert alert-teal" style="font-size:13px">기간과 조직 깊이를 선택한 후 "분석 로드" 버튼을 클릭하세요.</div></div>
@@ -857,11 +869,24 @@ async function loadOrgAnalysis() {
   resEl.innerHTML = '<div class="spinner" style="padding:20px">분석 중...</div>';
   try {
     const pIds = ep.map(p => p.id).join(',');
-    const [orgTree, trend] = await Promise.all([
+    const [orgTree, trend, empGrades] = await Promise.all([
       API.get(`/perf/org-tree?period_ids=${pIds}&max_depth=${maxDep}&include_inactive=${includeInactive}`),
-      API.get(`/perf/quarterly-trend?period_ids=${pIds}&include_inactive=${includeInactive}`)
+      API.get(`/perf/quarterly-trend?period_ids=${pIds}&include_inactive=${includeInactive}`),
+      API.get(`/perf/employee-grades?period_ids=${pIds}&include_inactive=${includeInactive}`).catch(() => null),
     ]);
     window._orgData = { orgTree, trend, fromId, toId, pIds, includeInactive };
+    window._empGradeData = empGrades;
+    window._policyCache = {};
+    if (empGrades?.available_policies) {
+      empGrades.available_policies.forEach(p => { window._policyCache[p.id] = p.criteria; });
+      // 환산 드롭다운 갱신
+      const sel = document.getElementById('convPolicyId');
+      if (sel) {
+        sel.innerHTML = empGrades.available_policies.map(p =>
+          `<option value="${p.id}"${p.id === empGrades.active_policy_id ? ' selected' : ''}>${escapeHtml(p.name)}</option>`
+        ).join('');
+      }
+    }
     renderOrgAnalysisResult(orgTree, trend);
   } catch(err) {
     resEl.innerHTML = `<div class="card"><div class="alert alert-red">오류: ${err.message}</div></div>`;
@@ -1172,5 +1197,91 @@ async function submitPasswordChange() {
     errEl.textContent = err.message || '비밀번호 변경에 실패했습니다.';
     errEl.style.display = 'block';
     if (btn) { btn.disabled = false; btn.textContent = '변경하기'; }
+  }
+}
+
+/* ── 분석 환산 옵션 (63D) ── */
+function convertGradeClient(score, criteria) {
+  if (score == null || isNaN(score) || !criteria || !criteria.length) return null;
+  for (const c of criteria) {
+    if (score >= c.min_score) return c.grade_code;
+  }
+  return null;
+}
+
+function onConvToggle() {
+  const enabled = document.getElementById('convToggle')?.checked;
+  const selectArea = document.getElementById('convPolicySelect');
+  if (selectArea) selectArea.style.display = enabled ? 'flex' : 'none';
+  refreshConvTable();
+}
+
+function refreshConvTable() {
+  const enabled = document.getElementById('convToggle')?.checked;
+  const convPolicyId = enabled ? parseInt(document.getElementById('convPolicyId')?.value) : null;
+  const data = window._empGradeData;
+  if (!data) return;
+
+  const existing = document.getElementById('conv-table-card');
+  if (!enabled) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  const criteria = convPolicyId ? (window._policyCache || {})[convPolicyId] : null;
+  const policyName = convPolicyId
+    ? data.available_policies.find(p => p.id === convPolicyId)?.name || ''
+    : '';
+
+  const rows = data.rows;
+  if (!rows || !rows.length) return;
+
+  const tableRows = rows.map(row => {
+    const storedGrade = row.final_grade || '—';
+    let displayCell;
+    if (criteria) {
+      const convGrade = convertGradeClient(row.final_score, criteria);
+      if (convGrade && convGrade !== storedGrade) {
+        displayCell = `<span style="color:var(--muted);text-decoration:line-through;font-size:12px">${storedGrade}</span><span style="margin:0 4px">→</span><strong style="color:var(--o500)">${convGrade}</strong>`;
+      } else {
+        displayCell = `<strong>${convGrade || storedGrade}</strong>`;
+      }
+    } else {
+      displayCell = `<strong>${storedGrade}</strong><span style="font-size:10px;color:var(--muted);margin-left:4px">(${escapeHtml(row.stored_policy_name||'정책없음')})</span>`;
+    }
+    return `<tr>
+      <td style="padding:6px 8px">${escapeHtml(row.employee_name)}</td>
+      <td style="padding:6px 8px;color:var(--muted);font-size:12px">${escapeHtml(row.dept||'')}</td>
+      <td style="padding:6px 8px;font-size:12px">${escapeHtml(row.period_label)}</td>
+      <td style="padding:6px 8px;font-weight:600;color:var(--o600)">${row.final_score != null ? (+row.final_score).toFixed(1) : '—'}</td>
+      <td style="padding:6px 8px">${displayCell}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `
+    <div class="card" id="conv-table-card" style="margin-top:12px;overflow-x:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+        <div style="font-size:13px;font-weight:600;color:var(--o800)">🔄 직원별 등급 환산 현황</div>
+        <div style="font-size:11px;color:var(--muted)">환산 기준: <strong>${escapeHtml(policyName)}</strong> · 저장값과 차이 있으면 <span style="color:var(--o500)">주황색</span> 표시</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--o200)">
+            <th style="text-align:left;padding:6px 8px;color:var(--muted)">직원</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--muted)">부서</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--muted)">기간</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--muted)">점수</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--muted)">등급</th>
+          </tr>
+        </thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+
+  const resEl = document.getElementById('org-analysis-result');
+  if (existing) {
+    existing.outerHTML = html;
+  } else if (resEl) {
+    resEl.insertAdjacentHTML('beforeend', html);
   }
 }
