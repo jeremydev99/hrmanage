@@ -252,8 +252,9 @@ model EvalPeriod {
   created_at      String?
   evalMode        String?      @default("MBO") @map("eval_mode")
   locked          Int?         @default(0)
-  gradePolicyId   Int?         @map("grade_policy_id")
-  gradePolicy     GradePolicy? @relation(fields: [gradePolicyId], references: [id])
+  gradePolicyId        Int?         @map("grade_policy_id")
+  activationBlockedAt  String?      @map("activation_blocked_at")
+  gradePolicy          GradePolicy? @relation(fields: [gradePolicyId], references: [id])
 
   @@map("eval_periods")
 }

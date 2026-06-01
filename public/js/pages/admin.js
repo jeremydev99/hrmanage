@@ -20,7 +20,7 @@ Pages.admin = async function() {
         <button class="adm-tab" data-tab="adm-status"   id="stb-adm-status"   onclick="switchAdmTab('adm-status')">전직원 평가 현황</button>
         <button class="adm-tab" data-tab="adm-cat"      id="stb-adm-cat"      onclick="switchAdmTab('adm-cat')">목표 카테고리</button>
         <button class="adm-tab" data-tab="adm-periods"  id="stb-adm-periods"  onclick="switchAdmTab('adm-periods')">평가 기간 관리</button>
-        <button class="adm-tab" data-tab="adm-grades"   id="stb-adm-grades"   onclick="switchAdmTab('adm-grades')">평가 등급</button>
+        <button class="adm-tab" data-tab="adm-grade-policies" id="stb-adm-grade-policies" onclick="switchAdmTab('adm-grade-policies')">등급 정책 관리</button>
         <button class="adm-tab" data-tab="adm-policy"   id="stb-adm-policy"   onclick="switchAdmTab('adm-policy')">평가 정책</button>
       </div>
       <!-- 2줄: 조직/권한/로그 -->
@@ -39,7 +39,7 @@ Pages.admin = async function() {
     <div class="sp"        id="adm-orgtable"></div>
     <div class="sp"        id="adm-roles"></div>
     <div class="sp"        id="adm-policy"></div>
-    <div class="sp"        id="adm-grades"></div>
+    <div class="sp"        id="adm-grade-policies"></div>
     <div class="sp"        id="adm-audit"></div>`;
   renderAdmAccounts();
 };
@@ -317,7 +317,7 @@ function switchAdmTab(id) {
   if (id==='adm-orgtable') renderAdmOrgTable();
   if (id==='adm-roles')    renderAdmRoles();
   if (id==='adm-policy')   renderAdmPolicy();
-  if (id==='adm-grades')   renderAdmGrades();
+  if (id==='adm-grade-policies') renderGradePolicies();
   if (id==='adm-audit')    renderAdmAudit();
 }
 
@@ -1882,139 +1882,283 @@ async function setGlobalEvalMode(mode) {
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
-/* ── 평가 등급 기준 관리 ── */
-async function renderAdmGrades() {
-  const el = document.getElementById('adm-grades');
+/* ── 등급 정책 관리 ── */
+async function renderGradePolicies() {
+  const el = document.getElementById('adm-grade-policies');
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const grades = await API.get('/grade-criteria');
-    el.innerHTML = `<div class="card">
-      <div class="card-header"><div>
-        <div class="card-header-t">평가 등급 기준 관리</div>
-        <div class="card-header-s">최소 2개 이상 · 순위 숫자가 작을수록 높은 등급 · 최종평가 시 평가자가 이 기준에서 선택합니다</div>
-      </div></div>
-
-      <table class="tbl" style="margin-bottom:16px">
-        <thead><tr>
-          <th style="width:55px;text-align:center">순위</th>
-          <th style="width:100px">등급 코드</th>
-          <th style="width:200px">등급 명칭</th>
-          <th>설명</th>
-          <th style="width:90px">비고</th>
-          <th style="width:90px"></th>
-        </tr></thead>
-        <tbody>
-          ${grades.map((g, idx) => `<tr>
-            <td style="text-align:center">
-              <input id="gc-sort-${g.id}" type="number" min="1" value="${g.sort_order||idx+1}"
-                style="width:48px;text-align:center;font-size:12px;height:28px">
-            </td>
-            <td><input id="gc-code-${g.id}" value="${g.grade_code||''}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px"></td>
-            <td><input id="gc-name-${g.id}" value="${g.grade_name||''}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px"></td>
-            <td><textarea id="gc-desc-${g.id}" oninput="markDirty()" style="width:100%;font-size:12px;min-height:60px;resize:vertical;padding:4px 6px" placeholder="등급 설명">${g.description||''}</textarea></td>
-            <td><input id="gc-note-${g.id}" value="${(g.note||'').replace(/"/g,'&quot;')}" oninput="markDirty()" style="width:100%;font-size:12px;height:28px" placeholder="비고"></td>
-            <td>
-              <div style="display:flex;gap:4px">
-                <button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="saveGrade(${g.id})">저장</button>
-                <button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:3px 6px;font-size:11px" onclick="deleteGrade(${g.id})">삭제</button>
-              </div>
-            </td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
-
-      <!-- 새 등급 추가 -->
-      <div style="background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:14px">
-        <div style="font-size:13px;font-weight:500;margin-bottom:10px;color:var(--o800)">새 등급 추가</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-          <div style="flex:0 0 55px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">순위</label>
-            <input id="new-gc-sort" type="number" min="1" value="${grades.length+1}" style="width:100%;height:34px;font-size:13px;text-align:center">
+    const policies = await API.get('/grade-policies');
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-header-t">등급 정책 관리</div>
+            <div class="card-header-s">등급별 100점 환산 기준을 정의합니다. 평가 기간에 바인딩된 정책의 cutoff는 수정 불가합니다.</div>
           </div>
-          <div style="flex:0 0 95px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">등급 코드</label>
-            <input id="new-gc-code" placeholder="예: OI" style="width:100%;height:34px;font-size:13px">
-          </div>
-          <div style="flex:1;min-width:130px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">등급 명칭</label>
-            <input id="new-gc-name" placeholder="등급 명칭" style="width:100%;height:34px;font-size:13px">
-          </div>
-          <div style="flex:2;min-width:160px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">설명</label>
-            <textarea id="new-gc-desc" placeholder="등급 설명" style="width:100%;height:60px;resize:vertical;font-size:13px;padding:4px 6px"></textarea>
-          </div>
-          <div style="flex:1;min-width:75px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">비고</label>
-            <input id="new-gc-note" placeholder="비고" style="width:100%;height:34px;font-size:13px">
-          </div>
-          <button class="btn btn-primary" style="height:34px" onclick="addGrade()">+ 추가</button>
+          <button class="btn btn-primary" onclick="openCreatePolicyModal()">+ 신규 정책 등록</button>
         </div>
-      </div>
-      <div style="display:flex;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--o100)">
-        <button class="btn btn-ghost adm-save-btn" onclick="saveAllGrades()">저장하기</button>
-      </div>
-    </div>`;
+        <div id="policy-list" style="margin-top:8px">
+          ${policies.length === 0
+            ? '<div class="alert alert-orange">등록된 등급 정책이 없습니다. 신규 정책을 등록해 주세요.</div>'
+            : policies.map(p => renderPolicyCard(p)).join('')}
+        </div>
+      </div>`;
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
 }
 
-async function saveGrade(id) {
+function renderPolicyCard(p) {
+  const isLocked = p.applied_periods && p.applied_periods.length > 0;
+  const appliedLabel = isLocked
+    ? `<span class="bd bd-locked" style="font-size:11px">${p.applied_periods.length}개 기간 적용 중 🔒</span>`
+    : `<span class="bd bd-draft" style="font-size:11px">미바인딩</span>`;
+  const criteria = p.criteria || [];
+
+  return `
+    <div class="period-card" data-policy-id="${p.id}" style="margin-bottom:8px">
+      <div class="period-card-header" onclick="togglePolicyCard(${p.id})">
+        <span class="toggle-icon" id="policyToggle_${p.id}">▶</span>
+        <strong style="font-size:14px">${escapeHtml(p.name)}</strong>
+        ${appliedLabel}
+        <span style="color:var(--muted);font-size:12px">${criteria.length}개 등급</span>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); openEditPolicyModal(${p.id})">
+            ${isLocked ? '이름·설명 수정' : '편집'}
+          </button>
+          <button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:3px 8px;font-size:11px" onclick="event.stopPropagation(); confirmDeletePolicy(${p.id})">삭제</button>
+        </div>
+      </div>
+      <div class="period-card-body" id="policyBody_${p.id}" style="display:none">
+        ${p.description ? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${escapeHtml(p.description)}</div>` : ''}
+        <table class="tbl" style="margin-bottom:12px">
+          <thead><tr>
+            <th style="width:55px;text-align:center">순위</th>
+            <th style="width:90px">등급코드</th>
+            <th style="width:160px">등급명</th>
+            <th style="width:90px">min_score</th>
+            <th>설명</th>
+          </tr></thead>
+          <tbody>
+            ${criteria.map(c => `
+              <tr>
+                <td style="text-align:center">${c.sort_order}</td>
+                <td><strong>${escapeHtml(c.grade_code)}</strong></td>
+                <td>${escapeHtml(c.grade_name)}</td>
+                <td><strong style="color:var(--o500)">${c.min_score}</strong></td>
+                <td style="font-size:12px;color:var(--muted)">${escapeHtml(c.description || '')}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        ${p.applied_periods && p.applied_periods.length ? `
+          <div style="padding-top:10px;border-top:1px solid var(--o100)">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:5px">적용 중인 평가 기간 (${p.applied_periods.length}개)</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${p.applied_periods.map(ep => `
+                <span class="bd ${ep.is_active ? 'bd-approved' : 'bd-draft'}" style="font-size:11px">
+                  ${ep.eval_year}년 ${escapeHtml(ep.period_label)}${ep.is_active ? '' : ' (비활성)'}
+                </span>`).join('')}
+            </div>
+          </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function togglePolicyCard(policyId) {
+  const body = document.getElementById(`policyBody_${policyId}`);
+  const icon = document.getElementById(`policyToggle_${policyId}`);
+  if (!body || !icon) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  icon.textContent = isOpen ? '▶' : '▼';
+}
+
+async function openCreatePolicyModal() {
+  const defaultCriteria = [
+    { sort_order: 1, grade_code: 'OI', grade_name: '탁월', min_score: 90, description: '' },
+    { sort_order: 2, grade_code: 'EX', grade_name: '우수', min_score: 75, description: '' },
+    { sort_order: 3, grade_code: 'ME', grade_name: '충족', min_score: 60, description: '' },
+    { sort_order: 4, grade_code: 'IM', grade_name: '개선필요', min_score: 40, description: '' },
+    { sort_order: 5, grade_code: 'NI', grade_name: '미흡', min_score: 20, description: '' },
+    { sort_order: 6, grade_code: 'IR', grade_name: '부적격', min_score: 0, description: '' },
+  ];
+  _openPolicyModal(null, defaultCriteria);
+}
+
+async function openEditPolicyModal(policyId) {
   try {
-    await API.put('/grade-criteria/' + id, {
-      grade_code:  document.getElementById('gc-code-'+id)?.value.trim(),
-      grade_name:  document.getElementById('gc-name-'+id)?.value.trim(),
-      description: document.getElementById('gc-desc-'+id)?.value.trim(),
-      note:        document.getElementById('gc-note-'+id)?.value.trim(),
-      sort_order:  parseInt(document.getElementById('gc-sort-'+id)?.value||'0'),
-    });
-    showAlert('저장되었습니다.', 'green');
-    renderAdmGrades();
+    const policies = await API.get('/grade-policies');
+    const policy = policies.find(p => p.id === policyId);
+    if (!policy) { showAlert('정책을 찾을 수 없습니다.', 'red'); return; }
+    _openPolicyModal(policy, policy.criteria || []);
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
-async function saveAllGrades() {
-  const rows = document.querySelectorAll('[id^="gc-code-"]');
-  if (!rows.length) { showAlert('저장할 등급이 없습니다.', 'orange'); return; }
-  try {
-    for (const el of rows) {
-      const id = el.id.replace('gc-code-', '');
-      await API.put('/grade-criteria/' + id, {
-        grade_code:  document.getElementById('gc-code-'+id)?.value.trim(),
-        grade_name:  document.getElementById('gc-name-'+id)?.value.trim(),
-        description: document.getElementById('gc-desc-'+id)?.value.trim(),
-        note:        document.getElementById('gc-note-'+id)?.value.trim(),
-        sort_order:  parseInt(document.getElementById('gc-sort-'+id)?.value||'0'),
+function _openPolicyModal(policy, criteria) {
+  const isEdit = !!policy;
+  const isLocked = isEdit && policy.applied_periods && policy.applied_periods.length > 0;
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'policyModal';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width:720px">
+      <div class="modal-header">
+        <h3>${isEdit ? '등급 정책 편집' : '신규 등급 정책 등록'}</h3>
+        <button class="modal-close" onclick="document.getElementById('policyModal').remove()">×</button>
+      </div>
+      <div class="modal-body">
+        ${isLocked ? `
+          <div class="alert alert-orange" style="margin-bottom:15px">
+            🔒 이 정책은 <strong>${policy.applied_periods.length}개 평가 기간</strong>에 적용 중이므로
+            <strong>cutoff(등급 기준)</strong>를 수정할 수 없습니다.
+            이름·설명은 자유롭게 수정 가능합니다. cutoff 변경이 필요하면
+            <button class="btn btn-ghost btn-sm" style="display:inline;padding:2px 8px" onclick="cloneAsNewPolicy(${policy.id})">새 정책으로 복제</button>하세요.
+          </div>` : ''}
+        <div style="margin-bottom:12px">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">정책 이름 *</label>
+          <input type="text" id="editPolicyName" value="${isEdit ? escapeHtml(policy.name) : ''}" placeholder="예: 사이냅 표준안 v2" style="width:100%;height:36px;font-size:14px">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">설명</label>
+          <textarea id="editPolicyDesc" rows="2" style="width:100%;font-size:13px;resize:vertical">${isEdit ? escapeHtml(policy.description || '') : ''}</textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--o800);display:block;margin-bottom:4px">
+            등급 cutoff ${isLocked ? '(잠금 — 수정 불가)' : ''}
+          </label>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px">sort_order 1이 가장 높은 등급. min_score는 0~100 범위, 단조감소해야 합니다.</div>
+          <div style="overflow-x:auto">
+            <table class="tbl" id="editCriteriaTable">
+              <thead><tr>
+                <th style="width:60px">순위</th>
+                <th style="width:80px">등급코드</th>
+                <th style="width:120px">등급명</th>
+                <th style="width:90px">min_score</th>
+                <th>설명</th>
+                ${isLocked ? '' : '<th style="width:40px"></th>'}
+              </tr></thead>
+              <tbody>
+                ${criteria.map(c => `
+                  <tr>
+                    <td><input type="number" value="${c.sort_order}" min="1" ${isLocked ? 'readonly' : ''} class="criteria-sort" style="width:50px;height:28px;font-size:12px;text-align:center"></td>
+                    <td><input type="text" value="${escapeHtml(c.grade_code)}" ${isLocked ? 'readonly' : ''} class="criteria-code" style="width:70px;height:28px;font-size:12px"></td>
+                    <td><input type="text" value="${escapeHtml(c.grade_name)}" ${isLocked ? 'readonly' : ''} class="criteria-name" style="width:110px;height:28px;font-size:12px"></td>
+                    <td><input type="number" value="${c.min_score}" min="0" max="100" step="0.01" ${isLocked ? 'readonly' : ''} class="criteria-min" style="width:80px;height:28px;font-size:12px"></td>
+                    <td><input type="text" value="${escapeHtml(c.description || '')}" ${isLocked ? 'readonly' : ''} class="criteria-desc" style="width:100%;height:28px;font-size:12px"></td>
+                    ${isLocked ? '' : '<td><button class="btn btn-sm" style="background:none;border:none;color:#A32D2D;padding:2px 4px;font-size:14px;cursor:pointer" onclick="removeCriteriaRow(this)" title="삭제">×</button></td>'}
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          ${isLocked ? '' : `<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="addCriteriaRow()">+ 등급 추가</button>`}
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="document.getElementById('policyModal').remove()">취소</button>
+        <button class="btn btn-primary" onclick="savePolicyEdit(${isEdit ? policy.id : 'null'}, ${isLocked})">저장</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function addCriteriaRow() {
+  const tbody = document.querySelector('#editCriteriaTable tbody');
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr');
+  const nextOrder = rows.length + 1;
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="number" value="${nextOrder}" min="1" class="criteria-sort" style="width:50px;height:28px;font-size:12px;text-align:center"></td>
+    <td><input type="text" value="" class="criteria-code" style="width:70px;height:28px;font-size:12px"></td>
+    <td><input type="text" value="" class="criteria-name" style="width:110px;height:28px;font-size:12px"></td>
+    <td><input type="number" value="0" min="0" max="100" step="0.01" class="criteria-min" style="width:80px;height:28px;font-size:12px"></td>
+    <td><input type="text" value="" class="criteria-desc" style="width:100%;height:28px;font-size:12px"></td>
+    <td><button class="btn btn-sm" style="background:none;border:none;color:#A32D2D;padding:2px 4px;font-size:14px;cursor:pointer" onclick="removeCriteriaRow(this)" title="삭제">×</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function removeCriteriaRow(btn) {
+  btn.closest('tr').remove();
+}
+
+async function savePolicyEdit(policyId, isLocked) {
+  const name = document.getElementById('editPolicyName')?.value.trim();
+  const description = document.getElementById('editPolicyDesc')?.value.trim() || '';
+
+  if (!name) { showAlert('정책 이름은 필수입니다.', 'orange'); return; }
+
+  const body = { name, description };
+
+  if (!isLocked) {
+    const rows = document.querySelectorAll('#editCriteriaTable tbody tr');
+    const criteria = [];
+    for (const row of rows) {
+      const code = row.querySelector('.criteria-code')?.value.trim();
+      const gname = row.querySelector('.criteria-name')?.value.trim();
+      if (!code || !gname) { showAlert('등급코드와 등급명은 필수입니다.', 'orange'); return; }
+      criteria.push({
+        sort_order: parseInt(row.querySelector('.criteria-sort')?.value) || 1,
+        grade_code: code,
+        grade_name: gname,
+        min_score: parseFloat(row.querySelector('.criteria-min')?.value) || 0,
+        description: row.querySelector('.criteria-desc')?.value.trim() || '',
       });
     }
-    clearDirty();
-    showAlert('모든 등급이 저장되었습니다.', 'green');
-    renderAdmGrades();
-  } catch(e) { showAlert(e.message, 'red'); }
+    if (criteria.length < 2) { showAlert('등급은 최소 2개 이상 필요합니다.', 'orange'); return; }
+    body.criteria = criteria;
+  }
+
+  try {
+    if (policyId === null) {
+      await API.post('/grade-policies', body);
+      showAlert('등급 정책이 등록되었습니다.', 'green');
+    } else {
+      await API.put('/grade-policies/' + policyId, body);
+      showAlert('저장되었습니다.', 'green');
+    }
+    document.getElementById('policyModal')?.remove();
+    renderGradePolicies();
+  } catch(e) { showAlert(e.message || '저장 실패', 'red'); }
 }
 
-async function deleteGrade(id) {
-  if (!confirm('이 등급을 삭제하시겠습니까?')) return;
+async function confirmDeletePolicy(policyId) {
   try {
-    await API.del('/grade-criteria/' + id);
-    showAlert('삭제되었습니다.', 'green');
-    renderAdmGrades();
-  } catch(e) { showAlert(e.message, 'red'); }
+    const policies = await API.get('/grade-policies');
+    const policy = policies.find(p => p.id === policyId);
+    if (!policy) return;
+
+    let msg = `정책 "${policy.name}"을(를) 삭제하시겠습니까?`;
+    if (policy.applied_periods && policy.applied_periods.length > 0) {
+      msg += `\n\n⚠️ 이 정책은 ${policy.applied_periods.length}개 평가 기간에 적용 중입니다. 삭제 시 해당 기간들은 자동으로 비활성화되며 등급 정책이 해제됩니다.`;
+    }
+    if (!confirm(msg)) return;
+
+    const result = await API.del('/grade-policies/' + policyId);
+    showAlert(result.message || '삭제되었습니다.', 'green');
+    renderGradePolicies();
+  } catch(e) { showAlert(e.message || '삭제 실패', 'red'); }
 }
 
-async function addGrade() {
+async function cloneAsNewPolicy(policyId) {
   try {
-    const sortVal = parseInt(document.getElementById('new-gc-sort')?.value || '999');
-    await API.post('/grade-criteria', {
-      grade_code:  document.getElementById('new-gc-code')?.value.trim(),
-      grade_name:  document.getElementById('new-gc-name')?.value.trim(),
-      description: document.getElementById('new-gc-desc')?.value.trim(),
-      note:        document.getElementById('new-gc-note')?.value.trim(),
-      sort_order:  sortVal,
-    });
-    showAlert('새 등급이 추가되었습니다.', 'green');
-    renderAdmGrades();
+    const policies = await API.get('/grade-policies');
+    const policy = policies.find(p => p.id === policyId);
+    if (!policy) return;
+    document.getElementById('policyModal')?.remove();
+    const cloned = {
+      name: policy.name + ' (복사본)',
+      description: policy.description || '',
+      criteria: (policy.criteria || []).map(c => ({ ...c })),
+    };
+    _openPolicyModal(null, cloned.criteria);
+    setTimeout(() => {
+      const nameEl = document.getElementById('editPolicyName');
+      if (nameEl) nameEl.value = cloned.name;
+      const descEl = document.getElementById('editPolicyDesc');
+      if (descEl) descEl.value = cloned.description;
+    }, 50);
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
@@ -2061,7 +2205,10 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
     if (yearFrom !== null) qParts.push('year_from=' + yearFrom);
     if (yearTo   !== null) qParts.push('year_to='   + yearTo);
     if (includeInactive)   qParts.push('include_inactive=true');
-    const periods = await API.get('/eval-periods' + (qParts.length ? '?' + qParts.join('&') : ''));
+    const [periods, gradePolicies] = await Promise.all([
+      API.get('/eval-periods' + (qParts.length ? '?' + qParts.join('&') : '')),
+      API.get('/grade-policies').catch(() => []),
+    ]);
 
     el.innerHTML = '';
 
@@ -2102,6 +2249,11 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
       + '<option value="1">1분기 (1~3월)</option><option value="2">2분기 (4~6월)</option><option value="3">3분기 (7~9월)</option><option value="4">4분기 (10~12월)</option></select></div>'
       + '<div style="flex:1;min-width:100px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">활성화</label>'
       + '<select id="np-active" style="height:34px;font-size:13px;width:100%"><option value="1">즉시 활성화</option><option value="0">비활성으로 추가</option></select></div>'
+      + '<div style="flex:2;min-width:180px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">등급 정책 *</label>'
+      + '<select id="np-policy" style="height:34px;font-size:13px;width:100%">'
+      + '<option value="">— 선택 —</option>'
+      + (gradePolicies.map(function(p){ return '<option value="' + p.id + '">' + escapeHtml(p.name) + ' (' + (p.criteria||[]).length + '개 등급)</option>'; }).join(''))
+      + '</select></div>'
       + '<button class="btn btn-primary" style="height:34px;white-space:nowrap" onclick="addEvalPeriod()">+ 추가</button>'
       + '</div>'
       + '<div style="margin-top:8px;font-size:12px;color:var(--muted)">생성될 기간: <strong id="np-preview"></strong></div>'
@@ -2216,15 +2368,28 @@ function updatePeriodLabel() {
 }
 
 async function addEvalPeriod() {
-  const year   = document.getElementById('np-year')?.value   || '2025년';
-  const type   = document.getElementById('np-type')?.value   || 'q';
-  const sub    = document.getElementById('np-sub')?.value    || '1';
-  const active = document.getElementById('np-active')?.value || '1';
-  const label  = type === 'q'
+  const year     = document.getElementById('np-year')?.value   || '2025년';
+  const type     = document.getElementById('np-type')?.value   || 'q';
+  const sub      = document.getElementById('np-sub')?.value    || '1';
+  const active   = document.getElementById('np-active')?.value || '0';
+  const policyId = document.getElementById('np-policy')?.value || '';
+  const label    = type === 'q'
     ? `${year} ${sub}분기`
     : `${year} ${sub==='1'?'상':'하'}반기`;
+
+  if (!policyId) {
+    showAlert('등급 정책을 선택해 주세요. 활성화하려면 등급 정책 바인딩이 필수입니다.', 'orange');
+    return;
+  }
+
   try {
-    await API.post('/eval-periods', { period_type:type, period_label:label, eval_year:year, is_active:parseInt(active) });
+    await API.post('/eval-periods', {
+      period_type: type,
+      period_label: label,
+      eval_year: year,
+      is_active: parseInt(active),
+      grade_policy_id: parseInt(policyId),
+    });
     showAlert(`${label} 기간이 추가되었습니다.`, 'green');
     renderAdmPeriods();
   } catch(e) { showAlert(e.message, 'red'); }
@@ -2312,4 +2477,43 @@ async function lockPeriodMode(periodId) {
     showAlert('평가방식이 잠겼습니다.', 'green');
     renderAdmPeriods();
   } catch(e) { showAlert(e.message, 'red'); }
+}
+
+/* ── 미바인딩 알림 배너 ── */
+async function checkMissingPolicyBanner() {
+  if (!App.user || !['master', 'admin'].includes(App.user.role)) return;
+  try {
+    const result = await API.get('/eval-periods/missing-policy');
+    const existing = document.getElementById('missing-policy-banner');
+
+    if (result.count > 0) {
+      if (existing) existing.remove();
+      const banner = document.createElement('div');
+      banner.id = 'missing-policy-banner';
+      banner.className = 'missing-policy-banner';
+      banner.innerHTML = `
+        <div class="banner-content">
+          <span class="banner-icon">⚠️</span>
+          <span class="banner-text">
+            등급의 100점환산 기준이 저장되지 않은 평가 기간이 <strong>${result.count}개</strong> 있습니다. 적용해 주세요.
+          </span>
+          <button class="btn btn-sm btn-primary" onclick="goToEvalPeriods()">즉시 해결 →</button>
+        </div>`;
+      const header = document.querySelector('.header') || document.body.firstElementChild;
+      if (header && header.parentNode) {
+        header.parentNode.insertBefore(banner, header.nextSibling);
+      } else {
+        document.body.insertBefore(banner, document.body.firstChild);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  } catch(e) {
+    console.warn('Missing policy check failed:', e);
+  }
+}
+
+function goToEvalPeriods() {
+  App.navigate('admin');
+  setTimeout(() => switchAdmTab('adm-periods'), 150);
 }

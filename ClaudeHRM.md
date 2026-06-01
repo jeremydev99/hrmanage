@@ -252,8 +252,10 @@ GET    /api/eval-periods/active         활성 기간
 GET    /api/eval-periods/available-years  평가 기간 데이터 존재 연도 목록 (?include_inactive, admin+)
 GET    /api/eval-periods/my-modes       활성 기간별 내 평가방식
 POST   /api/eval-periods                기간 추가 (admin+, grade_policy_id 필수)
-PATCH  /api/eval-periods/:id/toggle     활성/비활성 토글 (admin+, grade_policy_id 없으면 활성화 불가 — 400)
+PATCH  /api/eval-periods/:id            기간 수정 (admin+, grade_policy_id 변경 시 activation_blocked_at NULL 클리어)
+PATCH  /api/eval-periods/:id/toggle     활성/비활성 토글 (admin+, grade_policy_id 없으면 활성화 불가 — 400 + activation_blocked_at 기록)
 DELETE /api/eval-periods/:id            기간 삭제 (master, eval_period_modes도 삭제)
+GET    /api/eval-periods/missing-policy 미바인딩+차단이력 기간 목록 (admin+)
 GET    /api/eval-periods/:id/eval-mode  기간 전사 기본방식 조회 (admin+)
 POST   /api/eval-periods/:id/eval-mode  기간 전사 기본방식 설정 (admin+)
 GET    /api/eval-periods/:id/org-modes  기간 조직별 방식 조회 (admin+)
@@ -402,6 +404,10 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - 정책 삭제: applied_periods의 grade_policy_id NULL + is_active=0 강제 초기화, audit_log 기록
     - 검증 규칙: criteria 최소 1건, min_score 0~100, sort_order 오름차순 → min_score 단조감소, grade_code·min_score·sort_order 중복 불가
     - audit_log 액션: GRADE_POLICY_CREATED / GRADE_POLICY_UPDATED / GRADE_POLICY_CRITERIA_UPDATED / GRADE_POLICY_DELETED / EVAL_PERIOD_POLICY_DETACHED
+    - UI: 등급 정책 관리 탭(카드형 펼침), 평가 기간 폼 정책 드롭다운, 미바인딩 알림 배너(상단 고정, "즉시 해결" 버튼)
+    - 미바인딩 알림 표시 조건: grade_policy_id IS NULL AND activation_blocked_at IS NOT NULL
+    - DB: eval_periods.activation_blocked_at 컬럼 — PATCH toggle 차단 시 기록, 정책 바인딩 시 클리어
+    - audit_log 추가: EVAL_PERIOD_ACTIVATION_BLOCKED (미바인딩 기간 활성화 차단), EVAL_PERIOD_UPDATED (기간 수정)
 
 24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
     - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
@@ -504,6 +510,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 등급 정책 관리 UI 완성 — 카드형 탭 + 모달 편집 + 평가 기간 폼 정책 드롭다운 + 미바인딩 배너 상단 고정 + activation_blocked_at 컬럼 (PROMPT 63C) | Claude Code |
 | 2026-05-29 | 등급 정책 CRUD API 완성 — POST/PUT/DELETE + 검증(단조감소·범위·중복) + cutoff 잠금(applied_periods≥1) + 삭제 시 강제 초기화 + audit_log 5종 (PROMPT 63B) | Claude Code |
 | 2026-05-29 | 등급 정책 시점별 바인딩 도입 — grade_policies/grade_policy_criteria 신규, scoreToGrade 단일화, S/A/B/C/D 하드코딩 제거, eval_periods 활성화 게이트, grade-criteria API 폐기 (PROMPT 63A) | Claude Code |
 | 2026-05-29 | 내 평가 사이클 카드 진행 단계 표시 모바일 가로 오버플로 수정 (반응형 flex + 매우 좁은 화면 라벨 줄바꿈) (PROMPT 63-UI) | Claude Code |

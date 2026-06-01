@@ -122,7 +122,7 @@ const App = {
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-status'),300)">전직원 평가 현황</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-cat'),300)">목표 카테고리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-periods'),300)">평가 기간 관리</div>
-              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-grades'),300)">평가 등급</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-grade-policies'),300)">등급 정책 관리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-policy'),300)">평가 정책</div>
               <div class="dd-section-label">조직 / 권한</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('admin');setTimeout(()=>switchAdmTab('adm-org'),300)">조직도 관리</div>
@@ -172,6 +172,7 @@ const App = {
     };
     if (P[page]) P[page]();
     else { console.warn('[navigate] 미등록 페이지:', page); area.innerHTML = ''; }
+    if (typeof checkMissingPolicyBanner === 'function') checkMissingPolicyBanner();
   },
 };
 

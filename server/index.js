@@ -1295,6 +1295,22 @@ app.get('/api/eval-periods/available-years', auth, (req, res) => {
   }
 });
 
+// 미바인딩 + 차단 이력 있는 기간 목록 (admin+)
+app.get('/api/eval-periods/missing-policy', auth, adminOnly, (req, res) => {
+  try {
+    const periods = db.prepare(`
+      SELECT id, eval_year, period_label, is_active, activation_blocked_at
+      FROM eval_periods
+      WHERE grade_policy_id IS NULL
+        AND activation_blocked_at IS NOT NULL
+      ORDER BY activation_blocked_at DESC
+    `).all();
+    res.json({ count: periods.length, periods });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 평가 기간 추가 (admin+)
 app.post('/api/eval-periods', auth, adminOnly, (req, res) => {
   try {
@@ -1318,6 +1334,40 @@ app.post('/api/eval-periods', auth, adminOnly, (req, res) => {
   }
 });
 
+// 평가 기간 수정 (admin+) — grade_policy_id 변경 포함
+app.patch('/api/eval-periods/:id', auth, adminOnly, (req, res) => {
+  try {
+    const target = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    if (!target) return res.status(404).json({ error: '없음' });
+
+    const { grade_policy_id } = req.body;
+    const updates = [];
+    const params = [];
+
+    if (grade_policy_id !== undefined) {
+      if (grade_policy_id !== null && grade_policy_id !== '') {
+        const policy = db.prepare('SELECT id FROM grade_policies WHERE id=?').get(grade_policy_id);
+        if (!policy) return res.status(400).json({ error: '유효하지 않은 grade_policy_id' });
+        updates.push('grade_policy_id = ?');
+        params.push(grade_policy_id);
+        updates.push('activation_blocked_at = NULL');
+      } else {
+        updates.push('grade_policy_id = NULL');
+        params.push();
+      }
+    }
+
+    if (updates.length === 0) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+
+    params.push(req.params.id);
+    db.prepare(`UPDATE eval_periods SET ${updates.join(', ')} WHERE id=?`).run(...params);
+    auditLog(req.user.sub, 'EVAL_PERIOD_UPDATED', req.params.id, target.period_label, JSON.stringify(req.body), req.ip);
+    res.json({ ok: true });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 평가 기간 활성/비활성 토글 (admin+)
 app.patch('/api/eval-periods/:id/toggle', auth, adminOnly, (req, res) => {
   try {
@@ -1325,9 +1375,12 @@ app.patch('/api/eval-periods/:id/toggle', auth, adminOnly, (req, res) => {
     if (!p) return res.status(404).json({ error: '없음' });
     const next = p.is_active ? 0 : 1;
     if (next === 1 && !p.grade_policy_id) {
+      db.prepare(`UPDATE eval_periods SET activation_blocked_at = datetime('now') WHERE id=?`).run(req.params.id);
+      auditLog(req.user.sub, 'EVAL_PERIOD_ACTIVATION_BLOCKED', req.params.id, p.period_label, 'grade_policy_id is NULL', req.ip);
       return res.status(400).json({ error: '등급의 100점환산 기준이 저장되지 않았습니다. 적용해 주세요.' });
     }
-    db.prepare('UPDATE eval_periods SET is_active=? WHERE id=?').run(next, req.params.id);
+    const clearBlocked = next === 1 && p.grade_policy_id ? ', activation_blocked_at = NULL' : '';
+    db.prepare(`UPDATE eval_periods SET is_active=?${clearBlocked} WHERE id=?`).run(next, req.params.id);
     res.json({ success: true, is_active: next });
   } catch(err) {
     res.status(500).json({ error: err.message });
