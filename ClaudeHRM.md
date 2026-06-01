@@ -531,6 +531,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 일반 사용자 로그인 401 회귀 수정 — api.js token()이 localStorage만 읽어 sessionStorage 토큰 누락 → sessionStorage도 읽도록 수정 (PROMPT LOGIN-FIX) | Claude Code |
 | 2026-06-01 | 분석 환산 옵션 도입 — 성과 분석 화면에 "현재 cutoff 기준 환산" 토글 + 정책 드롭다운 + 가상 산출 (PROMPT 63D, 63 시리즈 완료) | Claude Code |
 | 2026-06-01 | 최종 등급 무결성 결함 수정 — 1차/2차 평가자 selected_grade 수동 선택 차단, 자동 산출 강제 (PROMPT 63D-FIX) | Claude Code |
 | 2026-06-01 | 등급 정책 관리 UI 완성 — 카드형 탭 + 모달 편집 + 평가 기간 폼 정책 드롭다운 + 미바인딩 배너 상단 고정 + activation_blocked_at 컬럼 (PROMPT 63C) | Claude Code |

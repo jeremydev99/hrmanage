@@ -1,7 +1,7 @@
 /* ── API 클라이언트 ── */
 const API = {
   base: '/api',
-  token() { return localStorage.getItem('synap_token'); },
+  token() { return localStorage.getItem('synap_token') || sessionStorage.getItem('synap_token'); },
   setToken(t) { localStorage.setItem('synap_token', t); },
   clearToken() { localStorage.removeItem('synap_token'); },
 
