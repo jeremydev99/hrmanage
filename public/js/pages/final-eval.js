@@ -495,52 +495,9 @@ async function renderFinalMgr(mgrPending) {
     // 종합 의견 + 제출
     const bottomSection = document.createElement('div');
     bottomSection.innerHTML = `
-      ${!ev.is_second && grades.length ? `
-      <div style="margin-top:12px">
-        <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:8px">
-          최종 등급 선택 <span style="color:var(--red)">*</span>
-        </label>
-        <div id="fin-grade-list-${ev.id}" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
-          ${grades.map((g, idx) => `
-          <div class="fin-grade-card" id="fin-grade-card-${ev.id}-${g.grade_code}"
-            data-eval="${ev.id}" data-code="${g.grade_code}"
-            onclick="selectGradeCard('${ev.id}','${g.grade_code}')"
-            style="border:2px solid var(--border);border-radius:8px;padding:10px 12px;
-                   cursor:pointer;transition:all .15s;background:var(--white)">
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
-              <tr>
-                <td style="width:50px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
-                           white-space:nowrap;vertical-align:top">순위</td>
-                <td style="color:var(--o800);font-weight:600;padding:2px 16px 2px 0;
-                           white-space:nowrap;vertical-align:top">${g.sort_order || idx+1}</td>
-                <td style="width:60px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
-                           white-space:nowrap;vertical-align:top">등급 코드</td>
-                <td style="color:var(--o800);font-weight:700;padding:2px 16px 2px 0;
-                           white-space:nowrap;vertical-align:top">${g.grade_code}</td>
-                <td style="width:60px;color:var(--muted);font-size:11px;padding:2px 8px 2px 0;
-                           white-space:nowrap;vertical-align:top">등급 명칭</td>
-                <td style="color:var(--o800);font-weight:500;padding:2px 0;
-                           vertical-align:top">${g.grade_name}</td>
-              </tr>
-              ${g.description ? `
-              <tr>
-                <td style="color:var(--muted);font-size:11px;padding:4px 8px 2px 0;
-                           white-space:nowrap;vertical-align:top">설명</td>
-                <td colspan="5" style="color:var(--o700);font-size:12px;padding:4px 0 2px 0;
-                           line-height:1.6;white-space:pre-wrap;vertical-align:top">${g.description}</td>
-              </tr>` : ''}
-              ${g.note ? `
-              <tr>
-                <td style="color:var(--muted);font-size:11px;padding:4px 8px 2px 0;
-                           white-space:nowrap;vertical-align:top">비고</td>
-                <td colspan="5" style="color:var(--muted);font-size:12px;padding:4px 0 2px 0;
-                           line-height:1.6;white-space:pre-wrap;vertical-align:top">${g.note}</td>
-              </tr>` : ''}
-            </table>
-          </div>`).join('')}
-        </div>
-        <!-- 선택된 등급 코드를 hidden input으로 보관 -->
-        <input type="hidden" id="fin-grade-sel-${ev.id}" value="">
+      ${!ev.is_second ? `
+      <div style="margin-top:12px;padding:10px 14px;background:var(--o50);border:1px solid var(--o100);border-radius:6px;font-size:13px;color:var(--o700)">
+        📊 최종 등급은 항목별 점수의 가중 평균에서 자동 산출됩니다. 제출 후 화면에서 확인할 수 있습니다.
       </div>` : ''}
       <div style="margin-top:4px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
@@ -605,14 +562,7 @@ async function submitFinalMgr(evalId, isSecond) {
     : '최종 평가를 확정하면 잠금 처리되어 인사팀 외에는 수정할 수 없습니다. 계속하시겠습니까?';
   if (!confirm(confirmMsg)) return;
 
-  const note          = document.getElementById(`fin-mgr-note-${evalId}`)?.value || '';
-  const selectedGrade = document.getElementById(`fin-grade-sel-${evalId}`)?.value || '';
-
-  // 등급 선택 필수 검증 (1차 평가자만)
-  if (!isSecond && !selectedGrade) {
-    showAlert('최종 등급을 선택해주세요.', 'orange');
-    return;
-  }
+  const note = document.getElementById(`fin-mgr-note-${evalId}`)?.value || '';
 
   // 2차 평가자: 별점 + 의견 제출
   if (isSecond) {
@@ -629,7 +579,6 @@ async function submitFinalMgr(evalId, isSecond) {
       await API.post(`/final/${evalId}/mgr`, {
         mgr_note: note,
         scores: scores2,
-        selected_grade: selectedGrade || '',
         is_second: true,
       });
       showAlert('2차 최종평가가 제출되었습니다.', 'green');
@@ -653,28 +602,9 @@ async function submitFinalMgr(evalId, isSecond) {
     const res = await API.post(`/final/${evalId}/mgr`, {
       mgr_note: note,
       scores,
-      selected_grade: selectedGrade,
     });
     showAlert(`최종 평가 확정! 점수: ${res.final_score}점 / 등급: ${res.grade}`, 'green');
     setTimeout(() => Pages.finalEval(), 1000);
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
-function selectGradeCard(evalId, gradeCode) {
-  // 같은 eval의 모든 카드 초기화
-  document.querySelectorAll(`[data-eval="${evalId}"].fin-grade-card`).forEach(card => {
-    card.style.borderColor = 'var(--border)';
-    card.style.background  = 'var(--white)';
-    card.style.boxShadow   = 'none';
-  });
-  // 선택된 카드 하이라이트
-  const selected = document.getElementById(`fin-grade-card-${evalId}-${gradeCode}`);
-  if (selected) {
-    selected.style.borderColor = 'var(--o500)';
-    selected.style.background  = 'var(--o50)';
-    selected.style.boxShadow   = '0 0 0 3px rgba(240,120,32,.15)';
-  }
-  // hidden input에 값 저장
-  const hiddenInput = document.getElementById('fin-grade-sel-' + evalId);
-  if (hiddenInput) hiddenInput.value = gradeCode;
-}

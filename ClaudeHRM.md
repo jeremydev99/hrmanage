@@ -409,6 +409,16 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - DB: eval_periods.activation_blocked_at 컬럼 — PATCH toggle 차단 시 기록, 정책 바인딩 시 클리어
     - audit_log 추가: EVAL_PERIOD_ACTIVATION_BLOCKED (미바인딩 기간 활성화 차단), EVAL_PERIOD_UPDATED (기간 수정)
 
+27. **최종 등급 무결성 원칙** (2026-06-01, PROMPT 63D-FIX):
+    - 최종 등급은 `scoreToGrade(final_score, period.policy.criteria)` 자동 산출값만 인정
+    - 평가자(1차/2차)·관리자 모두 등급 수동 선택·덮어쓰기 불가
+    - `final_grade = selected_grade = scoreToGrade(finalScore, ...)` 항상 동일 보장
+    - 클라이언트가 `selected_grade` 전송 시 서버에서 무시 + `console.warn` 경고 로그 기록
+    - `selected_grade` 컬럼 보존 (시스템 전반 6곳 사용처) — `final_grade`와 항상 동일 값
+    - `final-eval.js`에서 "최종 등급 선택 *" 카드 UI 제거, 자동 산출 안내 문구로 교체
+    - INTEGRITY-1 가드: server/index.js POST /api/final/:evalId/mgr에 선택 차단 적용
+    - 사용자 무결성 원칙 (2026-06-01): "평가자가 항목별 평가치를 무시하고 최종 등급을 줄 수 있다는 건 수용 불가"
+
 24. **점수 계산 공식** (2026-05-28, PROMPT 61A):
     - 공식: `final_score = Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))`
     - 헬퍼: `calcFinalScore(evalId, scoreField)` (scoreField: mgr_score | self_score | second_mgr_score)
@@ -510,6 +520,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 최종 등급 무결성 결함 수정 — 1차/2차 평가자 selected_grade 수동 선택 차단, 자동 산출 강제 (PROMPT 63D-FIX) | Claude Code |
 | 2026-06-01 | 등급 정책 관리 UI 완성 — 카드형 탭 + 모달 편집 + 평가 기간 폼 정책 드롭다운 + 미바인딩 배너 상단 고정 + activation_blocked_at 컬럼 (PROMPT 63C) | Claude Code |
 | 2026-05-29 | 등급 정책 CRUD API 완성 — POST/PUT/DELETE + 검증(단조감소·범위·중복) + cutoff 잠금(applied_periods≥1) + 삭제 시 강제 초기화 + audit_log 5종 (PROMPT 63B) | Claude Code |
 | 2026-05-29 | 등급 정책 시점별 바인딩 도입 — grade_policies/grade_policy_criteria 신규, scoreToGrade 단일화, S/A/B/C/D 하드코딩 제거, eval_periods 활성화 게이트, grade-criteria API 폐기 (PROMPT 63A) | Claude Code |

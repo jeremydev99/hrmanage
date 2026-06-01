@@ -1131,20 +1131,15 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
       fe = { id: newId, mgr_done: 0 };
     }
 
-    const { mgr_note, scores, selected_grade } = req.body;
+    const { mgr_note, scores, selected_grade: _clientGrade } = req.body;
+    if (_clientGrade) {
+      console.warn(`[63D-FIX] Client sent selected_grade=${_clientGrade} for evalId=${req.params.evalId} — ignored (무결성 원칙)`);
+    }
     const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
     if (isSecond) {
       // ── 2차 평가자 제출 ──────────────────────────────────
       if (!fe.mgr_done) return res.status(400).json({ error: '1차 평가자가 먼저 평가를 완료해야 합니다.' });
-
-      if (selected_grade) {
-        const secPolicy = getPolicyForEval(ev.id);
-        const validCodes = secPolicy ? secPolicy.criteria.map(c => c.grade_code) : [];
-        if (validCodes.length && !validCodes.includes(selected_grade)) {
-          return res.status(400).json({ error: `유효하지 않은 등급 코드: ${selected_grade}` });
-        }
-      }
 
       await finalEvalRepo.upsertScores(fe.id, scores, 'secondMgrScore');
 
@@ -1153,8 +1148,8 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         second_mgr_done: 1,
         second_mgr_done_at: now,
         second_mgr_id: req.user.sub,
-        selected_grade: selected_grade || fe.selected_grade,
-        second_selected_grade: selected_grade || '',
+        selected_grade: fe.final_grade,
+        second_selected_grade: '',
         locked: 1,
         locked_at: now
       });
@@ -1181,7 +1176,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
       if (!grade) {
         return res.status(400).json({ error: '등급 산출 실패: 평가 기간에 등급 정책이 바인딩되지 않았거나 점수가 정책 범위 밖입니다.' });
       }
-      const finalGradeCode = selected_grade || grade;
+      const finalGradeCode = grade; // 자동 산출 강제 (63D-FIX — 클라이언트 override 차단)
 
       await finalEvalRepo.upsert(ev.id, {
         mgr_note: mgr_note || '',
@@ -1190,7 +1185,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         mgr_approver_id: req.user.sub,
         final_score: finalScore,
         final_grade: finalGradeCode,
-        selected_grade: selected_grade || grade
+        selected_grade: grade
       });
 
       if (secondEnabled) {
