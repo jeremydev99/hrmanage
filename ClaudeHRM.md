@@ -531,6 +531,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 성과관리 홈 UI 보정 — AI 요약 영역 최상단 이동(B 흐름 안내) + 기간 드롭다운 한 줄 가로 배치 (PROMPT UI-PERF-HOME) | Claude Code |
 | 2026-06-01 | 일반 사용자 로그인 401 회귀 수정 — api.js token()이 localStorage만 읽어 sessionStorage 토큰 누락 → sessionStorage도 읽도록 수정 (PROMPT LOGIN-FIX) | Claude Code |
 | 2026-06-01 | 분석 환산 옵션 도입 — 성과 분석 화면에 "현재 cutoff 기준 환산" 토글 + 정책 드롭다운 + 가상 산출 (PROMPT 63D, 63 시리즈 완료) | Claude Code |
 | 2026-06-01 | 최종 등급 무결성 결함 수정 — 1차/2차 평가자 selected_grade 수동 선택 차단, 자동 산출 강제 (PROMPT 63D-FIX) | Claude Code |

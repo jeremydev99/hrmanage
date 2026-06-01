@@ -779,14 +779,22 @@ function renderOrgViewHTML(periods) {
         <span style="font-size:11px;color:var(--muted)">관리자 전용 — 비활성 기간 통계 분석</span>
       </div>` : '';
   return `
+    <div class="card" id="org-ai-summary-card" style="margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">🤖 조직 AI 요약</div>
+      <div id="org-ai-summary-body">
+        <div style="padding:14px;text-align:center;color:var(--muted);background:var(--o50);border-radius:6px;font-size:13px;line-height:1.7">
+          📊 먼저 아래 <strong>"전체 조직 분석"</strong>에서 기간을 선택하고 <strong>"분석 로드"</strong>를 실행하면 AI 요약을 사용할 수 있습니다.
+        </div>
+      </div>
+    </div>
     <div class="card" style="margin-bottom:12px">
       <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:12px">📈 전체 조직 분석</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
-        <span style="font-size:13px;color:var(--o700)">기간:</span>
-        <select id="org-period-from" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(sp, defFromId)}</select>
-        <span style="font-size:13px;color:var(--o700)">~</span>
-        <select id="org-period-to" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">${opts(sp, defToId)}</select>
-        <span style="font-size:11px;color:var(--muted)">(최대 8개 기간)</span>
+      <div style="display:flex;flex-wrap:nowrap;gap:8px;align-items:center;margin-bottom:10px;overflow:hidden">
+        <span style="font-size:13px;color:var(--o700);flex-shrink:0">기간:</span>
+        <select id="org-period-from" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px;flex:1 1 0;min-width:0;max-width:220px">${opts(sp, defFromId)}</select>
+        <span style="font-size:13px;color:var(--o700);flex-shrink:0">~</span>
+        <select id="org-period-to" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px;flex:1 1 0;min-width:0;max-width:220px">${opts(sp, defToId)}</select>
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0">(최대 8개 기간)</span>
       </div>
       ${inactiveRow}
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -975,9 +983,12 @@ function renderOrgAnalysisResult(orgTree, trend) {
       </div>
     </div>` : '';
 
-  const aiHtml = `
-    <div class="card" style="margin-bottom:12px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:10px">🤖 조직 AI 요약</div>
+  resEl.innerHTML = coHtml + orgHtml + chartHtml;
+
+  // AI 요약 카드 활성화 (최상단 카드 → 활성 상태로 갱신)
+  const aiSummaryBody = document.getElementById('org-ai-summary-body');
+  if (aiSummaryBody) {
+    aiSummaryBody.innerHTML = `
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px">
         <span style="font-size:13px;color:var(--o700)">요약 수준:</span>
         <select id="ai-summary-level" style="font-size:13px;padding:4px 8px;border:1px solid var(--o200);border-radius:6px">
@@ -989,10 +1000,8 @@ function renderOrgAnalysisResult(orgTree, trend) {
       </div>
       <div id="org-ai-result" style="font-size:13px;color:var(--muted);line-height:1.7">
         요약 수준을 선택한 후 "AI 요약 생성" 버튼을 클릭하세요.
-      </div>
-    </div>`;
-
-  resEl.innerHTML = coHtml + orgHtml + chartHtml + aiHtml;
+      </div>`;
+  }
   if (hasTrend) requestAnimationFrame(() => { window._orgTrendData = trend; renderOrgChart(trend, 'line'); });
 }
 
