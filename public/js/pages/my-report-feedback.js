@@ -86,7 +86,7 @@ async function renderRFPane(ev) {
 
     html += renderSummaryCard([...parsed.summary], reports.filter(r => r.goal_id === null && !legacyReports.find(lr=>lr.id===r.id)).concat([]), feedbacks);
 
-    if (canReport) html += renderWriteForm(ev.id, goals);
+    if (canReport) html += renderWriteForm(ev, goals);
 
     el.innerHTML = html;
   } catch(e) {
@@ -271,7 +271,8 @@ function renderSummaryCard(legacySummary, newSummaryReports, feedbacks) {
 }
 
 /* ── 보고 작성 폼 ── */
-function renderWriteForm(evalId, goals) {
+function renderWriteForm(ev, goals) {
+  const evalId = typeof ev === 'object' ? ev.id : ev;
   const goalInputs = goals.map(g => `
     <div style="margin-bottom:10px">
       <label style="font-size:12px;font-weight:500;color:var(--o800);display:block;margin-bottom:3px">
@@ -281,8 +282,13 @@ function renderWriteForm(evalId, goals) {
         style="width:100%;min-height:56px;resize:vertical"></textarea>
     </div>`).join('');
 
+  const modeLabel = ev.eval_mode || 'MBO';
   return `<div class="card" style="margin-top:16px;border-top:3px solid var(--o200)">
-    <div class="card-header"><div><div class="card-header-t">✏️ 새 보고 작성</div></div></div>
+    <div class="card-header"><div>
+      <div class="card-header-t">✏️ 새 보고 작성
+        <span style="font-weight:400;font-size:13px;opacity:.85;margin-left:8px">· ${escapeHtml(ev.period_label||'')} · ${escapeHtml(modeLabel)}</span>
+      </div>
+    </div></div>
     <div>
       ${goalInputs}
       <div style="margin-bottom:10px">

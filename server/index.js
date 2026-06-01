@@ -1632,8 +1632,8 @@ app.post('/api/reports/:evalId', auth, (req, res) => {
     const tx = db.transaction(() => {
       const insertedIds = [];
 
-      if (Array.isArray(items) && items.length) {
-        // 신규 형식: items 배열 (목표별)
+      if (Array.isArray(items)) {
+        // 신규 형식: items 배열 (목표별) — items가 빈 배열이어도 overall만 있으면 허용
         for (const item of items) {
           if (!item.content?.trim()) continue;
           const r = db.prepare(
@@ -1647,13 +1647,18 @@ app.post('/api/reports/:evalId', auth, (req, res) => {
           ).run(evalId, req.user.sub, encrypt(overall.trim()), newRound);
           insertedIds.push(r.lastInsertRowid);
         }
-      } else if (content) {
+        if (insertedIds.length === 0 && !content) {
+          throw new Error('보고 내용이 비어있습니다.');
+        }
+      }
+      if (!Array.isArray(items) && content) {
         // 레거시 형식: content 단일 문자열 (호환 처리)
         const r = db.prepare(
           "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, NULL, ?)"
         ).run(evalId, req.user.sub, encrypt(content || ''), newRound);
         insertedIds.push(r.lastInsertRowid);
-      } else {
+      }
+      if (insertedIds.length === 0) {
         throw new Error('보고 내용이 비어있습니다.');
       }
 
