@@ -420,6 +420,17 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - `convertGradeWithPolicy(score, policyId)` 서버 헬퍼, `convertGradeClient(score, criteria)` 클라이언트 헬퍼
     - 전체 조직 분석 화면 컨트롤 영역에 토글+드롭다운 추가, `onConvToggle()` / `refreshConvTable()` 핸들러
 
+30. **보고·피드백 통합 UI** (2026-06-01, PROMPT 64B):
+    - 부하 화면: "중간 보고" + "중간 피드백" → "보고·피드백" 단일 메뉴로 통합 (성과관리 드롭다운)
+    - `public/js/pages/my-report-feedback.js` 신규 — `Pages.myReportFeedback`
+    - 목표별 카드 N개 + 종합 카드: 각 카드 안에 보고(노랑)+피드백(파랑) 회차 시간순 인터리브
+    - 회차 펼치기: 기본 최신 3회차, "이전 회차 더보기" 3건씩 점진 노출 (`showMoreRounds`)
+    - 레거시 보고 (goal_id NULL, 1,510건): `parseLegacyReports`로 [목표명] 마커 파싱, 매칭 실패 시 종합 분류
+    - 보고 작성: `submitRFReport` — items/overall 형식으로 64A 라우터에 전송
+    - 상사 피드백 작성 화면: 부하 보고 raw text → 목표별 최신 보고 1건씩 구조화 표시
+    - lazy 로딩: 첫 pane만 즉시 렌더, 탭 클릭 시 해당 pane lazy 렌더
+    - CSS: .goal-report-card, .round-block, .item-block, .report-block, .feedback-block, .bd-legacy, .summary-card
+
 29. **목표별 보고/피드백 연동** (2026-06-01, PROMPT 64A):
     - `progress_reports`에 `goal_id INTEGER NULL` + `round INTEGER DEFAULT 1` 컬럼 추가
     - `goal_id=NULL` = 종합 의견 또는 레거시(기존 1,510행) 보존, `goal_id IS NOT NULL` = 목표별 보고
@@ -542,6 +553,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-01 | 보고·피드백 통합 UI — 목표별 카드 + 회차 펼치기 + 레거시 파서 + 메뉴 통합 (PROMPT 64B, 64 시리즈 완료) | Claude Code |
 | 2026-06-01 | 목표별 보고/피드백 연동 데이터 모델 — progress_reports.goal_id/round 추가, POST/GET 라우터 재작성, 회차 제한 강제 (PROMPT 64A) | Claude Code |
 | 2026-06-01 | 성과관리 홈 UI 보정 — AI 요약 영역 최상단 이동(B 흐름 안내) + 기간 드롭다운 한 줄 가로 배치 (PROMPT UI-PERF-HOME) | Claude Code |
 | 2026-06-01 | 일반 사용자 로그인 401 회귀 수정 — api.js token()이 localStorage만 읽어 sessionStorage 토큰 누락 → sessionStorage도 읽도록 수정 (PROMPT LOGIN-FIX) | Claude Code |

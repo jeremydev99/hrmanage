@@ -128,19 +128,39 @@ async function renderGiveFeedback(reporteeEvs, allEvs) {
     body.id = cardId;
     body.style.cssText = 'display:none;margin-top:14px;border-top:1px solid var(--o100);padding-top:14px';
 
-    // 중간 보고 표시 (PROMPT 42: 80자 제한 제거, 줄바꿈 보존, 전체 펼쳐서 표시)
+    // 부하 보고 구조화 표시 (64B: 목표별 그룹화)
     try {
       const reports = await API.get('/reports/' + ev.id).catch(() => []);
       if (reports && reports.length) {
         const rptDiv = document.createElement('div');
         rptDiv.style.cssText = 'background:var(--o50);border:1px solid var(--o200);border-radius:8px;padding:10px;margin-bottom:12px';
-        const esc = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        rptDiv.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--o700);margin-bottom:8px">📋 중간 보고 (${reports.length}건)</div>
-          ${reports.map((r, idx) => `
-            <div style="font-size:13px;color:var(--o800);padding:8px 0;${idx < reports.length-1 ? 'border-bottom:1px solid var(--o100);margin-bottom:4px' : ''}">
-              <div style="color:var(--muted);font-size:11px;margin-bottom:4px">보고 #${idx+1} · ${(r.created_at||'').slice(0,10)}</div>
-              <div style="white-space:pre-wrap;line-height:1.6">${esc(r.content || '')}</div>
-            </div>`).join('')}`;
+        rptDiv.innerHTML = `<div style="font-size:13px;font-weight:600;color:var(--o700);margin-bottom:8px">📋 부하 보고 (${reports.length}건)</div>`;
+
+        if (typeof parseLegacyReports === 'function') {
+          const legacy = reports.filter(r => r.goal_id === null || r.goal_id === undefined);
+          const parsed = parseLegacyReports(legacy, goals);
+          const newRpts = reports.filter(r => r.goal_id !== null && r.goal_id !== undefined);
+          const byGoal = groupByGoalId ? groupByGoalId([...newRpts, ...parsed.byGoal]) : {};
+
+          goals.forEach(g => {
+            const gRpts = byGoal[g.id] || [];
+            if (!gRpts.length) return;
+            const latest = gRpts.slice().sort((a,b) => new Date(b.created_at)-new Date(a.created_at))[0];
+            rptDiv.innerHTML += `<div style="padding:6px 0;border-bottom:1px solid var(--o100)">
+              <div style="font-size:12px;font-weight:500;color:var(--o800);margin-bottom:2px">${escapeHtml(g.name)}</div>
+              <div style="font-size:12px;color:var(--muted);white-space:pre-wrap;line-height:1.5">${escapeHtml(latest.content||'')}</div>
+            </div>`;
+          });
+        } else {
+          // fallback: raw list
+          const esc = (s) => String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+          rptDiv.innerHTML += reports.slice(0, 5).map((r,i) =>
+            `<div style="font-size:12px;color:var(--o800);padding:4px 0;border-bottom:1px solid var(--o100)">
+              <span style="color:var(--muted);font-size:11px">보고 #${i+1} · ${(r.created_at||'').slice(0,10)}</span><br>
+              <span style="white-space:pre-wrap">${esc(r.content||'')}</span>
+            </div>`
+          ).join('');
+        }
         body.appendChild(rptDiv);
       }
     } catch(e) {}

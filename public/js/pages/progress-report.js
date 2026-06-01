@@ -229,28 +229,21 @@ async function renderViewReports(evList) {
 async function submitReport(evalId, goals) {
   const overall = document.getElementById('rpt-content-' + evalId)?.value?.trim() || '';
 
-  // 목표별 내용 수집
-  const goalParts = (goals||[]).map(g => {
-    const val = document.getElementById(`rpt-goal-${evalId}-${g.id}`)?.value?.trim() || '';
-    return val ? `[${g.name}]\n${val}` : '';
-  }).filter(Boolean);
-
-  // 전체 content 구성
-  const parts = [];
-  if (goalParts.length) parts.push(goalParts.join('\n\n'));
-  if (overall) parts.push(`[종합의견]\n${overall}`);
-  const content = parts.join('\n\n');
+  // 64A items 형식으로 전송
+  const items = (goals||[])
+    .map(g => ({ goal_id: g.id, content: (document.getElementById(`rpt-goal-${evalId}-${g.id}`)?.value||'').trim() }))
+    .filter(x => x.content);
 
   const fileWidget = document.getElementById('rpt-file-wrap-' + evalId)?.querySelector('div._fw');
   const files = fileWidget?._files || [];
 
-  if (!content && !files.length) {
+  if (!items.length && !overall && !files.length) {
     showAlert('보고 내용을 입력하거나 파일을 첨부해주세요.', 'orange');
     return;
   }
   try {
-    await API.post('/reports/' + evalId, { content, files });
-    showAlert('중간 보고가 제출되었습니다!', 'teal');
+    const res = await API.post('/reports/' + evalId, { items, overall, files });
+    showAlert(`${res.round}회차 보고가 제출되었습니다!`, 'teal');
     setTimeout(() => Pages.progressReport(), 600);
   } catch(e) {
     showAlert(e.message, 'red');

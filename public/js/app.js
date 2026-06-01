@@ -104,8 +104,7 @@ const App = {
             </button>
             <div id="dd-perf" class="nav-dd-menu">
               <div class="dd-item" onclick="closeNavDD();App.navigate('perfHome')">📊 성과관리 홈</div>
-              <div class="dd-item" onclick="closeNavDD();App.navigate('progressReport')">중간 보고</div>
-              <div class="dd-item" onclick="closeNavDD();App.navigate('feedback')">중간 피드백</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('myReportFeedback')">📋 보고·피드백</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
             </div>
           </div>
@@ -161,9 +160,10 @@ const App = {
       'my-eval':        Pages.myEval,
       'myEval':         Pages.myEval,
       'approvals':      Pages.approvals,
-      'progress':       Pages.progressReport,
-      'progressReport': Pages.progressReport,
-      'feedback':       Pages.feedback,
+      'progress':            Pages.progressReport,
+      'progressReport':      Pages.progressReport,
+      'feedback':            Pages.feedback,
+      'myReportFeedback':    Pages.myReportFeedback,
       'final':          Pages.finalEval,
       'finalEval':      Pages.finalEval,
       'admin':          Pages.admin,
@@ -203,8 +203,7 @@ function toggleMobileMenu() {
       navigate: 'perfHome',
       items: [
         { label: '성과관리 홈', navigate: 'perfHome'     },
-        { label: '중간 보고',   navigate: 'progress'     },
-        { label: '중간 피드백', navigate: 'feedback'     },
+        { label: '보고·피드백', navigate: 'myReportFeedback' },
         { label: '🎯 OKR 현황', navigate: 'okrDashboard' },
       ]
     },
