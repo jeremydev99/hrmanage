@@ -15,6 +15,7 @@ const PrismaGoalRepository = require('../adapters/prisma/PrismaGoalRepository');
 const PrismaFeedbackRepository = require('../adapters/prisma/PrismaFeedbackRepository');
 const PrismaFinalEvaluationRepository = require('../adapters/prisma/PrismaFinalEvaluationRepository');
 const PrismaProgressReportRepository = require('../adapters/prisma/PrismaProgressReportRepository');
+const PrismaGoalApprovalRepository   = require('../adapters/prisma/PrismaGoalApprovalRepository');
 // 향후 추가:
 // const DirectSqlUserRepository = require('../adapters/direct-sql/DirectSqlUserRepository');
 
@@ -116,6 +117,16 @@ function getProgressReportRepository() {
   }
 }
 
+function getGoalApprovalRepository() {
+  const encSecret = process.env.ENC_SECRET || 'synap-local-enc-secret-32bytes!!';
+  switch (ADAPTER) {
+    case 'prisma':
+      return new PrismaGoalApprovalRepository(getSharedPrismaClient(), encSecret);
+    default:
+      throw new Error(`Unknown DATA_ADAPTER: ${ADAPTER}`);
+  }
+}
+
 module.exports = {
   getUserRepository,
   getGoalCategoryRepository,
@@ -126,5 +137,6 @@ module.exports = {
   getFeedbackRepository,
   getFinalEvaluationRepository,
   getProgressReportRepository,
+  getGoalApprovalRepository,
   getSharedPrismaClient,
 };

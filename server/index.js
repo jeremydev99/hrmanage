@@ -24,6 +24,7 @@ const {
   getFeedbackRepository,
   getFinalEvaluationRepository,
   getProgressReportRepository,
+  getGoalApprovalRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -33,7 +34,8 @@ const evalCycleRepo = getEvalCycleRepository();
 const goalRepo = getGoalRepository();
 const feedbackRepo = getFeedbackRepository();
 const finalEvalRepo = getFinalEvaluationRepository();
-const progressReportRepo = getProgressReportRepository();
+const progressReportRepo  = getProgressReportRepository();
+const approvalRepo        = getGoalApprovalRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -690,42 +692,21 @@ app.post('/api/evals/:id/submit', auth, async (req, res) => {
 });
 
 // ════════════════════════════════════════════════════════════
-//  APPROVALS (목표 승인)
+//  APPROVALS (목표 승인) [INFRA-A4: approvalRepo async 전환]
 // 내 목표 승인 이력 전체 (반려 포함)
-app.get('/api/evals/my-history', auth, (req, res) => {
+app.get('/api/evals/my-history', auth, async (req, res) => {
   try {
-    const evs = db.prepare(
-      "SELECT * FROM eval_cycles WHERE user_id=? ORDER BY created_at DESC"
-    ).all(req.user.sub);
+    const evs = await evalCycleRepo.findAllByUser(req.user.sub);
 
-    const result = evs.map(ev => {
-      const goals = db.prepare(
-        `SELECT g.*, c.name as cat_name FROM goals g
-         JOIN goal_categories c ON g.category_id=c.id
-         WHERE g.eval_id=? ORDER BY c.sort_order, g.sort_order`
-      ).all(ev.id).map(g => ({
-        ...g,
-        name: g.name ? decrypt(g.name) : '',
-        kpi:  g.kpi  ? decrypt(g.kpi)  : '',
-      }));
-
-      const approvals = db.prepare(
-        `SELECT a.*, u.name as approver_name, u.title as approver_title
-         FROM goal_approvals a JOIN users u ON a.approver_id=u.id
-         WHERE a.eval_id=? ORDER BY a.created_at DESC`
-      ).all(ev.id).map(a => ({
-        ...a,
-        note: a.note ? decrypt(a.note) : '',
-      }));
-
+    const result = await Promise.all(evs.map(async ev => {
+      const goals     = await goalRepo.findByEvalId(ev.id);
+      const approvals = await approvalRepo.findByEvalId(ev.id);
       return {
         ...ev,
-        self_reason:   ev.self_reason   ? decrypt(ev.self_reason)   : '',
-        reject_reason: ev.reject_reason ? decrypt(ev.reject_reason) : '',
-        goals,
+        goals:    goals.map(g => ({ ...g, name: g.name || '', kpi: g.kpi || '' })),
         approvals,
       };
-    });
+    }));
     res.json(result);
   } catch(err) {
     console.error('[evals/my-history]', err);
@@ -733,66 +714,37 @@ app.get('/api/evals/my-history', auth, (req, res) => {
   }
 });
 
-// ════════════════════════════════════════════════════════════
-// 내가 승인한 이력 목록 (기간 필터 지원)
-app.get('/api/approvals/my-history', auth, (req, res) => {
+// 내가 승인한 이력 목록 [INFRA-A4: approvalRepo async 전환]
+app.get('/api/approvals/my-history', auth, async (req, res) => {
   try {
     const { period_label, eval_year } = req.query;
-    let sql = `SELECT a.*, e.user_id, e.period_label, e.eval_year, e.phase,
-               u.name as target_name, u.dept as target_dept, u.title as target_title,
-               u.grade as target_grade
-               FROM goal_approvals a
-               JOIN eval_cycles e ON a.eval_id = e.id
-               JOIN users u ON e.user_id = u.id
-               WHERE a.approver_id = ?`;
-    const params = [req.user.sub];
-    if (period_label) { sql += ' AND e.period_label=?'; params.push(period_label); }
-    if (eval_year)    { sql += ' AND e.eval_year=?';    params.push(eval_year); }
-    sql += ' ORDER BY a.created_at DESC';
-    const rows = db.prepare(sql).all(...params).map(r => ({
-      ...r,
-      note: r.note ? decrypt(r.note) : '',
-    }));
+    const rows = await approvalRepo.findHistoryByApprover(req.user.sub, { periodLabel: period_label, evalYear: eval_year });
 
-    // 각 row에 최종평가 + 목표 정보 추가
-    const enriched = rows.map(r => {
-      const fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(r.eval_id);
-      const goals = db.prepare(
-        `SELECT g.id, g.weight, g.category_id,
-                g.name as name_enc, g.kpi as kpi_enc,
-                c.name as cat_name, c.color, c.text_color
-         FROM goals g JOIN goal_categories c ON g.category_id=c.id
-         WHERE g.eval_id=? ORDER BY c.sort_order, g.sort_order`
-      ).all(r.eval_id).map(g => ({
-        ...g,
-        name: g.name_enc ? decrypt(g.name_enc) : '',
-        kpi:  g.kpi_enc  ? decrypt(g.kpi_enc)  : '',
-      }));
+    const enriched = await Promise.all(rows.map(async r => {
+      const fe    = await finalEvalRepo.findByEvalId(r.eval_id);
+      const goals = await goalRepo.findByEvalId(r.eval_id);
       let finalData = null;
       if (fe) {
-        const scores = db.prepare('SELECT * FROM final_eval_scores WHERE final_id=?').all(fe.id);
-        const secondMgrUser = fe.second_mgr_id
-          ? db.prepare('SELECT name, title FROM users WHERE id=?').get(fe.second_mgr_id)
-          : null;
-        const mgrUser = fe.mgr_approver_id
-          ? db.prepare('SELECT name, title FROM users WHERE id=?').get(fe.mgr_approver_id)
-          : null;
+        const [secondMgr, mgrUser] = await Promise.all([
+          fe.second_mgr_id    ? userRepo.findById(fe.second_mgr_id)    : null,
+          fe.mgr_approver_id  ? userRepo.findById(fe.mgr_approver_id)  : null,
+        ]);
         finalData = {
           self_done:         fe.self_done,
           mgr_done:          fe.mgr_done,
           mgr_approver_name: mgrUser?.name || '',
           second_mgr_done:   fe.second_mgr_done,
-          second_mgr_name:   secondMgrUser?.name || '',
-          second_mgr_note:   fe.second_mgr_note && fe.second_mgr_done ? decrypt(fe.second_mgr_note) : null,
+          second_mgr_name:   secondMgr?.name || '',
+          second_mgr_note:   fe.second_mgr_note,
           final_score:       fe.final_score,
           final_grade:       fe.final_grade,
           selected_grade:    fe.selected_grade,
-          mgr_note:          fe.mgr_note && fe.mgr_done ? decrypt(fe.mgr_note) : null,
-          scores,
+          mgr_note:          fe.mgr_note,
+          scores:            fe.scores || [],
         };
       }
       return { ...r, goals, final_eval: finalData };
-    });
+    }));
     res.json(enriched);
   } catch(err) {
     console.error('[my-history]', err);
@@ -800,19 +752,18 @@ app.get('/api/approvals/my-history', auth, (req, res) => {
   }
 });
 
-// 승인 의견 수정
-app.patch('/api/approvals/:approvalId', auth, (req, res) => {
+// 승인 의견 수정 [INFRA-A4]
+app.patch('/api/approvals/:approvalId', auth, async (req, res) => {
   try {
-    const setting = db.prepare("SELECT value FROM app_settings WHERE key='approval_edit'").get();
-    if (!setting || setting.value !== '1')
-      return res.status(403).json({ error: '승인 수정이 허용되지 않은 상태입니다.' });
-    const appr = db.prepare('SELECT * FROM goal_approvals WHERE id=?').get(req.params.approvalId);
+    const editAllowed = getSetting('approval_edit', '0') === '1';
+    if (!editAllowed) return res.status(403).json({ error: '승인 수정이 허용되지 않은 상태입니다.' });
+    const appr = await approvalRepo.findById(req.params.approvalId);
     if (!appr) return res.status(404).json({ error: '없음' });
     if (String(appr.approver_id) !== String(req.user.sub) && !['master','admin'].includes(req.user.role))
       return res.status(403).json({ error: '본인 승인만 수정 가능합니다.' });
     const { note } = req.body;
-    db.prepare('UPDATE goal_approvals SET note=? WHERE id=?').run(encrypt(note||''), req.params.approvalId);
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(appr.eval_id);
+    await approvalRepo.updateNote(req.params.approvalId, note || '');
+    const ev = await evalCycleRepo.findById(appr.eval_id);
     auditLog(req.user.sub, 'APPROVAL_EDITED', ev?.user_id, null,
       `${appr.level}차 승인 의견 수정 (${ev?.period_label||''})`, req.ip);
     res.json({ success: true });
@@ -821,22 +772,22 @@ app.patch('/api/approvals/:approvalId', auth, (req, res) => {
   }
 });
 
-// 승인 취소
-app.delete('/api/approvals/:approvalId', auth, (req, res) => {
+// 승인 취소 [INFRA-A4]
+app.delete('/api/approvals/:approvalId', auth, async (req, res) => {
   try {
-    const setting = db.prepare("SELECT value FROM app_settings WHERE key='approval_edit'").get();
-    if (!setting || setting.value !== '1')
+    const editAllowed = getSetting('approval_edit', '0') === '1';
+    if (!editAllowed)
       return res.status(403).json({ error: '승인 취소가 허용되지 않은 상태입니다.' });
-    const appr = db.prepare('SELECT * FROM goal_approvals WHERE id=?').get(req.params.approvalId);
+    // [INFRA-A4] DELETE approval → approvalRepo
+    const appr = await approvalRepo.findById(req.params.approvalId);
     if (!appr) return res.status(404).json({ error: '없음' });
     if (String(appr.approver_id) !== String(req.user.sub) && !['master','admin'].includes(req.user.role))
       return res.status(403).json({ error: '본인 승인만 취소 가능합니다.' });
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(appr.eval_id);
-    db.prepare('DELETE FROM goal_approvals WHERE id=?').run(req.params.approvalId);
-    db.prepare("UPDATE eval_cycles SET phase='pending',approved_at=NULL,updated_at=datetime('now') WHERE id=?")
-      .run(appr.eval_id);
-    db.prepare("UPDATE goals SET status='pending' WHERE eval_id=?").run(appr.eval_id);
-    const targetUser = db.prepare('SELECT name FROM users WHERE id=?').get(ev?.user_id);
+    const ev = await evalCycleRepo.findById(appr.eval_id);
+    await approvalRepo.deleteById(req.params.approvalId);
+    await evalCycleRepo.setToPending(appr.eval_id);
+    await goalRepo.updateStatusByEvalId(appr.eval_id, 'pending');
+    const targetUser = await userRepo.findById(ev?.user_id);
     auditLog(req.user.sub, 'APPROVAL_CANCELLED', ev?.user_id, targetUser?.name,
       `${appr.level}차 승인 취소 (${ev?.period_label||''})`, req.ip);
     res.json({ success: true });
@@ -845,68 +796,70 @@ app.delete('/api/approvals/:approvalId', auth, (req, res) => {
   }
 });
 
-app.get('/api/approvals/pending', auth, (req, res) => {
-  // 내가 다음 승인자인 평가 목록
-  const pending = db.prepare(`
-    SELECT e.*,u.name as user_name,u.dept,u.title,u.manager_id
-    FROM eval_cycles e JOIN users u ON e.user_id=u.id
-    WHERE e.phase='pending'
-  `).all().filter(ev => isNextApprover(req.user.sub, ev.user_id, ev.id));
-
-  // 승인자는 직원 의견 복호화해서 볼 수 있음
-  pending.forEach(ev => {
-    ev.self_reason   = ev.self_reason   ? decrypt(ev.self_reason)   : '';
-    ev.reject_reason = ev.reject_reason ? decrypt(ev.reject_reason) : '';
-  });
-  res.json(pending);
+app.get('/api/approvals/pending', auth, async (req, res) => {
+  try {
+    // 내가 다음 승인자인 평가 목록 [INFRA-A4]
+    const allPending = await evalCycleRepo.findPendingWithUser();
+    const myPending = [];
+    for (const ev of allPending) {
+      if (await isNextApproverAsync(req.user.sub, ev.user_id, ev.id)) {
+        // 복호화는 EvalCycleRepo _flatten이 처리
+        myPending.push(ev);
+      }
+    }
+    res.json(myPending);
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-function isNextApprover(approverId, targetUserId, evalId) {
-  // 조직도 상 approverId가 targetUserId의 몇 번째 상위자인지 파악
-  // chain에 String으로 통일해서 비교 (DB integer vs JWT string 타입 불일치 방지)
-  const chain = [];
-  let cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUserId));
-  while (cur?.manager_id && chain.length < 5) {
-    chain.push(String(cur.manager_id));  // 반드시 String으로 저장
-    cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(cur.manager_id));
-  }
+// [INFRA-A4] isNextApprover → async, userRepo.findById 경유
+async function isNextApproverAsync(approverId, targetUserId, evalId) {
+  const chain = await getApproverChainAsync(targetUserId);
   const myLevel = chain.indexOf(String(approverId)) + 1;
   if (!myLevel) return false;
-  // 이미 이 레벨 승인했는지 확인
-  const done = db.prepare('SELECT 1 FROM goal_approvals WHERE eval_id=? AND level=?').get(evalId, myLevel);
+  const done = await approvalRepo.findByEvalIdAndLevel(evalId, myLevel);
   return !done;
+}
+
+async function getApproverChainAsync(userId) {
+  const chain = [];
+  let cur = await userRepo.findById(String(userId));
+  while (cur?.manager_id && chain.length < 5) {
+    chain.push(String(cur.manager_id));
+    cur = await userRepo.findById(String(cur.manager_id));
+  }
+  return chain;
 }
 
 app.post('/api/approvals/:evalId/approve', auth, async (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const ev = await evalCycleRepo.findById(req.params.evalId);
     if (!ev || ev.phase !== 'pending') return res.status(400).json({ error: '승인 불가 상태' });
-    if (!isNextApprover(req.user.sub, ev.user_id, ev.id)) return res.status(403).json({ error: '승인 권한 없음' });
+    if (!await isNextApproverAsync(req.user.sub, ev.user_id, ev.id)) return res.status(403).json({ error: '승인 권한 없음' });
 
     const validation = await validateEvalGoals(req.params.evalId);
     if (!validation.valid)
       return res.status(400).json({ error: `목표 검증 실패: ${validation.error} 평가자에게 목표 수정을 요청하세요.` });
 
     const { note } = req.body;
-    const chain    = getApproverChain(ev.user_id);
+    const chain    = await getApproverChainAsync(ev.user_id);
     const myLevel  = chain.indexOf(String(req.user.sub)) + 1;
     if (!myLevel) return res.status(403).json({ error: '승인 권한 없음' });
 
-    db.prepare('INSERT INTO goal_approvals(eval_id,approver_id,level,action,note) VALUES(?,?,?,?,?)')
-      .run(ev.id, req.user.sub, myLevel, 'approved', encrypt(note||''));
+    await approvalRepo.create({ eval_id: ev.id, approver_id: req.user.sub, level: myLevel, action: 'approved', note: note || '' });
 
-    // 작은따옴표로 통일 (큰따옴표는 SQLite에서 컬럼명으로 인식됨)
-    const doneCount = db.prepare("SELECT COUNT(*) as c FROM goal_approvals WHERE eval_id=? AND action='approved'").get(ev.id).c;
+    const doneCount    = await approvalRepo.countApprovedByEval(ev.id);
     const finalApproved = doneCount >= chain.length;
 
     if (finalApproved) {
-      db.prepare("UPDATE eval_cycles SET phase='approved',approved_at=datetime('now'),updated_at=datetime('now') WHERE id=?").run(ev.id);
-      db.prepare("UPDATE goals SET status='approved' WHERE eval_id=?").run(ev.id);
+      await evalCycleRepo.setApproved(ev.id);
+      await goalRepo.updateStatusByEvalId(ev.id, 'approved');
     }
-    const targetUser2 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
-    const approverUser = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
-    const actionLabel  = finalApproved ? 'GOAL_FINAL_APPROVED' : 'GOAL_APPROVED';
-    const detail       = finalApproved
+    const [targetUser2, approverUser] = await Promise.all([
+      userRepo.findById(ev.user_id),
+      userRepo.findById(req.user.sub),
+    ]);
+    const actionLabel = finalApproved ? 'GOAL_FINAL_APPROVED' : 'GOAL_APPROVED';
+    const detail      = finalApproved
       ? `${myLevel}차 최종 승인 완료 — 목표 확정 (${ev.period_label||''})`
       : `${myLevel}차 승인 완료 (${ev.period_label||''})`;
     auditLog(req.user.sub, actionLabel, ev.user_id, targetUser2?.name, detail, req.ip);
@@ -917,27 +870,21 @@ app.post('/api/approvals/:evalId/approve', auth, async (req, res) => {
   }
 });
 
-app.post('/api/approvals/:evalId/reject', auth, (req, res) => {
+app.post('/api/approvals/:evalId/reject', auth, async (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const ev = await evalCycleRepo.findById(req.params.evalId);
     if (!ev || ev.phase !== 'pending') return res.status(400).json({ error: '반려 불가 상태' });
-    if (!isNextApprover(req.user.sub, ev.user_id, ev.id)) return res.status(403).json({ error: '권한 없음' });
+    if (!await isNextApproverAsync(req.user.sub, ev.user_id, ev.id)) return res.status(403).json({ error: '권한 없음' });
     const { note } = req.body;
     if (!note || !note.trim()) return res.status(400).json({ error: '반려 사유 필수' });
-    const chain   = getApproverChain(ev.user_id);
+    const chain   = await getApproverChainAsync(ev.user_id);
     const myLevel = chain.indexOf(String(req.user.sub)) + 1;
 
-    db.prepare('INSERT INTO goal_approvals(eval_id,approver_id,level,action,note) VALUES(?,?,?,?,?)')
-      .run(ev.id, req.user.sub, myLevel, 'rejected', encrypt(note));
-
-    // phase = 'rejected' (draft 아님 — 피평가자가 반려 사유 확인 후 수정 가능)
-    // reject_reason 컬럼에 사유 저장 (마이그레이션으로 자동 추가)
-    db.prepare("UPDATE eval_cycles SET phase='rejected',reject_reason=?,updated_at=datetime('now') WHERE id=?")
-      .run(encrypt(note), ev.id);
-    // 기존 승인 이력 초기화 (재제출 시 처음부터 다시 승인)
-    db.prepare("DELETE FROM goal_approvals WHERE eval_id=?").run(ev.id);
-    db.prepare("UPDATE goals SET status='draft' WHERE eval_id=?").run(ev.id);
-    const targetUser3 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
+    await approvalRepo.create({ eval_id: ev.id, approver_id: req.user.sub, level: myLevel, action: 'rejected', note });
+    await evalCycleRepo.setRejected(ev.id, note);
+    await approvalRepo.deleteByEvalId(ev.id);
+    await goalRepo.updateStatusByEvalId(ev.id, 'draft');
+    const targetUser3 = await userRepo.findById(ev.user_id);
     auditLog(req.user.sub, 'GOAL_REJECTED', ev.user_id, targetUser3?.name,
       `목표 반려 (${ev.period_label||''}) — 사유: ${note}`, req.ip);
     res.json({ success: true });
@@ -947,21 +894,15 @@ app.post('/api/approvals/:evalId/reject', auth, (req, res) => {
   }
 });
 
-function getApproverChain(userId) {
-  const chain = [];
-  let cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(userId));
-  while (cur?.manager_id && chain.length < 5) {
-    chain.push(String(cur.manager_id));
-    cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(cur.manager_id));
-  }
-  return chain;
-}
+// [INFRA-A4] getApproverChain legacy sync 제거 — getApproverChainAsync 사용
 
-app.get('/api/approvals/:evalId/history', auth, (req, res) => {
-  const rows = db.prepare('SELECT a.*,u.name as approver_name,u.title FROM goal_approvals a JOIN users u ON a.approver_id=u.id WHERE a.eval_id=? ORDER BY a.level').all(req.params.evalId);
-  const isAdmin = ['master','admin'].includes(req.user.role);
-  rows.forEach(r => { r.note = isAdmin ? decrypt(r.note) : null; });
-  res.json(rows);
+app.get('/api/approvals/:evalId/history', auth, async (req, res) => {
+  try {
+    const rows = await approvalRepo.findByEvalIdOrdered(req.params.evalId);
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    if (!isAdmin) rows.forEach(r => { r.note = null; });
+    res.json(rows);
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // ════════════════════════════════════════════════════════════

@@ -142,6 +142,49 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       }
     });
   }
+
+  // approvals 도메인용 phase 전환 메서드 (INFRA-A4)
+  async findAllByUser(userId) {
+    const evs = await this.prisma.evalCycle.findMany({
+      where: { userId: Number(userId) },
+      orderBy: { created_at: 'desc' },
+    });
+    return evs.map(e => this._flatten(e));
+  }
+
+  async setApproved(id) {
+    await this.prisma.evalCycle.update({
+      where: { id: Number(id) },
+      data: { phase: 'approved', approved_at: new Date().toISOString(), updated_at: new Date().toISOString() }
+    });
+  }
+
+  async setRejected(id, rejectReasonPlain) {
+    await this.prisma.evalCycle.update({
+      where: { id: Number(id) },
+      data: {
+        phase:        'rejected',
+        rejectReason: this._encrypt(rejectReasonPlain || ''),
+        updated_at:   new Date().toISOString(),
+      }
+    });
+  }
+
+  async setToPending(id) {
+    await this.prisma.evalCycle.update({
+      where: { id: Number(id) },
+      data: { phase: 'pending', approved_at: null, updated_at: new Date().toISOString() }
+    });
+  }
+
+  async findPendingWithUser() {
+    const rows = await this.prisma.$queryRawUnsafe(`
+      SELECT e.*, u.name as user_name, u.dept, u.title, u.manager_id
+      FROM eval_cycles e JOIN users u ON e.user_id = u.id
+      WHERE e.phase='pending'
+    `);
+    return rows;
+  }
 }
 
 module.exports = PrismaEvalCycleRepository;

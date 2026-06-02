@@ -591,6 +591,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | INFRA-2A-MIGRATE-A4 — approvals 암호화 도메인 40건(enc11) PrismaGoalApprovalRepository 신설+어댑터 경유, _flatten enc보호, db.prepare 248→208, V3.14 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A4) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A3 — 분류표 정확 마감(237=합계, 28건=주석) + Aggregate 캡슐화O + organizations/feedback/final-eval/evals 15건 async, db.prepare 263→248, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A3) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A2 — 286 전수 재분류(246 실 호출) + auth/notice/settings 11건 async 전환, db.prepare 272→263, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A2) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A1 — users 도메인 14건 async 전환(userRepo 경유), db.prepare 286→272, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A1) | Claude Code |
