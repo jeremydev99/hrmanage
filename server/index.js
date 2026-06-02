@@ -2108,13 +2108,14 @@ function calcCompletionStats(directUserIds, periodIds) {
   return { completed, total: totalExpected, rate: Math.round(completed / totalExpected * 100) };
 }
 
-app.get('/api/perf/org-tree', auth, (req, res) => {
+// [INFRA-A6] perf/org-tree → adminRepo async 전환
+app.get('/api/perf/org-tree', auth, async (req, res) => {
   try {
     const userId = req.user.sub;
     const isAdmin = ['master','admin'].includes(req.user.role);
     let allowedIds = null;
     if (!isAdmin) {
-      const lIds = getLeaderOrgIds(userId);
+      const lIds = await adminRepo.getLeaderOrgIds(userId);
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
@@ -2125,48 +2126,55 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
     if (!isAdmin && includeInactive) {
       auditLog(userId, 'PERF_INACTIVE_ACCESS_BLOCKED', null, null, '비관리자의 비활성 기간 포함 시도 (org-tree)', req.ip);
     }
-    const activeFilter = effectiveInclInactive ? '' : 'AND is_active = 1';
     let periodRows;
     if (period_ids) {
       const ids = period_ids.split(',').map(Number).filter(Boolean);
       if (ids.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 선택 가능합니다.' });
       if (!ids.length) return res.status(400).json({ error: 'period_ids가 올바르지 않습니다.' });
-      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${ids.map(() => '?').join(',')}) ${activeFilter} ORDER BY eval_year, period_label`).all(...ids);
+      periodRows = await adminRepo.findPeriodsByIds(ids, !effectiveInclInactive);
     } else {
-      periodRows = db.prepare(`SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year, period_label`).all();
+      periodRows = await evalPeriodRepo.findActive();
     }
     const periodLabels = periodRows.map(p => p.period_label);
     const periodIds = periodRows.map(p => p.id);
     const gm = buildGradeMap(periodRows[0]?.grade_policy_id || null);
-    let orgs = db.prepare(`
-      SELECT o.id, o.name, o.parent_id, o.sort_order, u.name as leader_name
-      FROM organizations o LEFT JOIN users u ON o.leader_id=u.id
-      WHERE o.is_active=1 ORDER BY o.sort_order, o.id
-    `).all();
+    let orgs = await adminRepo.findOrgsWithLeader();
     if (allowedIds) orgs = orgs.filter(o => allowedIds.includes(o.id));
     const orgMap = new Map(orgs.map(o => [o.id, o]));
     const result = [];
-    function traverse(orgId, depth) {
+    async function traverse(orgId, depth) {
       if (depth > maxDepth) return;
       const org = orgMap.get(orgId);
       if (!org) return;
-      const uIds = getSubtreeUserIds(orgId);
-      const directIds = db.prepare('SELECT id FROM users WHERE org_id=? AND is_active=1').all(orgId).map(r => r.id);
-      const s = calcGradeStats(uIds, periodLabels, gm);
-      const c = calcCompletionStats(directIds, periodIds);
+      const [uIds, directIds, s_raw] = await Promise.all([
+        adminRepo.getSubtreeUserIds(orgId),
+        adminRepo.getSubtreeUserIds(orgId).then(() => // get direct members
+          adminRepo.prisma.$queryRawUnsafe('SELECT id FROM users WHERE org_id=? AND is_active=1', Number(orgId)).then(r => r.map(x => Number(x.id)))
+        ),
+        adminRepo.calcGradeStats(await adminRepo.getSubtreeUserIds(orgId), periodLabels, gm),
+      ]);
+      // direct members (simpler approach)
+      const directRows = await adminRepo.prisma.$queryRawUnsafe('SELECT id FROM users WHERE org_id=? AND is_active=1', Number(orgId));
+      const dIds = directRows.map(r => Number(r.id));
+      const [s, c] = await Promise.all([
+        adminRepo.calcGradeStats(uIds, periodLabels, gm),
+        adminRepo.calcCompletionStats(dIds, periodIds),
+      ]);
       result.push({ id: org.id, name: org.name, depth, parent_id: org.parent_id, leader_name: org.leader_name || null,
-        direct_members: directIds.length, total_members: s.total, evaluated_members: c.completed,
+        direct_members: dIds.length, total_members: s.total, evaluated_members: c.completed,
         expected_total: c.total, completion_rate: c.rate,
         avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist });
-      orgs.filter(o => o.parent_id === orgId).forEach(ch => traverse(ch.id, depth + 1));
+      await Promise.all(orgs.filter(o => o.parent_id === orgId).map(ch => traverse(ch.id, depth + 1)));
     }
     const roots = orgs.filter(o => !o.parent_id || !orgMap.has(o.parent_id));
-    roots.forEach(r => traverse(r.id, 0));
+    await Promise.all(roots.map(r => traverse(r.id, 0)));
     let company = null;
     if (isAdmin) {
-      const allIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
-      const s = calcGradeStats(allIds, periodLabels, gm);
-      const c = calcCompletionStats(allIds, periodIds);
+      const [allIds] = await Promise.all([adminRepo.findAllActiveUserIds()]);
+      const [s, c] = await Promise.all([
+        adminRepo.calcGradeStats(allIds, periodLabels, gm),
+        adminRepo.calcCompletionStats(allIds, periodIds),
+      ]);
       company = { name: '㈜사이냅소프트 (전체)', total_members: s.total, evaluated_members: c.completed,
         expected_total: c.total, completion_rate: c.rate,
         avg_score: s.avg_score, avg_score_max: gm.maxScore, avg_grade: s.avg_grade, grade_distribution: s.dist };
@@ -2179,11 +2187,11 @@ app.get('/api/perf/org-tree', auth, (req, res) => {
   }
 });
 
-// 직원별 등급 환산 데이터 (분석 환산 옵션용, DB 저장 없는 가상 산출 지원)
-app.get('/api/perf/employee-grades', auth, (req, res) => {
+// 직원별 등급 환산 데이터 [INFRA-A6: adminRepo async 전환]
+app.get('/api/perf/employee-grades', auth, async (req, res) => {
   try {
     const isAdmin = ['master','admin'].includes(req.user.role);
-    const isLeader = !isAdmin ? getLeaderOrgIds(req.user.sub).length > 0 : true;
+    const isLeader = !isAdmin ? (await adminRepo.getLeaderOrgIds(req.user.sub)).length > 0 : true;
     if (!isAdmin && !isLeader) return res.status(403).json({ error: '권한 없음' });
 
     const { period_ids, include_inactive: inclInact } = req.query;
@@ -2195,42 +2203,31 @@ app.get('/api/perf/employee-grades', auth, (req, res) => {
     const includeInactive = isAdmin && String(inclInact) === 'true';
     const activeFilter = includeInactive ? '' : 'AND ep.is_active = 1';
 
-    const rows = db.prepare(`
-      SELECT
-        u.id AS user_id,
-        u.name AS employee_name,
-        u.dept,
-        ec.period_label,
-        ec.eval_year,
-        fe.id AS final_eval_id,
-        fe.final_score,
-        fe.final_grade,
-        ep.grade_policy_id AS stored_policy_id,
-        gp.name AS stored_policy_name
+    const ph = ids.map(() => '?').join(',');
+    const activeWhere = includeInactive ? '' : 'AND ep.is_active = 1';
+    const rows = await adminRepo.prisma.$queryRawUnsafe(`
+      SELECT u.id AS user_id, u.name AS employee_name, u.dept,
+             ec.period_label, ec.eval_year,
+             fe.id AS final_eval_id, fe.final_score, fe.final_grade,
+             ep.grade_policy_id AS stored_policy_id, gp.name AS stored_policy_name
       FROM final_evaluations fe
       JOIN eval_cycles ec ON fe.eval_id = ec.id
       JOIN users u ON ec.user_id = u.id
       JOIN eval_periods ep ON ep.period_label = ec.period_label AND ep.eval_year = ec.eval_year
-        AND ep.id IN (${ids.map(() => '?').join(',')}) ${activeFilter}
+        AND ep.id IN (${ph}) ${activeWhere}
       LEFT JOIN grade_policies gp ON gp.id = ep.grade_policy_id
       WHERE fe.final_grade IS NOT NULL
       ORDER BY ec.eval_year DESC, ec.period_label DESC, u.name
-    `).all(...ids);
+    `, ...ids);
 
-    // 사용 가능한 모든 정책 + criteria (환산 드롭다운용)
-    const policies = db.prepare('SELECT id, name FROM grade_policies ORDER BY id').all();
-    const policiesWithCriteria = policies.map(p => ({
-      ...p,
-      criteria: db.prepare(
-        'SELECT grade_code, grade_name, min_score FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
-      ).all(p.id)
-    }));
+    const policies = await adminRepo.prisma.$queryRawUnsafe('SELECT id, name FROM grade_policies ORDER BY id');
+    const policiesWithCriteria = await Promise.all(policies.map(async p => ({
+      ...p, id: Number(p.id),
+      criteria: await adminRepo.findGradePolicyCriteria(p.id),
+    })));
 
-    // 디폴트 환산 기준: 가장 최근 활성 기간의 정책
-    const activePeriod = db.prepare(
-      'SELECT grade_policy_id FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, period_label DESC LIMIT 1'
-    ).get();
-    const activePolicyId = activePeriod?.grade_policy_id || (policies[0]?.id || null);
+    const activePeriods = await evalPeriodRepo.findActive();
+    const activePolicyId = activePeriods[0]?.grade_policy_id || (policies[0]?.id ? Number(policies[0].id) : null);
 
     res.json({ rows, available_policies: policiesWithCriteria, active_policy_id: activePolicyId });
   } catch(err) {
@@ -2239,13 +2236,14 @@ app.get('/api/perf/employee-grades', auth, (req, res) => {
   }
 });
 
-app.get('/api/perf/quarterly-trend', auth, (req, res) => {
+// [INFRA-A6] perf/quarterly-trend → adminRepo async
+app.get('/api/perf/quarterly-trend', auth, async (req, res) => {
   try {
     const userId = req.user.sub;
     const isAdmin = ['master','admin'].includes(req.user.role);
     let allowedIds = null;
     if (!isAdmin) {
-      const lIds = getLeaderOrgIds(userId);
+      const lIds = await adminRepo.getLeaderOrgIds(userId);
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
@@ -2259,28 +2257,30 @@ app.get('/api/perf/quarterly-trend', auth, (req, res) => {
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
-    const pPh = pIdList.map(() => '?').join(',');
-    const activeFilter = effectiveInclInactive ? '' : 'AND is_active = 1';
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter} ORDER BY eval_year, period_label`).all(...pIdList);
+    const periods = await adminRepo.findPeriodsByIds(pIdList, !effectiveInclInactive);
     const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds, orgName = '회사 전체';
     if (org_id) {
       const orgIdNum = parseInt(org_id);
       if (allowedIds && !allowedIds.includes(orgIdNum)) return res.status(403).json({ error: '해당 조직 접근 권한이 없습니다.' });
-      orgName = db.prepare('SELECT name FROM organizations WHERE id=?').get(orgIdNum)?.name || '알 수 없음';
-      userIds = getSubtreeUserIds(orgIdNum);
+      [orgName, userIds] = await Promise.all([
+        adminRepo.findOrgNameById(orgIdNum).then(n => n || '알 수 없음'),
+        adminRepo.getSubtreeUserIds(orgIdNum),
+      ]);
     } else if (isAdmin) {
-      userIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
+      userIds = await adminRepo.findAllActiveUserIds();
     } else {
       const rootOrgId = allowedIds[0];
-      orgName = db.prepare('SELECT name FROM organizations WHERE id=?').get(rootOrgId)?.name || '알 수 없음';
-      userIds = getSubtreeUserIds(rootOrgId);
+      [orgName, userIds] = await Promise.all([
+        adminRepo.findOrgNameById(rootOrgId).then(n => n || '알 수 없음'),
+        adminRepo.getSubtreeUserIds(rootOrgId),
+      ]);
     }
-    const result = periods.map(p => {
-      const s = calcGradeStats(userIds, [p.period_label], gm);
+    const result = await Promise.all(periods.map(async p => {
+      const s = await adminRepo.calcGradeStats(userIds, [p.period_label], gm);
       return { period_id: p.id, label: p.period_label, total: s.total, evaluated: s.evaluated,
         avg_score: s.avg_score, avg_grade: s.avg_grade, dist: s.dist };
-    });
+    }));
     res.json({ org_name: orgName, periods: result, grade_codes: gm.gradeCodes, max_score: gm.maxScore });
   } catch(err) {
     console.error('[GET /api/perf/quarterly-trend]', err);
@@ -2288,13 +2288,14 @@ app.get('/api/perf/quarterly-trend', auth, (req, res) => {
   }
 });
 
-app.get('/api/perf/grade-distribution', auth, (req, res) => {
+// [INFRA-A6] perf/grade-distribution → adminRepo async
+app.get('/api/perf/grade-distribution', auth, async (req, res) => {
   try {
     const userId = req.user.sub;
     const isAdmin = ['master','admin'].includes(req.user.role);
     let allowedIds = null;
     if (!isAdmin) {
-      const lIds = getLeaderOrgIds(userId);
+      const lIds = await adminRepo.getLeaderOrgIds(userId);
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
@@ -2308,35 +2309,25 @@ app.get('/api/perf/grade-distribution', auth, (req, res) => {
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
-    const pPh = pIdList.map(() => '?').join(',');
-    const activeFilter2 = effectiveInclInactive ? '' : 'AND is_active = 1';
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter2} ORDER BY eval_year, period_label`).all(...pIdList);
+    const periods = await adminRepo.findPeriodsByIds(pIdList, !effectiveInclInactive);
     const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds;
     if (org_id) {
       const orgIdNum = parseInt(org_id);
       if (allowedIds && !allowedIds.includes(orgIdNum)) return res.status(403).json({ error: '해당 조직 접근 권한이 없습니다.' });
-      userIds = getSubtreeUserIds(orgIdNum);
+      userIds = await adminRepo.getSubtreeUserIds(orgIdNum);
     } else if (isAdmin) {
-      userIds = db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id);
+      userIds = await adminRepo.findAllActiveUserIds();
     } else {
-      userIds = getSubtreeUserIds(allowedIds[0]);
+      userIds = await adminRepo.getSubtreeUserIds(allowedIds[0]);
     }
     if (!userIds.length) {
       return res.json({ periods: periods.map(p => p.period_label), grades: gm.gradeCodes,
         matrix: gm.gradeCodes.map(() => periods.map(() => 0)) });
     }
-    const uPh = userIds.map(() => '?').join(',');
-    const matrix = gm.gradeCodes.map(grade =>
-      periods.map(p => {
-        const row = db.prepare(`
-          SELECT COUNT(*) as c FROM final_evaluations fe
-          JOIN eval_cycles ec ON fe.eval_id=ec.id
-          WHERE ec.user_id IN (${uPh}) AND ec.period_label=? AND fe.selected_grade=?
-        `).get(...userIds, p.period_label, grade);
-        return row?.c || 0;
-      })
-    );
+    const matrix = await Promise.all(gm.gradeCodes.map(async grade =>
+      Promise.all(periods.map(p => adminRepo.countByGrade(userIds, p.period_label, grade)))
+    ));
     res.json({ periods: periods.map(p => p.period_label), grades: gm.gradeCodes, matrix });
   } catch(err) {
     console.error('[GET /api/perf/grade-distribution]', err);
