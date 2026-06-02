@@ -591,6 +591,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | INFRA-2D-1-FIX — deploy 대본 안전화(scp→git clone PII 유출 차단, DNS 전파 가드, certbot staging 리허설, .env 단계 정리) (PROMPT INFRA-2D-1-FIX) | Claude Code |
 | 2026-06-02 | INFRA-2D-1 — NCloud 인프라 파이프라인 설정 파일 준비(docker-compose+Nginx+certbot, .env.example, infra-up.sh, pg-backup.sh), 앱 독립 리허설 구조 완성 (PROMPT INFRA-2D-1) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A5 — enc+tx 혼합 19건(eval-detail/reports/mgr-pending/dashboard) 어댑터 경유, createMulti $transaction 캡슐화, db.prepare 208→189, V3.14+V3.15 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A5) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A4 — approvals 암호화 도메인 40건(enc11) PrismaGoalApprovalRepository 신설+어댑터 경유, _flatten enc보호, db.prepare 248→208, V3.14 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A4) | Claude Code |
