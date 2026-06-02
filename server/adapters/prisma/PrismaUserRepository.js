@@ -94,6 +94,91 @@ class PrismaUserRepository extends UserRepository {
     }
     return false;
   }
+
+  // ── 64A: users 도메인 전환을 위한 추가 메서드 ──────────────
+
+  async findAll() {
+    const users = await this.prisma.user.findMany({ orderBy: { id: 'asc' } });
+    return users.map(toSnakeCase);
+  }
+
+  async findSignupRequests() {
+    const users = await this.prisma.user.findMany({
+      where: { accountStatus: { in: ['pending', 'rejected'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    return users.map(u => ({
+      id: u.id, name: u.name, email: u.email, dept: u.dept, title: u.title,
+      signup_note: u.signupNote, account_status: u.accountStatus,
+      created_at: _toStr(u.createdAt ?? u.created_at),
+    }));
+  }
+
+  async createAdmin({ name, email, passwordHash, role, dept, title, managerId }) {
+    const user = await this.prisma.user.create({
+      data: {
+        name, email, passwordHash,
+        role: role || 'user',
+        dept: dept || '',
+        title: title || '',
+        managerId: managerId || null,
+      },
+    });
+    return user.id;
+  }
+
+  async updatePartial(id, { role, dept, title, manager_id, is_active }) {
+    const data = {};
+    if (role !== undefined) data.role = role;
+    if (dept !== undefined) data.dept = dept;
+    if (title !== undefined) data.title = title;
+    if (manager_id !== undefined) data.managerId = manager_id;
+    if (is_active !== undefined) data.isActive = is_active;
+    if (Object.keys(data).length === 0) return;
+    await this.prisma.user.update({ where: { id: Number(id) }, data });
+  }
+
+  async approveSignup(id, { role, dept, title, managerId }) {
+    const data = { accountStatus: 'approved', isActive: 1, role: role || 'user', managerId: managerId || null };
+    if (dept !== undefined) data.dept = dept;
+    if (title !== undefined) data.title = title;
+    await this.prisma.user.update({ where: { id: Number(id) }, data });
+  }
+
+  async rejectSignup(id) {
+    await this.prisma.user.update({
+      where: { id: Number(id) },
+      data: { accountStatus: 'rejected', isActive: 0 },
+    });
+  }
+
+  async toggleActive(id) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: Number(id) }, select: { isActive: true },
+    });
+    if (!user) return null;
+    const newVal = user.isActive ? 0 : 1;
+    await this.prisma.user.update({ where: { id: Number(id) }, data: { isActive: newVal } });
+    return newVal;
+  }
+
+  async getApproverChain(userId) {
+    const approvers = [];
+    let curUser = await this.prisma.user.findUnique({
+      where: { id: Number(userId) }, select: { managerId: true },
+    });
+    let level = 0;
+    while (curUser?.managerId && level < 5) {
+      const mgr = await this.prisma.user.findUnique({
+        where: { id: curUser.managerId },
+        select: { id: true, name: true, dept: true, title: true, managerId: true },
+      });
+      if (!mgr) break;
+      approvers.push({ id: mgr.id, name: mgr.name, dept: mgr.dept, title: mgr.title, manager_id: mgr.managerId, level: ++level });
+      curUser = mgr;
+    }
+    return approvers;
+  }
 }
 
 module.exports = PrismaUserRepository;

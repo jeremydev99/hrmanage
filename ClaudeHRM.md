@@ -544,11 +544,14 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ---
 
-### BL-006: PostgreSQL 전환 — INFRA-2A-MIGRATE (운영 전환 필수)
+### BL-006: PostgreSQL 전환 — INFRA-2A-MIGRATE 시리즈 (운영 전환 필수)
 
-**우선순위**: INFRA-2D(NCloud 배포) 직전 필수
-**현황** (2026-06-02 분석):
-- server/index.js에 `better-sqlite3` 직접 호출 **286건** — 전체 서버가 SQLite 동기 API 의존
+**전략**: Phase A(provider 불변, async 전환) → Phase B(provider postgresql, SQL 방언 fix, V3 on PG)
+**데이터 이관 폐기**: 시드 데이터는 운영 데이터 아님 → Phase B에서 `prisma db push` + 시드 스크립트로 재생성
+
+**현황** (2026-06-02):
+- server/index.js `better-sqlite3` 직접 호출: 286 → **272건** (A1 완료: users 14건 → userRepo async)
+- A1 완료 도메인: users (findAll, findSignupRequests, createAdmin, updatePartial, approveSignup, rejectSignup, toggleActive, getApproverChain 신설)
 - Prisma 어댑터는 설계되어 있으나 실제 쿼리 경로에서 사용 중인 곳은 0건
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
 - Prisma schema.prisma는 현재 provider="sqlite" 유지
@@ -585,6 +588,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | INFRA-2A-MIGRATE-A1 — users 도메인 14건 async 전환(userRepo 경유), db.prepare 286→272, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A1) | Claude Code |
 | 2026-06-02 | 64B-FIX3 — 종합 카드 더보기 onclick 누락 fix + 평가 기간 관리 탭 정렬 + sortPeriodsDesc 전역 헬퍼 (PROMPT 64B-FIX3) | Claude Code |
 | 2026-06-02 | 64B-FIX2 — 더보기 onclick JSON 취약점 fix(window 캐시) + 피드백 회차 시간적 배정 + CP949 깨진 보고 cleanup 스크립트 (PROMPT 64B-FIX2) | Claude Code |
 | 2026-06-01 | 64B-FIX — POST 라우터 items=[] + overall 케이스 처리 + 작성 폼 분기 라벨 + 암호화 점검 스크립트 (PROMPT 64B-FIX) | Claude Code |

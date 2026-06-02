@@ -320,75 +320,77 @@ app.post('/api/auth/change-password', auth, async (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  USERS & ORG
 // ════════════════════════════════════════════════════════════
-app.get('/api/users', auth, (req, res) => {
-  const users = db.prepare('SELECT id,name,email,role,dept,grade,title,manager_id,is_active,account_status,org_id FROM users').all();
-  res.json(users);
+// [INFRA-2A-MIGRATE-A1] users 도메인 → userRepo async 전환 (15건 → 0건 db.prepare)
+app.get('/api/users', auth, async (req, res) => {
+  try {
+    const users = await userRepo.findAll();
+    res.json(users);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/users', auth, adminOnly, (req, res) => {
+app.post('/api/users', auth, adminOnly, async (req, res) => {
   const { name, email, password, role, dept, title, manager_id } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: '필수 항목 누락' });
-  const hash = bcrypt.hashSync(password, 10);
-  const r = db.prepare(
-    'INSERT INTO users(name,email,password_hash,role,dept,title,manager_id) VALUES(?,?,?,?,?,?,?)'
-  ).run(name, email, hash, role||'user', dept||'', title||'', manager_id||null);
-  res.json({ id: r.lastInsertRowid });
+  try {
+    const hash = bcrypt.hashSync(password, 10);
+    const id = await userRepo.createAdmin({ name, email, passwordHash: hash, role, dept, title, managerId: manager_id });
+    res.json({ id });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.patch('/api/users/:id', auth, adminOnly, (req, res) => {
+app.patch('/api/users/:id', auth, adminOnly, async (req, res) => {
   const { role, dept, title, manager_id, is_active } = req.body;
-  db.prepare('UPDATE users SET role=COALESCE(?,role), dept=COALESCE(?,dept), title=COALESCE(?,title), manager_id=?, is_active=COALESCE(?,is_active) WHERE id=?')
-    .run(role, dept, title, manager_id !== undefined ? manager_id : db.prepare('SELECT manager_id FROM users WHERE id=?').get(req.params.id)?.manager_id, is_active, req.params.id);
-  res.json({ success: true });
+  try {
+    await userRepo.updatePartial(req.params.id, { role, dept, title, manager_id, is_active });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // 가입 신청 목록 조회 (admin+)
-app.get('/api/users/signup-requests', auth, adminOnly, (req, res) => {
-  const rows = db.prepare(
-    "SELECT id,name,email,dept,title,signup_note,account_status,created_at FROM users WHERE account_status IN ('pending','rejected') ORDER BY created_at DESC"
-  ).all();
-  res.json(rows);
+app.get('/api/users/signup-requests', auth, adminOnly, async (req, res) => {
+  try {
+    const rows = await userRepo.findSignupRequests();
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // 가입 승인 (admin+)
-app.post('/api/users/:id/approve', auth, adminOnly, (req, res) => {
+app.post('/api/users/:id/approve', auth, adminOnly, async (req, res) => {
   const { role, dept, title, manager_id } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  if (!user) return res.status(404).json({ error: '사용자 없음' });
-  db.prepare("UPDATE users SET account_status='approved', is_active=1, role=?, dept=COALESCE(?,dept), title=COALESCE(?,title), manager_id=? WHERE id=?")
-    .run(role||'user', dept, title, manager_id||null, req.params.id);
-  db.prepare("INSERT INTO audit_logs(user_id,action,ip) VALUES(?,?,?)").run(req.user.sub, 'ACCOUNT_APPROVED:'+req.params.id, req.ip);
-  res.json({ success: true });
+  try {
+    const user = await userRepo.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: '사용자 없음' });
+    await userRepo.approveSignup(req.params.id, { role, dept, title, managerId: manager_id });
+    auditLog(req.user.sub, 'ACCOUNT_APPROVED', req.params.id, user.name, null, req.ip);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // 가입 거절 (admin+)
-app.post('/api/users/:id/reject', auth, adminOnly, (req, res) => {
-  db.prepare("UPDATE users SET account_status='rejected', is_active=0 WHERE id=?").run(req.params.id);
-  db.prepare("INSERT INTO audit_logs(user_id,action,ip) VALUES(?,?,?)").run(req.user.sub, 'ACCOUNT_REJECTED:'+req.params.id, req.ip);
-  res.json({ success: true });
+app.post('/api/users/:id/reject', auth, adminOnly, async (req, res) => {
+  try {
+    await userRepo.rejectSignup(req.params.id);
+    auditLog(req.user.sub, 'ACCOUNT_REJECTED', req.params.id, null, null, req.ip);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // 계정 비활성화/활성화 토글 (admin+)
-app.post('/api/users/:id/toggle-active', auth, adminOnly, (req, res) => {
-  const user = db.prepare('SELECT is_active FROM users WHERE id=?').get(req.params.id);
-  if (!user) return res.status(404).json({ error: '사용자 없음' });
-  const newVal = user.is_active ? 0 : 1;
-  db.prepare('UPDATE users SET is_active=? WHERE id=?').run(newVal, req.params.id);
-  db.prepare("INSERT INTO audit_logs(user_id,action,ip) VALUES(?,?,?)").run(req.user.sub, (newVal?'ACCOUNT_ENABLED':'ACCOUNT_DISABLED')+':'+req.params.id, req.ip);
-  res.json({ success: true, is_active: newVal });
+app.post('/api/users/:id/toggle-active', auth, adminOnly, async (req, res) => {
+  try {
+    const newVal = await userRepo.toggleActive(req.params.id);
+    if (newVal === null) return res.status(404).json({ error: '사용자 없음' });
+    auditLog(req.user.sub, newVal ? 'ACCOUNT_ENABLED' : 'ACCOUNT_DISABLED', req.params.id, null, null, req.ip);
+    res.json({ success: true, is_active: newVal });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // 조직도: 특정 사용자의 승인 체계 반환
-app.get('/api/users/:id/approvers', auth, (req, res) => {
-  const approvers = [];
-  let cur = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
-  let level = 0;
-  while (cur?.manager_id && level < 5) {
-    cur = db.prepare('SELECT id,name,dept,title,manager_id FROM users WHERE id=?').get(cur.manager_id);
-    if (cur) approvers.push({ ...cur, level: ++level });
-    else break;
-  }
-  res.json(approvers);
+app.get('/api/users/:id/approvers', auth, async (req, res) => {
+  try {
+    const approvers = await userRepo.getApproverChain(req.params.id);
+    res.json(approvers);
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ════════════════════════════════════════════════════════════
