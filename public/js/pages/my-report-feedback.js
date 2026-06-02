@@ -155,16 +155,27 @@ function groupFeedbacksByGoal(feedbacks, goals) {
 function mergeByRound(reports, feedbackItems) {
   const rounds = {};
 
+  // 보고를 회차별로 그룹 + 각 회차의 마지막 보고 시각 추적
   for (const r of reports) {
     const rnd = r.round || 1;
-    if (!rounds[rnd]) rounds[rnd] = { round:rnd, items:[] };
+    if (!rounds[rnd]) rounds[rnd] = { round:rnd, items:[], maxReportTime:0 };
     rounds[rnd].items.push({ ...r, type:'report' });
+    const t = new Date(r.created_at).getTime() || 0;
+    if (t > rounds[rnd].maxReportTime) rounds[rnd].maxReportTime = t;
   }
 
+  // 피드백을 시간적으로 가장 가까운 이전 보고 회차에 배정
+  const roundNums = Object.keys(rounds).map(Number).sort((a, b) => a - b);
+
   for (const f of feedbackItems) {
-    const rnd = f.round || 1;
-    if (!rounds[rnd]) rounds[rnd] = { round:rnd, items:[] };
-    rounds[rnd].items.push({ ...f, type:'feedback' });
+    const fbTime = new Date(f.created_at).getTime() || 0;
+    // 피드백 시각 이전에 제출된 보고 회차 중 가장 마지막 회차
+    let assignedRound = roundNums.length ? roundNums[0] : 1;
+    for (const rnd of roundNums) {
+      if (rounds[rnd].maxReportTime <= fbTime) assignedRound = rnd;
+    }
+    if (!rounds[assignedRound]) rounds[assignedRound] = { round:assignedRound, items:[], maxReportTime:0 };
+    rounds[assignedRound].items.push({ ...f, type:'feedback' });
   }
 
   return Object.values(rounds).sort((a, b) => b.round - a.round);
@@ -183,7 +194,10 @@ function renderGoalCard(goal, reports, feedbackItems) {
 
   const initial = rounds.slice(0, 3);
   const hidden  = rounds.slice(3);
-  const hiddenJson = JSON.stringify(hidden).replace(/"/g, '&quot;');
+
+  // onclick 인라인 JSON 대신 window 캐시 사용 (특수문자 이슈 방지)
+  window._rfHiddenRounds = window._rfHiddenRounds || {};
+  if (hidden.length) window._rfHiddenRounds[goal.id] = hidden;
 
   return `<div class="card goal-report-card" data-goal-id="${goal.id}">
     <div class="card-header"><div>
@@ -194,7 +208,7 @@ function renderGoalCard(goal, reports, feedbackItems) {
       ${initial.map(r => renderRoundBlock(r)).join('')}
     </div>
     ${hidden.length ? `<div class="more-controls" id="more-${goal.id}">
-      <button class="btn btn-ghost btn-sm" onclick="showMoreRounds(${goal.id}, '${hiddenJson}')">이전 회차 더보기 (남은 ${hidden.length}회차)</button>
+      <button class="btn btn-ghost btn-sm" onclick="showMoreRounds(${goal.id})">이전 회차 더보기 (남은 ${hidden.length}회차)</button>
     </div>` : ''}
   </div>`;
 }
@@ -227,20 +241,27 @@ function renderFeedbackItem(item) {
   </div>`;
 }
 
-function showMoreRounds(goalId, hiddenJson) {
+function showMoreRounds(goalId) {
   try {
-    const hidden = JSON.parse(hiddenJson.replace(/&quot;/g, '"'));
+    const cache = window._rfHiddenRounds || {};
+    const hidden = cache[goalId];
+    if (!hidden || !hidden.length) return;
+
     const container = document.getElementById('rounds-' + goalId);
+    if (!container) return;
+
     const next3 = hidden.slice(0, 3);
     next3.forEach(r => container.insertAdjacentHTML('beforeend', renderRoundBlock(r)));
+
     const remaining = hidden.slice(3);
+    cache[goalId] = remaining;  // 캐시 갱신
+
     const moreDiv = document.getElementById('more-' + goalId);
     if (!moreDiv) return;
     if (remaining.length === 0) {
       moreDiv.remove();
     } else {
-      const newJson = JSON.stringify(remaining).replace(/"/g, '&quot;');
-      moreDiv.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="showMoreRounds(${goalId}, '${newJson}')">이전 회차 더보기 (남은 ${remaining.length}회차)</button>`;
+      moreDiv.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="showMoreRounds(${goalId})">이전 회차 더보기 (남은 ${remaining.length}회차)</button>`;
     }
   } catch(e) { console.warn('showMoreRounds error:', e); }
 }

@@ -553,6 +553,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | 64B-FIX2 — 더보기 onclick JSON 취약점 fix(window 캐시) + 피드백 회차 시간적 배정 + CP949 깨진 보고 cleanup 스크립트 (PROMPT 64B-FIX2) | Claude Code |
 | 2026-06-01 | 64B-FIX — POST 라우터 items=[] + overall 케이스 처리 + 작성 폼 분기 라벨 + 암호화 점검 스크립트 (PROMPT 64B-FIX) | Claude Code |
 | 2026-06-01 | 보고·피드백 통합 UI — 목표별 카드 + 회차 펼치기 + 레거시 파서 + 메뉴 통합 (PROMPT 64B, 64 시리즈 완료) | Claude Code |
 | 2026-06-01 | 목표별 보고/피드백 연동 데이터 모델 — progress_reports.goal_id/round 추가, POST/GET 라우터 재작성, 회차 제한 강제 (PROMPT 64A) | Claude Code |
