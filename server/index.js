@@ -25,6 +25,7 @@ const {
   getFinalEvaluationRepository,
   getProgressReportRepository,
   getGoalApprovalRepository,
+  getEvalPeriodRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -36,6 +37,7 @@ const feedbackRepo = getFeedbackRepository();
 const finalEvalRepo = getFinalEvaluationRepository();
 const progressReportRepo  = getProgressReportRepository();
 const approvalRepo        = getGoalApprovalRepository();
+const evalPeriodRepo      = getEvalPeriodRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -1162,263 +1164,156 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
 // ── 평가 기간 관리 API ───────────────────────────────────
 
 // 전체 평가 기간 목록
-app.get('/api/eval-periods', auth, (req, res) => {
+// [INFRA-A6] eval-periods 도메인 전체 → evalPeriodRepo async 전환
+app.get('/api/eval-periods', auth, async (req, res) => {
   try {
     const yearFrom = req.query.year_from ? parseInt(req.query.year_from) : null;
     const yearTo   = req.query.year_to   ? parseInt(req.query.year_to)   : null;
-
     if (yearFrom !== null && yearTo !== null) {
       if (yearTo - yearFrom > 9) return res.status(400).json({ error: '최대 10년 범위까지 조회 가능합니다.' });
       if (yearTo < yearFrom)     return res.status(400).json({ error: '종료 연도는 시작 연도보다 같거나 커야 합니다.' });
     }
-
-    const filters = [];
-    const params  = [];
-    if (yearFrom !== null && yearTo !== null) {
-      filters.push('CAST(eval_year AS INTEGER) >= ?');
-      params.push(yearFrom);
-      filters.push('CAST(eval_year AS INTEGER) <= ?');
-      params.push(yearTo);
-    }
-
-    const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
-    const periods = db.prepare(
-      `SELECT ep.*, gp.name AS grade_policy_name FROM eval_periods ep LEFT JOIN grade_policies gp ON gp.id = ep.grade_policy_id ${where} ORDER BY ep.eval_year DESC, ep.period_label`
-    ).all(...params);
-
+    const includeInactive = String(req.query.include_inactive) === 'true';
+    const periods = await evalPeriodRepo.findAll({ yearFrom, yearTo, includeInactive });
     res.set('X-Periods-Year-From', yearFrom ?? '');
     res.set('X-Periods-Year-To',   yearTo   ?? '');
     res.set('X-Periods-Total',     periods.length);
     res.json(periods);
-  } catch(err) {
-    res.json([]);
-  }
+  } catch(err) { res.json([]); }
 });
 
-// 활성화된 평가 기간만 (직원용)
-app.get('/api/eval-periods/active', auth, (req, res) => {
+app.get('/api/eval-periods/active', auth, async (req, res) => {
   try {
-    const periods = db.prepare(
-      "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, period_label"
-    ).all();
-    res.json(periods);
-  } catch(err) {
-    res.json([]); // 테이블 없으면 빈 배열
-  }
+    res.json(await evalPeriodRepo.findActive());
+  } catch(err) { res.json([]); }
 });
 
-// 평가 기간이 존재하는 연도 목록 (드롭다운용)
-app.get('/api/eval-periods/available-years', auth, (req, res) => {
+app.get('/api/eval-periods/available-years', auth, async (req, res) => {
   try {
     const includeInactive = String(req.query.include_inactive) === 'true';
     const isAdmin = ['master', 'admin'].includes(req.user?.role);
     const effective = isAdmin && includeInactive;
-
-    const filter = effective ? '' : 'WHERE is_active = 1';
-    const rows = db.prepare(
-      `SELECT DISTINCT eval_year FROM eval_periods ${filter} ORDER BY eval_year DESC`
-    ).all();
-
-    const years = rows
-      .map(r => {
-        const match = String(r.eval_year).match(/(\d{4})/);
-        return match ? parseInt(match[1]) : null;
-      })
-      .filter(y => y !== null);
-
+    const evalYears = await evalPeriodRepo.findAvailableYears({ includeInactive: effective });
+    const years = evalYears.map(y => { const m = String(y).match(/(\d{4})/); return m ? parseInt(m[1]) : null; }).filter(Boolean);
     res.json({ years });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 미바인딩 + 차단 이력 있는 기간 목록 (admin+)
-app.get('/api/eval-periods/missing-policy', auth, adminOnly, (req, res) => {
+app.get('/api/eval-periods/missing-policy', auth, adminOnly, async (req, res) => {
   try {
-    const periods = db.prepare(`
-      SELECT id, eval_year, period_label, is_active, activation_blocked_at
-      FROM eval_periods
-      WHERE grade_policy_id IS NULL
-        AND activation_blocked_at IS NOT NULL
-      ORDER BY activation_blocked_at DESC
-    `).all();
+    const periods = await evalPeriodRepo.findMissingPolicy();
     res.json({ count: periods.length, periods });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가 기간 추가 (admin+)
-app.post('/api/eval-periods', auth, adminOnly, (req, res) => {
+app.post('/api/eval-periods', auth, adminOnly, async (req, res) => {
   try {
     const { period_type, period_label, eval_year, is_active, grade_policy_id } = req.body;
     if (!period_type || !period_label || !eval_year)
       return res.status(400).json({ error: '필수 항목 누락' });
     if (!grade_policy_id)
       return res.status(400).json({ error: '등급의 100점환산 기준이 저장되지 않았습니다. 적용해 주세요.' });
-    const policy = db.prepare('SELECT id FROM grade_policies WHERE id=?').get(grade_policy_id);
-    if (!policy) return res.status(400).json({ error: '유효하지 않은 등급 정책입니다.' });
-    const exists = db.prepare(
-      'SELECT 1 FROM eval_periods WHERE period_label=? AND eval_year=?'
-    ).get(period_label, eval_year);
-    if (exists) return res.status(409).json({ error: '이미 존재하는 기간입니다.' });
-    const r = db.prepare(
-      'INSERT INTO eval_periods(period_type,period_label,eval_year,is_active,created_by,grade_policy_id) VALUES(?,?,?,?,?,?)'
-    ).run(period_type, period_label, eval_year, is_active ?? 1, req.user.sub, grade_policy_id);
-    res.json({ id: r.lastInsertRowid });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+    if (!await evalPeriodRepo.validateGradePolicy(grade_policy_id))
+      return res.status(400).json({ error: '유효하지 않은 등급 정책입니다.' });
+    if (await evalPeriodRepo.findByLabelAndYear(period_label, eval_year))
+      return res.status(409).json({ error: '이미 존재하는 기간입니다.' });
+    const id = await evalPeriodRepo.create({ period_type, period_label, eval_year, is_active, created_by: req.user.sub, grade_policy_id });
+    res.json({ id });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가 기간 수정 (admin+) — grade_policy_id 변경 포함
-app.patch('/api/eval-periods/:id', auth, adminOnly, (req, res) => {
+app.patch('/api/eval-periods/:id', auth, adminOnly, async (req, res) => {
   try {
-    const target = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    const target = await evalPeriodRepo.findById(req.params.id);
     if (!target) return res.status(404).json({ error: '없음' });
-
     const { grade_policy_id } = req.body;
-    const updates = [];
-    const params = [];
-
-    if (grade_policy_id !== undefined) {
-      if (grade_policy_id !== null && grade_policy_id !== '') {
-        const policy = db.prepare('SELECT id FROM grade_policies WHERE id=?').get(grade_policy_id);
-        if (!policy) return res.status(400).json({ error: '유효하지 않은 grade_policy_id' });
-        updates.push('grade_policy_id = ?');
-        params.push(grade_policy_id);
-        updates.push('activation_blocked_at = NULL');
-      } else {
-        updates.push('grade_policy_id = NULL');
-        params.push();
-      }
+    if (grade_policy_id === undefined) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
+    if (grade_policy_id !== null && grade_policy_id !== '') {
+      if (!await evalPeriodRepo.validateGradePolicy(grade_policy_id))
+        return res.status(400).json({ error: '유효하지 않은 grade_policy_id' });
     }
-
-    if (updates.length === 0) return res.status(400).json({ error: '수정할 필드가 없습니다.' });
-
-    params.push(req.params.id);
-    db.prepare(`UPDATE eval_periods SET ${updates.join(', ')} WHERE id=?`).run(...params);
+    await evalPeriodRepo.update(req.params.id, { grade_policy_id });
     auditLog(req.user.sub, 'EVAL_PERIOD_UPDATED', req.params.id, target.period_label, JSON.stringify(req.body), req.ip);
     res.json({ ok: true });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가 기간 활성/비활성 토글 (admin+)
-app.patch('/api/eval-periods/:id/toggle', auth, adminOnly, (req, res) => {
+app.patch('/api/eval-periods/:id/toggle', auth, adminOnly, async (req, res) => {
   try {
-    const p = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
-    if (!p) return res.status(404).json({ error: '없음' });
-    const next = p.is_active ? 0 : 1;
-    if (next === 1 && !p.grade_policy_id) {
-      db.prepare(`UPDATE eval_periods SET activation_blocked_at = datetime('now') WHERE id=?`).run(req.params.id);
-      auditLog(req.user.sub, 'EVAL_PERIOD_ACTIVATION_BLOCKED', req.params.id, p.period_label, 'grade_policy_id is NULL', req.ip);
+    const result = await evalPeriodRepo.toggle(req.params.id);
+    if (!result) return res.status(404).json({ error: '없음' });
+    if (result.blocked) {
+      auditLog(req.user.sub, 'EVAL_PERIOD_ACTIVATION_BLOCKED', req.params.id, null, 'grade_policy_id is NULL', req.ip);
       return res.status(400).json({ error: '등급의 100점환산 기준이 저장되지 않았습니다. 적용해 주세요.' });
     }
-    const clearBlocked = next === 1 && p.grade_policy_id ? ', activation_blocked_at = NULL' : '';
-    db.prepare(`UPDATE eval_periods SET is_active=?${clearBlocked} WHERE id=?`).run(next, req.params.id);
-    res.json({ success: true, is_active: next });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+    res.json({ success: true, is_active: result.is_active });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가 기간 삭제 (master만)
-app.delete('/api/eval-periods/:id', auth, masterOnly, (req, res) => {
+app.delete('/api/eval-periods/:id', auth, masterOnly, async (req, res) => {
   try {
-    const p = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    const p = await evalPeriodRepo.findById(req.params.id);
     if (!p) return res.status(404).json({ error: '없음' });
-    const inUse = db.prepare(
-      'SELECT 1 FROM eval_cycles WHERE period_label=? AND eval_year=?'
-    ).get(p.period_label, p.eval_year);
-    if (inUse) return res.status(409).json({ error: '이미 사용 중인 기간은 삭제할 수 없습니다.' });
-    db.prepare('DELETE FROM eval_period_modes WHERE period_id=?').run(req.params.id);
-    db.prepare('DELETE FROM eval_periods WHERE id=?').run(req.params.id);
+    if (await evalPeriodRepo.checkInUse(p.period_label, p.eval_year))
+      return res.status(409).json({ error: '이미 사용 중인 기간은 삭제할 수 없습니다.' });
+    await evalPeriodRepo.deleteModes(req.params.id);
+    await evalPeriodRepo.delete(req.params.id);
     res.json({ success: true });
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가기간 전사 기본방식 조회/설정
-app.get('/api/eval-periods/:id/eval-mode', auth, adminOnly, (req, res) => {
+app.get('/api/eval-periods/:id/eval-mode', auth, adminOnly, async (req, res) => {
   try {
-    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    const period = await evalPeriodRepo.findById(req.params.id);
     if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
     res.json({ eval_mode: period.eval_mode || 'MBO', locked: period.locked });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/eval-periods/:id/eval-mode', auth, adminOnly, (req, res) => {
+app.post('/api/eval-periods/:id/eval-mode', auth, adminOnly, async (req, res) => {
   try {
     const { eval_mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(eval_mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
-    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    const period = await evalPeriodRepo.findById(req.params.id);
     if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
     if (period.locked && req.user.role !== 'master')
       return res.status(400).json({ error: '잠긴 평가 기간의 방식은 변경할 수 없습니다.' });
-    db.prepare('UPDATE eval_periods SET eval_mode=? WHERE id=?').run(eval_mode, req.params.id);
-    auditLog(req.user.sub, 'PERIOD_EVAL_MODE_CHANGED', req.params.id,
-      period.period_label, `평가기간 방식 변경: ${eval_mode}`, req.ip);
+    await evalPeriodRepo.setEvalMode(req.params.id, eval_mode);
+    auditLog(req.user.sub, 'PERIOD_EVAL_MODE_CHANGED', req.params.id, period.period_label, `평가기간 방식 변경: ${eval_mode}`, req.ip);
     const warning = period.locked ? '⚠ 잠긴 기간을 강제 변경했습니다.' : null;
     res.json({ success: true, warning });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 조직별 기간별 평가방식 조회 (organizations 기반)
-app.get('/api/eval-periods/:id/org-modes', auth, adminOnly, (req, res) => {
+app.get('/api/eval-periods/:id/org-modes', auth, adminOnly, async (req, res) => {
   try {
-    const orgs = db.prepare(`
-      SELECT o.id as org_id, o.name as org_name,
-        o.leader_id, u.name as leader_name,
-        COALESCE(epm.eval_mode, ep.eval_mode, 'MBO') as eval_mode,
-        epm.locked as org_locked
-      FROM organizations o
-      LEFT JOIN users u ON o.leader_id = u.id
-      LEFT JOIN eval_period_modes epm ON epm.manager_id=o.leader_id AND epm.period_id=?
-      LEFT JOIN eval_periods ep ON ep.id=?
-      WHERE o.is_active=1 AND o.leader_id IS NOT NULL
-      ORDER BY o.sort_order, o.id
-    `).all(req.params.id, req.params.id);
-    res.json(orgs);
+    res.json(await evalPeriodRepo.findOrgModes(req.params.id));
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 조직별 기간별 평가방식 설정
-app.post('/api/eval-periods/:id/org-modes', auth, adminOnly, (req, res) => {
+app.post('/api/eval-periods/:id/org-modes', auth, adminOnly, async (req, res) => {
   try {
     const { manager_id, eval_mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(eval_mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
-    const period = db.prepare('SELECT * FROM eval_periods WHERE id=?').get(req.params.id);
+    const period = await evalPeriodRepo.findById(req.params.id);
     if (!period) return res.status(404).json({ error: '기간을 찾을 수 없습니다.' });
-    const existing = db.prepare(
-      'SELECT locked FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-    ).get(req.params.id, manager_id);
+    const existing = await evalPeriodRepo.getOrgModeForManager(req.params.id, manager_id);
     if (existing?.locked && req.user.role !== 'master')
       return res.status(400).json({ error: '잠긴 조직의 방식은 변경할 수 없습니다.' });
-    db.prepare(`
-      INSERT INTO eval_period_modes(period_id, manager_id, eval_mode)
-      VALUES(?,?,?)
-      ON CONFLICT(period_id, manager_id) DO UPDATE SET eval_mode=?
-    `).run(req.params.id, manager_id, eval_mode, eval_mode);
-    const mgr = db.prepare('SELECT name FROM users WHERE id=?').get(manager_id);
-    auditLog(req.user.sub, 'ORG_EVAL_MODE_CHANGED', manager_id, mgr?.name,
-      `조직 평가방식 변경 (${period.period_label}): ${eval_mode}`, req.ip);
+    await evalPeriodRepo.setOrgMode(req.params.id, manager_id, eval_mode);
+    const mgr = await userRepo.findById(manager_id);
+    auditLog(req.user.sub, 'ORG_EVAL_MODE_CHANGED', manager_id, mgr?.name, `조직 평가방식 변경 (${period.period_label}): ${eval_mode}`, req.ip);
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 평가기간 방식 잠금 (admin+)
-app.post('/api/eval-periods/:id/lock', auth, adminOnly, (req, res) => {
+app.post('/api/eval-periods/:id/lock', auth, adminOnly, async (req, res) => {
   try {
-    db.prepare('UPDATE eval_periods SET locked=1 WHERE id=?').run(req.params.id);
-    db.prepare('UPDATE eval_period_modes SET locked=1 WHERE period_id=?').run(req.params.id);
-    const period = db.prepare('SELECT period_label FROM eval_periods WHERE id=?').get(req.params.id);
-    auditLog(req.user.sub, 'PERIOD_LOCKED', req.params.id,
-      period?.period_label, '평가기간 방식 잠금', req.ip);
+    await evalPeriodRepo.lockOrgMode(req.params.id);
+    const period = await evalPeriodRepo.findById(req.params.id);
+    auditLog(req.user.sub, 'PERIOD_LOCKED', req.params.id, period?.period_label, '평가기간 방식 잠금', req.ip);
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -1455,50 +1350,18 @@ app.post('/api/eval-periods/:id/lock', auth, adminOnly, (req, res) => {
 //   }
 // });
 
-// [PROMPT_45] Repository Pattern 적용
-app.get('/api/reports/:evalId', auth, (req, res) => {
+// [INFRA-A6] GET /api/reports/:evalId → evalCycleRepo + userRepo + $queryRawUnsafe (enc _flatten)
+app.get('/api/reports/:evalId', auth, async (req, res) => {
   try {
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(req.params.evalId);
+    const ev = await evalCycleRepo.findById(req.params.evalId);
     if (!ev) return res.status(404).json({ error: '없음' });
     const isAdmin = ['master','admin'].includes(req.user.role);
     const isOwner = String(ev.user_id) === String(req.user.sub);
-    const chain = [];
-    let cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(ev.user_id));
-    while (cur?.manager_id && chain.length < 5) {
-      chain.push(String(cur.manager_id));
-      cur = db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(cur.manager_id));
-    }
-    const isApprover = chain.includes(String(req.user.sub));
+    const isApprover = isOwner ? false : await userRepo.isInApproverChain(req.user.sub, ev.user_id);
     if (!isAdmin && !isOwner && !isApprover)
       return res.status(403).json({ error: '권한 없음' });
 
-    const rows = db.prepare(`
-      SELECT pr.id, pr.eval_id, pr.author_id, pr.content,
-             pr.goal_id, pr.round, pr.created_at, pr.updated_at,
-             u.name AS author_name,
-             g.name AS goal_name
-      FROM progress_reports pr
-      LEFT JOIN users u ON u.id = pr.author_id
-      LEFT JOIN goals g ON g.id = pr.goal_id
-      WHERE pr.eval_id = ?
-      ORDER BY pr.round ASC, pr.goal_id ASC, pr.created_at ASC
-    `).all(req.params.evalId);
-
-    rows.forEach(r => {
-      if (r.content) r.content = decrypt(r.content);
-      if (r.goal_name) r.goal_name = decrypt(r.goal_name);
-    });
-
-    const reportIds = rows.map(r => r.id);
-    if (reportIds.length) {
-      const files = db.prepare(
-        `SELECT id, report_id, file_name, file_type, file_size FROM report_files WHERE report_id IN (${reportIds.map(() => '?').join(',')})`
-      ).all(...reportIds);
-      rows.forEach(r => { r.files = files.filter(f => f.report_id === r.id); });
-    } else {
-      rows.forEach(r => { r.files = []; });
-    }
-
+    const rows = await progressReportRepo.findByEvalIdFull(req.params.evalId);
     res.json(rows);
   } catch(err) {
     console.error('[reports GET]', err);
@@ -1656,14 +1519,17 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, async (req, res
 // 내 평가 방식 조회 (조직장 설정 상속)
 // 활성 기간별 내 평가방식 목록
 // 내 소속 조직의 리더 체인 (org_id 기반)
-function getMyOrgLeaderChain(userId) {
+// [INFRA-A6] getMyOrgLeaderChain → async, userRepo + $queryRawUnsafe
+async function getMyOrgLeaderChainAsync(userId) {
   try {
-    const me = db.prepare('SELECT org_id FROM users WHERE id=?').get(userId);
+    const me = await userRepo.findById(userId);
     if (!me?.org_id) return [];
     const chain = [];
     let currentOrgId = me.org_id;
+    const prisma = evalPeriodRepo.prisma;
     for (let depth = 0; depth < 10; depth++) {
-      const org = db.prepare('SELECT * FROM organizations WHERE id=?').get(currentOrgId);
+      const rows = await prisma.$queryRawUnsafe('SELECT * FROM organizations WHERE id=? LIMIT 1', Number(currentOrgId));
+      const org = rows[0];
       if (!org) break;
       if (org.leader_id) chain.push(org.leader_id);
       if (!org.parent_id) break;
@@ -1673,64 +1539,50 @@ function getMyOrgLeaderChain(userId) {
   } catch(e) { return []; }
 }
 
-app.get('/api/eval-periods/my-modes', auth, (req, res) => {
+app.get('/api/eval-periods/my-modes', auth, async (req, res) => {
   try {
-    const activePeriods = db.prepare(
-      "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY eval_year DESC, id DESC"
-    ).all();
-    const leaderChain = getMyOrgLeaderChain(req.user.sub);
+    const activePeriods = await evalPeriodRepo.findActive();
+    const leaderChain = await getMyOrgLeaderChainAsync(req.user.sub);
 
-    const result = activePeriods.map(period => {
-      // org_id 기반 조직장 체인 탐색 (MBO가 아닌 명시적 설정만 반환)
+    const result = await Promise.all(activePeriods.map(async period => {
       for (const leaderId of leaderChain) {
-        const orgMode = db.prepare(
-          'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, leaderId);
+        const orgMode = await evalPeriodRepo.getOrgModeForManager(period.id, leaderId);
         if (orgMode && orgMode.eval_mode !== 'MBO') return {
           period_id: period.id, period_label: period.period_label,
           eval_year: period.eval_year, mode: orgMode.eval_mode, source: 'org_period'
         };
       }
-      // 기간 전사 기본값
       return {
         period_id: period.id, period_label: period.period_label,
         eval_year: period.eval_year, mode: period.eval_mode || 'MBO', source: 'period'
       };
-    });
+    }));
 
     res.json(result);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/settings/my-eval-mode', auth, (req, res) => {
+app.get('/api/settings/my-eval-mode', auth, async (req, res) => {
   try {
-    const activePeriods = db.prepare(
-      "SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC"
-    ).all();
+    const activePeriods = await evalPeriodRepo.findActive();
 
     if (!activePeriods.length) {
-      const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
-      return res.json({ mode: global?.value || 'MBO', source: 'global' });
+      return res.json({ mode: getSetting('eval_mode', 'MBO'), source: 'global' });
     }
 
-    const leaderChain = getMyOrgLeaderChain(req.user.sub);
+    const leaderChain = await getMyOrgLeaderChainAsync(req.user.sub);
 
     for (const period of activePeriods) {
-      // org_id 기반 조직장 체인 탐색
       for (const leaderId of leaderChain) {
-        const orgMode = db.prepare(
-          'SELECT eval_mode FROM eval_period_modes WHERE period_id=? AND manager_id=?'
-        ).get(period.id, leaderId);
+        const orgMode = await evalPeriodRepo.getOrgModeForManager(period.id, leaderId);
         if (orgMode && orgMode.eval_mode !== 'MBO')
           return res.json({ mode: orgMode.eval_mode, source: 'org_period', period: period.period_label });
       }
-      // 기간 전사 기본값
       if (period.eval_mode && period.eval_mode !== 'MBO')
         return res.json({ mode: period.eval_mode, source: 'period', period: period.period_label });
     }
 
-    const global = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
-    res.json({ mode: global?.value || 'MBO', source: 'global' });
+    res.json({ mode: getSetting('eval_mode', 'MBO'), source: 'global' });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 

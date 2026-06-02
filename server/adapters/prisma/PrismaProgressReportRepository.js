@@ -136,6 +136,43 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     });
   }
 
+  // [INFRA-A6] goal_id/round/goal_name 포함 전체 조회 (enc _flatten 경유)
+  async findByEvalIdFull(evalId) {
+    const rows = await this.prisma.$queryRawUnsafe(`
+      SELECT pr.id, pr.eval_id, pr.author_id, pr.content,
+             pr.goal_id, pr.round, pr.created_at, pr.updated_at,
+             u.name AS author_name, g.name AS goal_name
+      FROM progress_reports pr
+      LEFT JOIN users u ON u.id = pr.author_id
+      LEFT JOIN goals g ON g.id = pr.goal_id
+      WHERE pr.eval_id = ?
+      ORDER BY pr.round ASC, pr.goal_id ASC, pr.created_at ASC
+    `, Number(evalId));
+
+    const reportIds = rows.map(r => Number(r.id));
+    let fileMap = {};
+    if (reportIds.length) {
+      const files = await this.prisma.$queryRawUnsafe(
+        `SELECT id, report_id, file_name, file_type, file_size FROM report_files WHERE report_id IN (${reportIds.map(() => '?').join(',')})`,
+        ...reportIds
+      );
+      files.forEach(f => {
+        const rid = Number(f.report_id);
+        if (!fileMap[rid]) fileMap[rid] = [];
+        fileMap[rid].push(f);
+      });
+    }
+
+    return rows.map(r => ({
+      ...r,
+      id:        Number(r.id),
+      eval_id:   Number(r.eval_id),
+      content:   r.content ? this._decrypt(r.content) : '',
+      goal_name: r.goal_name ? this._decrypt(r.goal_name) : null,
+      files:     fileMap[Number(r.id)] || [],
+    }));
+  }
+
   // 보고 회차 카운트 (Prisma client에 round 미반영 → rawUnsafe)
   async getMaxRound(evalId, authorId) {
     const rows = await this.prisma.$queryRawUnsafe(
