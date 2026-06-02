@@ -152,6 +152,50 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
     return evs.map(e => this._flatten(e));
   }
 
+  async findLatestByUser(userId) {
+    const ev = await this.prisma.evalCycle.findFirst({
+      where: { userId: Number(userId) },
+      orderBy: { created_at: 'desc' },
+    });
+    return this._flatten(ev);
+  }
+
+  async findFinalPendingByManager(managerId) {
+    const rows = await this.prisma.$queryRawUnsafe(`
+      SELECT e.id, e.user_id, e.period_label, e.eval_year, e.phase, e.self_reason, e.reject_reason, e.locked,
+             u.name as user_name, u.dept, u.grade, u.title, 0 as is_second
+      FROM eval_cycles e
+      JOIN users u ON e.user_id = u.id
+      WHERE e.phase IN ('final_mgr_pending','final_mgr2_pending')
+        AND u.manager_id = ?
+      ORDER BY e.created_at DESC
+    `, Number(managerId));
+    return rows.map(r => ({
+      ...r,
+      self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
+      reject_reason: r.reject_reason ? this._decrypt(r.reject_reason) : '',
+    }));
+  }
+
+  async findFinalPending2ndByManager(managerId) {
+    const rows = await this.prisma.$queryRawUnsafe(`
+      SELECT e.id, e.user_id, e.period_label, e.eval_year, e.phase, e.self_reason, e.reject_reason, e.locked,
+             u.name as user_name, u.dept, u.grade, u.title, 1 as is_second
+      FROM eval_cycles e
+      JOIN users u ON e.user_id = u.id
+      JOIN final_evaluations fe ON fe.eval_id = e.id
+      WHERE e.phase IN ('final_mgr2_pending')
+        AND fe.mgr_done = 1
+        AND u.manager_id IN (SELECT id FROM users WHERE manager_id = ?)
+      ORDER BY e.created_at DESC
+    `, Number(managerId));
+    return rows.map(r => ({
+      ...r,
+      self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
+      reject_reason: r.reject_reason ? this._decrypt(r.reject_reason) : '',
+    }));
+  }
+
   async setApproved(id) {
     await this.prisma.evalCycle.update({
       where: { id: Number(id) },

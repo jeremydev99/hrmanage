@@ -1532,11 +1532,11 @@ app.get('/api/reports/:evalId', auth, (req, res) => {
 //   }
 // });
 
-// [PROMPT 64A] 목표별 보고 + 회차 제한 (신구 형식 호환)
-app.post('/api/reports/:evalId', auth, (req, res) => {
+// [INFRA-A5] 목표별 보고 + 회차 제한 — progressReportRepo.createMulti (tx 캡슐화, enc _flatten)
+app.post('/api/reports/:evalId', auth, async (req, res) => {
   try {
     const evalId = req.params.evalId;
-    const ev = db.prepare('SELECT * FROM eval_cycles WHERE id=?').get(evalId);
+    const ev = await evalCycleRepo.findById(evalId);
     if (!ev || String(ev.user_id) !== String(req.user.sub))
       return res.status(403).json({ error: '본인만 작성 가능' });
     if (!['approved','final_self','final_mgr_pending','final_done'].includes(ev.phase))
@@ -1544,10 +1544,7 @@ app.post('/api/reports/:evalId', auth, (req, res) => {
 
     // 회차 제한 확인
     const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
-    const maxRoundRow = db.prepare(
-      'SELECT COALESCE(MAX(round), 0) AS max_round FROM progress_reports WHERE eval_id = ? AND author_id = ?'
-    ).get(evalId, req.user.sub);
-    const currentRound = maxRoundRow.max_round;
+    const currentRound = await progressReportRepo.getMaxRound(evalId, req.user.sub);
     if (feedbackLimit > 0 && currentRound >= feedbackLimit) {
       return res.status(400).json({
         error: `보고 가능 횟수를 초과했습니다. (제한: ${feedbackLimit}회, 현재: ${currentRound}회)`
@@ -1556,53 +1553,14 @@ app.post('/api/reports/:evalId', auth, (req, res) => {
     const newRound = currentRound + 1;
 
     const { content, items, overall, files } = req.body;
-    const fileList = Array.isArray(files) ? files : [];
-
-    const tx = db.transaction(() => {
-      const insertedIds = [];
-
-      if (Array.isArray(items)) {
-        // 신규 형식: items 배열 (목표별) — items가 빈 배열이어도 overall만 있으면 허용
-        for (const item of items) {
-          if (!item.content?.trim()) continue;
-          const r = db.prepare(
-            "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, ?, ?)"
-          ).run(evalId, req.user.sub, encrypt(item.content.trim()), item.goal_id || null, newRound);
-          insertedIds.push(r.lastInsertRowid);
-        }
-        if (overall?.trim()) {
-          const r = db.prepare(
-            "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, NULL, ?)"
-          ).run(evalId, req.user.sub, encrypt(overall.trim()), newRound);
-          insertedIds.push(r.lastInsertRowid);
-        }
-        if (insertedIds.length === 0 && !content) {
-          throw new Error('보고 내용이 비어있습니다.');
-        }
-      }
-      if (!Array.isArray(items) && content) {
-        // 레거시 형식: content 단일 문자열 (호환 처리)
-        const r = db.prepare(
-          "INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, NULL, ?)"
-        ).run(evalId, req.user.sub, encrypt(content || ''), newRound);
-        insertedIds.push(r.lastInsertRowid);
-      }
-      if (insertedIds.length === 0) {
-        throw new Error('보고 내용이 비어있습니다.');
-      }
-
-      if (fileList.length && insertedIds.length) {
-        for (const f of fileList) {
-          db.prepare(
-            'INSERT INTO report_files (report_id, file_name, file_data, file_type, file_size) VALUES (?, ?, ?, ?, ?)'
-          ).run(insertedIds[0], f.name, f.data, f.type, f.size);
-        }
-      }
-
-      return { insertedIds, round: newRound };
+    const result = await progressReportRepo.createMulti({
+      eval_id:   evalId,
+      author_id: req.user.sub,
+      items,
+      overall:   overall || ((!Array.isArray(items) && content) ? content : ''),
+      round:     newRound,
+      files:     Array.isArray(files) ? files : [],
     });
-
-    const result = tx();
     auditLog(req.user.sub, 'REPORT_SUBMITTED', ev.user_id, null,
       `중간 보고 작성 (${ev.period_label||''}) round=${newRound}`, req.ip);
     res.json({ ok: true, round: result.round, count: result.insertedIds.length });
@@ -1958,42 +1916,21 @@ app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
   }
 });
 
-// 특정 직원 평가 상세 조회 (admin+)
-app.get('/api/admin/eval-detail/:userId', auth, adminOnly, (req, res) => {
+// 특정 직원 평가 상세 조회 [INFRA-A5: 어댑터 async 전환, enc _flatten 경유]
+app.get('/api/admin/eval-detail/:userId', auth, adminOnly, async (req, res) => {
   try {
-    const u = db.prepare('SELECT id,name,dept,title FROM users WHERE id=?').get(req.params.userId);
+    const u = await userRepo.findById(req.params.userId);
     if (!u) return res.status(404).json({ error: '사용자 없음' });
 
-    const ev = db.prepare(
-      'SELECT * FROM eval_cycles WHERE user_id=? ORDER BY created_at DESC LIMIT 1'
-    ).get(req.params.userId);
-
+    const ev = await evalCycleRepo.findLatestByUser(req.params.userId);
     if (!ev) return res.json({ user: u, eval: null, goals: [], feedbacks: [], finalEval: null, approvals: [] });
 
-    const goals = db.prepare(
-      'SELECT g.*, c.name as cat_name, c.color, c.text_color FROM goals g JOIN goal_categories c ON g.category_id = c.id WHERE g.eval_id=? ORDER BY c.sort_order, g.sort_order'
-    ).all(ev.id).map(g => ({ ...g, name: decrypt(g.name), kpi: decrypt(g.kpi) }));
-
-    const fbs = db.prepare(
-      'SELECT f.*, u2.name as author_name FROM feedbacks f JOIN users u2 ON f.author_id = u2.id WHERE f.eval_id=? ORDER BY f.created_at DESC'
-    ).all(ev.id).map(f => ({
-      ...f,
-      overall_note: decrypt(f.overall_note),
-      items: db.prepare(
-        'SELECT fi.*, g.name as goal_name_enc FROM feedback_items fi JOIN goals g ON fi.goal_id = g.id WHERE fi.feedback_id=?'
-      ).all(f.id).map(it => ({ ...it, note: decrypt(it.note), goal_name: decrypt(it.goal_name_enc) })),
-    }));
-
-    const fe = db.prepare('SELECT * FROM final_evaluations WHERE eval_id=?').get(ev.id);
-    if (fe) {
-      fe.self_note = decrypt(fe.self_note);
-      fe.mgr_note  = decrypt(fe.mgr_note);
-      fe.scores    = db.prepare('SELECT * FROM final_eval_scores WHERE final_id=?').all(fe.id);
-    }
-
-    const approvals = db.prepare(
-      'SELECT a.*, u3.name as approver_name, u3.title as approver_title FROM goal_approvals a JOIN users u3 ON a.approver_id = u3.id WHERE a.eval_id=? ORDER BY a.level'
-    ).all(ev.id).map(a => ({ ...a, note: decrypt(a.note) }));
+    const [goals, fbs, fe, approvals] = await Promise.all([
+      goalRepo.findByEvalId(ev.id),
+      feedbackRepo.findByEvalId(ev.id),
+      finalEvalRepo.findByEvalId(ev.id),
+      approvalRepo.findByEvalIdOrdered(ev.id),
+    ]);
 
     res.json({ user: u, eval: ev, goals, feedbacks: fbs, finalEval: fe || null, approvals });
   } catch(err) {
@@ -2004,12 +1941,9 @@ app.get('/api/admin/eval-detail/:userId', auth, adminOnly, (req, res) => {
 
 // ── 성과관리 API ──────────────────────────────────────────
 
-// 대시보드 계층 설정
+// 대시보드 계층 설정 [INFRA-A5: getSetting 헬퍼 경유]
 app.get('/api/settings/dashboard-depth', auth, (req, res) => {
-  try {
-    const s = db.prepare("SELECT value FROM app_settings WHERE key='dashboard_depth'").get();
-    res.json({ depth: parseInt(s?.value || '2') });
-  } catch(err) { res.status(500).json({ error: err.message }); }
+  res.json({ depth: parseInt(getSetting('dashboard_depth', '2')) });
 });
 
 app.post('/api/settings/dashboard-depth', auth, adminOnly, (req, res) => {
@@ -2017,12 +1951,7 @@ app.post('/api/settings/dashboard-depth', auth, adminOnly, (req, res) => {
     const depth = parseInt(req.body.depth);
     if (![1,2,3].includes(depth))
       return res.status(400).json({ error: '1~3단계만 설정 가능합니다. (4단계 미지원)' });
-    db.prepare(`
-      INSERT INTO app_settings(key,value,updated_by,updated_at)
-      VALUES('dashboard_depth',?,?,datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET
-        value=excluded.value, updated_by=excluded.updated_by, updated_at=excluded.updated_at
-    `).run(depth.toString(), req.user.sub);
+    upsertSettingMeta('dashboard_depth', depth.toString(), req.user.sub); // [INFRA-A5]
     auditLog(req.user.sub, 'DASHBOARD_DEPTH_CHANGED', null, null,
       `대시보드 계층 변경: ${depth}단계`, req.ip);
     res.json({ success: true, depth });
@@ -2103,9 +2032,7 @@ app.get('/api/perf/team-summary', auth, (req, res) => {
   try {
     const { period_id } = req.query;
     const userId = req.user.sub;
-    const maxDepth = parseInt(
-      db.prepare("SELECT value FROM app_settings WHERE key='dashboard_depth'").get()?.value || '2'
-    );
+    const maxDepth = parseInt(getSetting('dashboard_depth', '2')); // [INFRA-A5]
 
     const myOrg = db.prepare('SELECT * FROM organizations WHERE leader_id=? AND is_active=1').get(userId);
     if (!myOrg) return res.json({ is_leader: false, teams: [] });
@@ -2876,34 +2803,15 @@ app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
   }
 });
 
-// 내가 직속 상사(또는 2차 평가자)인 final_mgr_pending eval 목록
-app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
+// 내가 직속 상사(또는 2차 평가자)인 final_mgr_pending eval 목록 [INFRA-A5]
+app.get('/api/evals/my-mgr-pending', auth, async (req, res) => {
   try {
-    // 1차: 내 직속 부하의 eval (자기평가 완료 이후 단계 전체)
-    const directRows = db.prepare(
-      `SELECT e.*,u.name as user_name,u.dept,u.grade,u.title,0 as is_second
-       FROM eval_cycles e
-       JOIN users u ON e.user_id=u.id
-       WHERE e.phase IN ('final_mgr_pending','final_mgr2_pending')
-       AND u.manager_id=?
-       ORDER BY e.created_at DESC`
-    ).all(req.user.sub);
+    const directRows = await evalCycleRepo.findFinalPendingByManager(req.user.sub);
 
-    // 2차 최종평가 설정 확인
     const secondEnabled = getSetting('second_final', '0') === '1';
     let secondRows = [];
     if (secondEnabled) {
-      // 2차: 1차 평가자가 이미 평가 완료한 경우만 표시
-      secondRows = db.prepare(
-        `SELECT e.*,u.name as user_name,u.dept,u.grade,u.title,1 as is_second
-         FROM eval_cycles e
-         JOIN users u ON e.user_id=u.id
-         JOIN final_evaluations fe ON fe.eval_id=e.id
-         WHERE e.phase IN ('final_mgr2_pending')
-         AND fe.mgr_done=1
-         AND u.manager_id IN (SELECT id FROM users WHERE manager_id=?)
-         ORDER BY e.created_at DESC`
-      ).all(req.user.sub);
+      secondRows = await evalCycleRepo.findFinalPending2ndByManager(req.user.sub);
     }
 
     const seen = new Set(directRows.map(r => r.id));
@@ -2911,11 +2819,7 @@ app.get('/api/evals/my-mgr-pending', auth, (req, res) => {
       ...directRows,
       ...secondRows.filter(r => !seen.has(r.id)),
     ];
-    combined.forEach(r => {
-      r.self_reason   = r.self_reason   ? decrypt(r.self_reason)   : '';
-      r.reject_reason = r.reject_reason ? decrypt(r.reject_reason) : '';
-    });
-    res.json(combined);
+    res.json(combined); // enc 복호화는 findFinalPending* 메서드에서 처리됨
   } catch(err) {
     console.error('[my-mgr-pending]', err);
     res.status(500).json({ error: err.message });

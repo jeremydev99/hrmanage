@@ -96,6 +96,55 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     return reports.map(r => this._flatten(r, authorMap[r.authorId], filesByReport[r.id] || []));
   }
 
+  // [INFRA-A5] items 배열 + round 지원 — tx 캡슐화 (Prisma $transaction + rawUnsafe for round/goalId)
+  async createMulti({ eval_id, author_id, items, overall, round, files }) {
+    const newRound = Number(round) || 1;
+    return await this.prisma.$transaction(async (tx) => {
+      const insertedIds = [];
+
+      const insertRow = async (content, goalId) => {
+        const rows = await tx.$queryRawUnsafe(
+          'INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, ?, ?) RETURNING id',
+          Number(eval_id), Number(author_id), this._encrypt(content), goalId || null, newRound
+        );
+        const id = rows[0]?.id;
+        if (id) insertedIds.push(id);
+      };
+
+      if (Array.isArray(items)) {
+        for (const item of items) {
+          if (!item.content?.trim()) continue;
+          await insertRow(item.content.trim(), item.goal_id || null);
+        }
+        if (overall?.trim()) await insertRow(overall.trim(), null);
+      } else if (overall?.trim()) {
+        await insertRow(overall.trim(), null);
+      }
+
+      if (insertedIds.length === 0) throw new Error('보고 내용이 비어있습니다.');
+
+      const fileList = Array.isArray(files) ? files : [];
+      if (fileList.length && insertedIds.length) {
+        for (const f of fileList) {
+          await tx.reportFile.create({
+            data: { reportId: insertedIds[0], fileName: f.name, fileData: f.data, file_type: f.type, file_size: f.size },
+          });
+        }
+      }
+
+      return { insertedIds, round: newRound };
+    });
+  }
+
+  // 보고 회차 카운트 (Prisma client에 round 미반영 → rawUnsafe)
+  async getMaxRound(evalId, authorId) {
+    const rows = await this.prisma.$queryRawUnsafe(
+      'SELECT COALESCE(MAX(round), 0) AS max_round FROM progress_reports WHERE eval_id = ? AND author_id = ?',
+      Number(evalId), Number(authorId)
+    );
+    return Number(rows[0]?.max_round || 0);
+  }
+
   async create(data) {
     return await this.prisma.$transaction(async (tx) => {
       const created = await tx.progressReport.create({
