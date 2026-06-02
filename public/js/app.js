@@ -634,6 +634,23 @@ function renderTeamPerfView(teamData) {
     </div>`).join('')}`;
 }
 
+/* ── 평가 기간 정렬 헬퍼 (전역, 여러 화면에서 재사용) ── */
+function periodSortKey(p) {
+  const year = parseInt(((p.eval_year || p.period_label || '')).match(/(\d{4})/)?.[1] || 0);
+  const label = p.period_label || '';
+  let endMonth = 0, typeOrder = 1;
+  if (label.includes('하반기'))      { endMonth = 12; typeOrder = 0; }
+  else if (label.includes('4분기'))  { endMonth = 12; typeOrder = 1; }
+  else if (label.includes('3분기'))  { endMonth =  9; typeOrder = 1; }
+  else if (label.includes('상반기')) { endMonth =  6; typeOrder = 0; }
+  else if (label.includes('2분기'))  { endMonth =  6; typeOrder = 1; }
+  else if (label.includes('1분기'))  { endMonth =  3; typeOrder = 1; }
+  return year * 100000 + endMonth * 10 + (10 - typeOrder);
+}
+function sortPeriodsDesc(periods) {
+  return [...(periods || [])].sort((a, b) => periodSortKey(b) - periodSortKey(a));
+}
+
 function switchPerfView(view) {
   ['my','team','org'].forEach(v => {
     const el  = document.getElementById('perf-view-'+v);

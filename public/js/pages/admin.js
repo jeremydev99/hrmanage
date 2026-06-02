@@ -2205,10 +2205,12 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
     if (yearFrom !== null) qParts.push('year_from=' + yearFrom);
     if (yearTo   !== null) qParts.push('year_to='   + yearTo);
     if (includeInactive)   qParts.push('include_inactive=true');
-    const [periods, gradePolicies] = await Promise.all([
+    let [rawPeriods, gradePolicies] = await Promise.all([
       API.get('/eval-periods' + (qParts.length ? '?' + qParts.join('&') : '')),
       API.get('/grade-policies').catch(() => []),
     ]);
+    // 최신 분기 우선 정렬 (하반기→4분기→3분기→상반기→2분기→1분기, 연도 DESC)
+    const periods = typeof sortPeriodsDesc === 'function' ? sortPeriodsDesc(rawPeriods) : rawPeriods;
 
     el.innerHTML = '';
 

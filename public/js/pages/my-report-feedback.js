@@ -6,10 +6,15 @@ Pages.myReportFeedback = async function() {
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
     const evs = await API.get('/evals');
-    const myEvs = evs.filter(e =>
-      String(e.user_id) === String(App.user.id) &&
-      ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
-    );
+    const myEvs = (typeof sortPeriodsDesc === 'function'
+      ? sortPeriodsDesc(evs.filter(e =>
+          String(e.user_id) === String(App.user.id) &&
+          ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+        ))
+      : evs.filter(e =>
+          String(e.user_id) === String(App.user.id) &&
+          ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+        ));
 
     if (!myEvs.length) {
       area.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
@@ -280,15 +285,49 @@ function renderSummaryCard(legacySummary, newSummaryReports, feedbacks) {
     ...summaryFbs
   ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
+  // 종합 카드 더보기 캐시 (goal 카드와 동일 패턴)
+  window._rfSummaryItems = window._rfSummaryItems || {};
+  const summaryKey = 'summary';
   const shown = allItems.slice(0, 10);
+  const hiddenSummary = allItems.slice(10);
+  if (hiddenSummary.length) window._rfSummaryItems[summaryKey] = hiddenSummary;
 
   return `<div class="card summary-card">
     <div class="card-header"><div><div class="card-header-t">📋 종합 보고·피드백</div></div></div>
-    ${allItems.length === 0
-      ? '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">아직 종합 의견이 없습니다.</div>'
-      : shown.map(item => item.type === 'report' ? renderReportItem(item) : renderFeedbackItem(item)).join('')}
-    ${allItems.length > 10 ? `<div class="more-controls"><button class="btn btn-ghost btn-sm">더보기 (${allItems.length-10}건)</button></div>` : ''}
+    <div id="summary-items">
+      ${allItems.length === 0
+        ? '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">아직 종합 의견이 없습니다.</div>'
+        : shown.map(item => item.type === 'report' ? renderReportItem(item) : renderFeedbackItem(item)).join('')}
+    </div>
+    ${hiddenSummary.length ? `<div class="more-controls" id="more-summary">
+      <button class="btn btn-ghost btn-sm" onclick="showMoreSummary()">더보기 (${hiddenSummary.length}건 더)</button>
+    </div>` : ''}
   </div>`;
+}
+
+function showMoreSummary() {
+  try {
+    const cache = window._rfSummaryItems || {};
+    const hidden = cache['summary'];
+    if (!hidden || !hidden.length) return;
+    const container = document.getElementById('summary-items');
+    if (!container) return;
+    const next = hidden.slice(0, 10);
+    next.forEach(item => {
+      container.insertAdjacentHTML('beforeend',
+        item.type === 'report' ? renderReportItem(item) : renderFeedbackItem(item)
+      );
+    });
+    const remaining = hidden.slice(10);
+    cache['summary'] = remaining;
+    const moreDiv = document.getElementById('more-summary');
+    if (!moreDiv) return;
+    if (remaining.length === 0) {
+      moreDiv.remove();
+    } else {
+      moreDiv.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="showMoreSummary()">더보기 (${remaining.length}건 더)</button>`;
+    }
+  } catch(e) { console.warn('showMoreSummary error:', e); }
 }
 
 /* ── 보고 작성 폼 ── */
