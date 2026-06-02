@@ -95,7 +95,24 @@ class PrismaUserRepository extends UserRepository {
     return false;
   }
 
-  // ── 64A: users 도메인 전환을 위한 추가 메서드 ──────────────
+  // ── INFRA-A2: auth 도메인 전환을 위한 추가 메서드 ──────────
+
+  async createSignup({ name, email, passwordHash, dept, title, signupNote }) {
+    const user = await this.prisma.user.create({
+      data: {
+        name, email, passwordHash,
+        role: 'user',
+        dept: dept || '',
+        title: title || '',
+        accountStatus: 'pending',
+        signupNote: signupNote || '',
+        isActive: 0,
+      },
+    });
+    return user.id;
+  }
+
+  // ── INFRA-A1: users 도메인 전환을 위한 추가 메서드 ──────────────
 
   async findAll() {
     const users = await this.prisma.user.findMany({ orderBy: { id: 'asc' } });

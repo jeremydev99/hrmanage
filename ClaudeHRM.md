@@ -551,7 +551,9 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 **현황** (2026-06-02):
 - server/index.js `better-sqlite3` 직접 호출: 286 → **272건** (A1 완료: users 14건 → userRepo async)
-- A1 완료 도메인: users (findAll, findSignupRequests, createAdmin, updatePartial, approveSignup, rejectSignup, toggleActive, getApproverChain 신설)
+- A1 완료 도메인: users 14건 (findAll, findSignupRequests, createAdmin, updatePartial, approveSignup, rejectSignup, toggleActive, getApproverChain 신설)
+- A2 완료 도메인: auth 3건(createSignup 신설) + notice/settings 6건(getSettingRow/upsertSettingMeta 헬퍼) + settings-simple 2건(getSetting/setSetting 경유) = 11건 전환
+- A2 전수 재분류 결과: 246 실 호출(비주석), 나머지 26건은 주석처리 코드
 - Prisma 어댑터는 설계되어 있으나 실제 쿼리 경로에서 사용 중인 곳은 0건
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
 - Prisma schema.prisma는 현재 provider="sqlite" 유지
@@ -588,6 +590,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | INFRA-2A-MIGRATE-A2 — 286 전수 재분류(246 실 호출) + auth/notice/settings 11건 async 전환, db.prepare 272→263, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A2) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A1 — users 도메인 14건 async 전환(userRepo 경유), db.prepare 286→272, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A1) | Claude Code |
 | 2026-06-02 | 64B-FIX3 — 종합 카드 더보기 onclick 누락 fix + 평가 기간 관리 탭 정렬 + sortPeriodsDesc 전역 헬퍼 (PROMPT 64B-FIX3) | Claude Code |
 | 2026-06-02 | 64B-FIX2 — 더보기 onclick JSON 취약점 fix(window 캐시) + 피드백 회차 시간적 배정 + CP949 깨진 보고 cleanup 스크립트 (PROMPT 64B-FIX2) | Claude Code |

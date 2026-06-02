@@ -163,15 +163,12 @@ function masterOnly(req, res, next) {
 }
 
 // 공지사항 조회 (인증 불필요 — 로그인 화면에서도 사용)
-app.get('/api/notice', (req, res) => {
+// [INFRA-A2] notice/settings 6건 → getSettingRow/upsertSettingMeta/userRepo async 전환
+app.get('/api/notice', async (req, res) => {
   try {
-    const notice = db.prepare(
-      "SELECT value, updated_by, updated_at FROM app_settings WHERE key='notice'"
-    ).get();
+    const notice = getSettingRow('notice');
     if (!notice) return res.json({ content: '', author_name: '', author_title: '', updated_at: '' });
-    const author = notice.updated_by
-      ? db.prepare('SELECT name, title FROM users WHERE id=?').get(notice.updated_by)
-      : null;
+    const author = notice.updated_by ? await userRepo.findById(notice.updated_by) : null;
     res.json({
       content: notice.value || '',
       author_name: author?.name || '',
@@ -182,20 +179,13 @@ app.get('/api/notice', (req, res) => {
 });
 
 // 공지사항 수정 (admin+)
-app.post('/api/notice', auth, adminOnly, (req, res) => {
+app.post('/api/notice', auth, adminOnly, async (req, res) => {
   try {
     const { content } = req.body;
-    db.prepare(`
-      INSERT INTO app_settings(key, value, updated_by, updated_at)
-      VALUES('notice', ?, ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET
-        value=excluded.value,
-        updated_by=excluded.updated_by,
-        updated_at=excluded.updated_at
-    `).run(content || '', req.user.sub);
+    upsertSettingMeta('notice', content || '', req.user.sub);
     auditLog(req.user.sub, 'NOTICE_UPDATED', null, null,
       `공지사항 수정 (${(content||'').length}자)`, req.ip);
-    const author = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
+    const author = await userRepo.findById(req.user.sub);
     res.json({ success: true, author_name: author?.name });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
@@ -203,8 +193,8 @@ app.post('/api/notice', auth, adminOnly, (req, res) => {
 // 세션 정책 조회
 app.get('/api/settings/session-policy', auth, (req, res) => {
   try {
-    const policy = db.prepare("SELECT value FROM app_settings WHERE key='session_policy'").get();
-    res.json(JSON.parse(policy?.value || '{"close_on_browser_close":false,"timeout_minutes":480}'));
+    const value = getSetting('session_policy', null);
+    res.json(JSON.parse(value || '{"close_on_browser_close":false,"timeout_minutes":480}'));
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -216,12 +206,7 @@ app.post('/api/settings/session-policy', auth, masterOnly, (req, res) => {
     if (safeTimeout < 1)
       return res.status(400).json({ error: '최소 1분 이상이어야 합니다.' });
     const policy = { close_on_browser_close: !!close_on_browser_close, timeout_minutes: safeTimeout };
-    db.prepare(`
-      INSERT INTO app_settings(key,value,updated_by,updated_at)
-      VALUES('session_policy',?,?,datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET
-        value=excluded.value, updated_by=excluded.updated_by, updated_at=excluded.updated_at
-    `).run(JSON.stringify(policy), req.user.sub);
+    upsertSettingMeta('session_policy', JSON.stringify(policy), req.user.sub);
     auditLog(req.user.sub, 'SESSION_POLICY_CHANGED', null, null,
       `세션 정책 변경: 브라우저종료=${policy.close_on_browser_close}, 만료=${safeTimeout}분`, req.ip);
     res.json({ success: true, policy });
@@ -231,35 +216,38 @@ app.post('/api/settings/session-policy', auth, masterOnly, (req, res) => {
 // ════════════════════════════════════════════════════════════
 //  AUTH API
 // ════════════════════════════════════════════════════════════
-app.post('/api/auth/login', (req, res) => {
+// [INFRA-A2] auth 3건 → userRepo async 전환
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE email=? AND is_active=1').get(email);
-  if (!user || !bcrypt.compareSync(password, user.password_hash))
-    return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
-  if (user.account_status === 'pending')
-    return res.status(403).json({ error: '가입 승인 대기 중입니다. 관리자의 승인을 기다려주세요.' });
-  if (user.account_status === 'rejected')
-    return res.status(403).json({ error: '가입이 거절되었습니다. 관리자에게 문의하세요.' });
-  const token = jwt.sign(
-    { sub: user.id, email: user.email, role: user.role, name: user.name },
-    JWT_SECRET, { expiresIn: '8h' }
-  );
-  auditLog(user.id, 'LOGIN', user.id, user.name, `로그인 (${user.role})`, req.ip);
-  res.json({ token, user: { id: user.id, name: user.name, email: user.email,
-    role: user.role, dept: user.dept, title: user.title, manager_id: user.manager_id } });
+  try {
+    const user = await userRepo.findByEmail(email);
+    if (!user || !user.is_active || !bcrypt.compareSync(password, user.password_hash))
+      return res.status(401).json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' });
+    if (user.account_status === 'pending')
+      return res.status(403).json({ error: '가입 승인 대기 중입니다. 관리자의 승인을 기다려주세요.' });
+    if (user.account_status === 'rejected')
+      return res.status(403).json({ error: '가입이 거절되었습니다. 관리자에게 문의하세요.' });
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, role: user.role, name: user.name },
+      JWT_SECRET, { expiresIn: '8h' }
+    );
+    auditLog(user.id, 'LOGIN', user.id, user.name, `로그인 (${user.role})`, req.ip);
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email,
+      role: user.role, dept: user.dept, title: user.title, manager_id: user.manager_id } });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 신규 가입 신청 (인증 불필요 — 누구나 신청 가능)
-app.post('/api/auth/signup', (req, res) => {
+app.post('/api/auth/signup', async (req, res) => {
   const { name, email, password, dept, title, signup_note } = req.body;
   if (!name || !email || !password) return res.status(400).json({ error: '이름, 이메일, 비밀번호는 필수입니다.' });
-  const exists = db.prepare('SELECT 1 FROM users WHERE email=?').get(email);
-  if (exists) return res.status(409).json({ error: '이미 사용 중인 이메일입니다.' });
-  const hash = bcrypt.hashSync(password, 10);
-  const r = db.prepare(
-    'INSERT INTO users(name,email,password_hash,role,dept,title,account_status,signup_note,is_active) VALUES(?,?,?,?,?,?,?,?,?)'
-  ).run(name, email, hash, 'user', dept||'', title||'', 'pending', signup_note||'', 0);
-  res.json({ success: true, message: '가입 신청이 완료되었습니다. 관리자 승인 후 로그인 가능합니다.' });
+  try {
+    const exists = await userRepo.findByEmail(email);
+    if (exists) return res.status(409).json({ error: '이미 사용 중인 이메일입니다.' });
+    const hash = bcrypt.hashSync(password, 10);
+    await userRepo.createSignup({ name, email, passwordHash: hash, dept, title, signupNote: signup_note });
+    res.json({ success: true, message: '가입 신청이 완료되었습니다. 관리자 승인 후 로그인 가능합니다.' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // [PROMPT_36-4] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
@@ -2865,6 +2853,25 @@ function setSetting(key, value) {
     else db.prepare("INSERT INTO app_settings(key,value) VALUES(?,?)").run(key, value);
   } catch(e) { console.error('[setSetting]', e.message); }
 }
+// app_settings 전체 행 반환 (value + updated_by + updated_at 포함)
+function getSettingRow(key) {
+  try {
+    return db.prepare("SELECT value, updated_by, updated_at FROM app_settings WHERE key=?").get(key);
+  } catch(e) { return null; }
+}
+// app_settings upsert (updated_by·updated_at 포함) — notice/session-policy 등
+function upsertSettingMeta(key, value, userId) {
+  try {
+    db.prepare(`
+      INSERT INTO app_settings(key, value, updated_by, updated_at)
+      VALUES(?, ?, ?, datetime('now'))
+      ON CONFLICT(key) DO UPDATE SET
+        value=excluded.value,
+        updated_by=excluded.updated_by,
+        updated_at=excluded.updated_at
+    `).run(key, value, userId);
+  } catch(e) { console.error('[upsertSettingMeta]', e.message); }
+}
 
 // 이력 공개 설정
 app.get('/api/settings/history-visibility', auth, (req, res) => {
@@ -2903,10 +2910,9 @@ app.post('/api/settings/second-final', auth, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
-// 시간대 설정
+// 시간대 설정 [INFRA-A2: 2건 → getSetting/setSetting 헬퍼 경유]
 app.get('/api/settings/timezone', auth, (req, res) => {
-  const tz = db.prepare("SELECT value FROM app_settings WHERE key='timezone'").get();
-  res.json({ timezone: tz?.value || 'Asia/Seoul' });
+  res.json({ timezone: getSetting('timezone', 'Asia/Seoul') });
 });
 app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
   try {
@@ -2920,7 +2926,7 @@ app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
     ];
     if (!validTimezones.includes(timezone))
       return res.status(400).json({ error: '지원하지 않는 시간대입니다.' });
-    db.prepare("INSERT OR REPLACE INTO app_settings(key,value) VALUES('timezone',?)").run(timezone);
+    setSetting('timezone', timezone);
     process.env.TZ = timezone;
     auditLog(req.user.sub, 'TIMEZONE_CHANGED', null, null,
       `시간대 변경: ${timezone}`, req.ip);
