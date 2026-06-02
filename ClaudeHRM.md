@@ -591,6 +591,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-02 | INFRA-2D-1 — NCloud 인프라 파이프라인 설정 파일 준비(docker-compose+Nginx+certbot, .env.example, infra-up.sh, pg-backup.sh), 앱 독립 리허설 구조 완성 (PROMPT INFRA-2D-1) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A5 — enc+tx 혼합 19건(eval-detail/reports/mgr-pending/dashboard) 어댑터 경유, createMulti $transaction 캡슐화, db.prepare 208→189, V3.14+V3.15 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A5) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A4 — approvals 암호화 도메인 40건(enc11) PrismaGoalApprovalRepository 신설+어댑터 경유, _flatten enc보호, db.prepare 248→208, V3.14 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A4) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A3 — 분류표 정확 마감(237=합계, 28건=주석) + Aggregate 캡슐화O + organizations/feedback/final-eval/evals 15건 async, db.prepare 263→248, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A3) | Claude Code |
@@ -867,6 +868,7 @@ docker compose --profile postgres up -d postgres
 
 - [x] 호스팅 선정: NCloud (INFRA_HOSTING_COMPARISON 참조, 2026-05-21)
 - [x] 호스팅 검증: Vercel + Supabase·Railway 비교 후 NCloud 유지 결정 (INFRA_NCLOUD_VS_SUPABASE_VERCEL, 2026-05-27)
+- [x] **인프라 설정 파일 준비** (docker-compose.yml Nginx 추가 + nginx/conf.d/hrpms.conf + deploy/infra-up.sh + deploy/pg-backup.sh + .env.example, INFRA-2D-1, feat/infra-ncloud 브랜치)
 - [ ] NCloud 무료 평가판 신청 (7~30일)
 - [ ] Server 인스턴스 셋업 (2vCPU/4GB, ₩60,000/월)
 - [ ] 추가 디스크 50GB 마운트 (DB 데이터 + 첨부 파일)
