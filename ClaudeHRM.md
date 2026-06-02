@@ -536,6 +536,38 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - BL-001·BL-002 결정 후 마케팅 포인트 표현 정확하게 수정
 - 영업 자료·홈페이지·제품 소개서 모두 일관성 유지
 
+### BL-005: 보안 강화 패키지 — PROMPT BL-005-SECURITY-CHECK (예약)
+
+**우선순위**: 운영 진입 직전 필수
+**현황**: PROMPT 63C·LOGIN-FIX·64B 등에서 예약된 번호. 아직 별도 등록 안 됨.
+**범위**: PRIVACY_ISSUES P0/P1 일괄 해결, AES-GCM 마이그레이션, HTTPS 강제, docker-compose 시크릿 분리
+
+---
+
+### BL-006: PostgreSQL 전환 — INFRA-2A-MIGRATE (운영 전환 필수)
+
+**우선순위**: INFRA-2D(NCloud 배포) 직전 필수
+**현황** (2026-06-02 분석):
+- server/index.js에 `better-sqlite3` 직접 호출 **286건** — 전체 서버가 SQLite 동기 API 의존
+- Prisma 어댑터는 설계되어 있으나 실제 쿼리 경로에서 사용 중인 곳은 0건
+- docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
+- Prisma schema.prisma는 현재 provider="sqlite" 유지
+
+**PROMPT INFRA-2A-MIGRATE 작업 범위**:
+1. 286건 `db.prepare()` → Prisma 또는 `pg.query()` 전환 (sync → async 전면 리팩토링)
+2. SQLite 전용 SQL 교체: `datetime('now')` → `NOW()`, `PRAGMA table_info` → `information_schema`, `AUTOINCREMENT` → `SERIAL`
+3. Prisma schema provider 변경: sqlite → postgresql
+4. `npx prisma generate` + `npx prisma db push`
+5. 데이터 이관: `scripts/migrate-sqlite-to-postgres.js`
+6. V3 시나리오 전체 회귀 검증 (8단계)
+
+**PostgreSQL Docker 가동 시**:
+```bash
+docker compose --profile postgres up -d postgres
+```
+
+**롤백**: `.env` DATABASE_URL을 SQLite로 되돌리고 Prisma schema provider 복원
+
 ### BL-004: PC 전용 UI 최적화
 
 **우선순위**: 운영 안정화 후 (사용자 결정 2026-05-27, 우선순위 4)
