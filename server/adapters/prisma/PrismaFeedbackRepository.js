@@ -77,6 +77,12 @@ class PrismaFeedbackRepository extends FeedbackRepository {
     return feedbacks.map(fb => this._flattenFeedback(fb));
   }
 
+  async countByAuthor(evalId, authorId) {
+    return await this.prisma.feedback.count({
+      where: { evalId: Number(evalId), authorId: Number(authorId) },
+    });
+  }
+
   async create(data) {
     return await this.prisma.$transaction(async (tx) => {
       const fb = await tx.feedback.create({

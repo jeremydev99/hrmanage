@@ -679,7 +679,7 @@ app.post('/api/evals/:id/submit', auth, async (req, res) => {
     });
     await goalRepo.updateStatusByEvalId(req.params.id, 'pending');
 
-    const targetUser = db.prepare('SELECT name FROM users WHERE id=?').get(req.user.sub);
+    const targetUser = await userRepo.findById(req.user.sub); // [INFRA-A3]
     auditLog(req.user.sub, 'GOAL_SUBMITTED', ev.id, targetUser?.name,
       `목표 승인 요청 제출 (${ev.period_label||''})`, req.ip);
     res.json({ success: true });
@@ -1005,12 +1005,10 @@ app.post('/api/feedback/:evalId', auth, async (req, res) => {
     if (!ev || !['approved','final_self','final_mgr_pending'].includes(ev.phase))
       return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
 
-    // 64A: 피드백 회차 제한 강제
+    // 64A: 피드백 회차 제한 강제 [INFRA-A3: feedbackRepo.countByAuthor]
     const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
     if (feedbackLimit > 0) {
-      const currentCount = db.prepare(
-        'SELECT COUNT(*) AS cnt FROM feedbacks WHERE eval_id = ? AND author_id = ?'
-      ).get(req.params.evalId, req.user.sub).cnt;
+      const currentCount = await feedbackRepo.countByAuthor(req.params.evalId, req.user.sub);
       if (currentCount >= feedbackLimit) {
         return res.status(400).json({
           error: `피드백 가능 횟수를 초과했습니다. (제한: ${feedbackLimit}회, 현재: ${currentCount}회)`
@@ -1090,7 +1088,7 @@ app.post('/api/final/:evalId/self', auth, async (req, res) => {
       await finalEvalRepo.upsertScores(feId, scores, 'selfScore');
     }
 
-    db.prepare("UPDATE eval_cycles SET phase='final_mgr_pending',updated_at=datetime('now') WHERE id=?").run(ev.id);
+    await evalCycleRepo.updatePhaseAndLocked(ev.id, 'final_mgr_pending', 0); // [INFRA-A3]
 
     res.json({ success: true });
   } catch(err) {
@@ -1106,7 +1104,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
     if (!ev || !['final_mgr_pending','final_mgr2_pending'].includes(ev.phase))
       return res.status(400).json({ error: '상사 평가 불가 상태' });
 
-    const targetUser = db.prepare('SELECT manager_id FROM users WHERE id=?').get(ev.user_id);
+    const targetUser = await userRepo.findById(ev.user_id); // [INFRA-A3]
     const isAdmin    = ['master','admin'].includes(req.user.role);
     const isDirect   = String(targetUser?.manager_id) === String(req.user.sub);
 
@@ -1114,7 +1112,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
     let isSecond = false;
     if (secondEnabled) {
       const directMgr = targetUser?.manager_id
-        ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUser.manager_id))
+        ? await userRepo.findById(String(targetUser.manager_id))
         : null;
       isSecond = String(directMgr?.manager_id) === String(req.user.sub);
     }
@@ -1157,9 +1155,9 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         locked_at: now
       });
 
-      db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
+      await evalCycleRepo.updatePhaseAndLocked(ev.id, 'final_done', 1); // [INFRA-A3]
 
-      const t2 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
+      const t2 = await userRepo.findById(ev.user_id);
       auditLog(req.user.sub, 'FINAL_EVAL_2ND', ev.user_id, t2?.name,
         `2차 최종평가 완료 (${ev.period_label||''})`, req.ip);
       res.json({ success: true, is_second: true });
@@ -1191,22 +1189,22 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         selected_grade: grade
       });
 
-      if (secondEnabled) {
+      if (secondEnabled) { // [INFRA-A3]
         const directMgrUser = targetUser?.manager_id
-          ? db.prepare('SELECT manager_id FROM users WHERE id=?').get(String(targetUser.manager_id))
+          ? await userRepo.findById(String(targetUser.manager_id))
           : null;
         if (directMgrUser?.manager_id) {
-          db.prepare("UPDATE eval_cycles SET phase='final_mgr2_pending',updated_at=datetime('now') WHERE id=?").run(ev.id);
+          await evalCycleRepo.updatePhaseAndLocked(ev.id, 'final_mgr2_pending', 0);
         } else {
-          db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
+          await evalCycleRepo.updatePhaseAndLocked(ev.id, 'final_done', 1);
           await finalEvalRepo.upsert(ev.id, { locked: 1, locked_at: now });
         }
       } else {
-        db.prepare("UPDATE eval_cycles SET phase='final_done',locked=1,updated_at=datetime('now') WHERE id=?").run(ev.id);
+        await evalCycleRepo.updatePhaseAndLocked(ev.id, 'final_done', 1);
         await finalEvalRepo.upsert(ev.id, { locked: 1, locked_at: now });
       }
 
-      const t1 = db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id);
+      const t1 = await userRepo.findById(ev.user_id);
       auditLog(req.user.sub, 'FINAL_EVAL_LOCKED', ev.user_id, t1?.name,
         `1차 최종평가 완료 — 점수: ${finalScore}점 / 등급: ${grade} (${ev.period_label||''})`, req.ip);
       res.json({ success: true, final_score: finalScore, grade });
@@ -2825,14 +2823,15 @@ app.get('/api/organizations/:id/members', auth, async (req, res) => {
   }
 });
 
-app.patch('/api/users/:id/org', auth, adminOnly, (req, res) => {
+// [INFRA-A3] organizations 3건 → userRepo/orgRepo async 전환
+app.patch('/api/users/:id/org', auth, adminOnly, async (req, res) => {
   try {
     const { org_id } = req.body;
-    db.prepare('UPDATE users SET org_id=? WHERE id=?').run(org_id||null, req.params.id);
-    const target = db.prepare('SELECT name FROM users WHERE id=?').get(req.params.id);
-    const org = org_id ? db.prepare('SELECT name FROM organizations WHERE id=?').get(org_id) : null;
+    await userRepo.updateOrgId(req.params.id, org_id || null);
+    const target = await userRepo.findById(req.params.id);
+    const orgName = org_id ? (await orgRepo.findNameById(org_id)) : null;
     auditLog(req.user.sub, 'USER_ORG_CHANGED', req.params.id, target?.name,
-      `조직 변경: ${org?.name||'미지정'}`, req.ip);
+      `조직 변경: ${orgName||'미지정'}`, req.ip);
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });

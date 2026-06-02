@@ -112,6 +112,13 @@ class PrismaUserRepository extends UserRepository {
     return user.id;
   }
 
+  async updateOrgId(id, orgId) {
+    await this.prisma.user.update({
+      where: { id: Number(id) },
+      data: { orgId: orgId || null },
+    });
+  }
+
   // ── INFRA-A1: users 도메인 전환을 위한 추가 메서드 ──────────────
 
   async findAll() {
