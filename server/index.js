@@ -26,6 +26,7 @@ const {
   getProgressReportRepository,
   getGoalApprovalRepository,
   getEvalPeriodRepository,
+  getAdminRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -38,6 +39,7 @@ const finalEvalRepo = getFinalEvaluationRepository();
 const progressReportRepo  = getProgressReportRepository();
 const approvalRepo        = getGoalApprovalRepository();
 const evalPeriodRepo      = getEvalPeriodRepository();
+const adminRepo           = getAdminRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -1695,19 +1697,19 @@ app.post('/api/okr', auth, (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/okr/:id/progress', auth, (req, res) => {
+// [INFRA-A6] OKR progress → adminRepo.updateKrProgress
+app.post('/api/okr/:id/progress', auth, async (req, res) => {
   try {
     const { kr_updates } = req.body;
-    (kr_updates||[]).forEach(u => {
-      db.prepare('UPDATE okr_key_results SET current_value=? WHERE id=?')
-        .run(u.current_value, u.kr_id);
-    });
+    for (const u of (kr_updates || [])) {
+      await adminRepo.updateKrProgress(u.kr_id, u.current_value);
+    }
     res.json({ success: true });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 전직원 평가 현황 요약 (admin+)
-app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
+// 전직원 평가 현황 요약 [INFRA-A6: adminRepo async 전환]
+app.get('/api/admin/eval-status', auth, adminOnly, async (req, res) => {
   try {
     const isAdmin = ['master','admin'].includes(req.user.role);
     const includeInactive = String(req.query.include_inactive) === 'true';
@@ -1717,39 +1719,24 @@ app.get('/api/admin/eval-status', auth, adminOnly, (req, res) => {
         '비관리자의 비활성 기간 포함 시도 (eval-status)', req.ip);
     }
 
-    // 대상 기간 ID 결정
+    // [INFRA-A6] admin eval-status → adminRepo async 전환
     const periodIdsParam = req.query.period_ids || '';
     let targetPeriodIds = [];
     if (periodIdsParam) {
       targetPeriodIds = periodIdsParam.split(',').map(s => Number(s.trim())).filter(Boolean);
     } else {
-      const activeFilter = effectiveInclInactive ? '' : 'WHERE is_active=1';
-      targetPeriodIds = db.prepare(`SELECT id FROM eval_periods ${activeFilter}`).all().map(p => p.id);
+      const periods = await evalPeriodRepo.findAll({ includeInactive: effectiveInclInactive });
+      targetPeriodIds = periods.map(p => p.id);
     }
     if (targetPeriodIds.length === 0)
       return res.json({ users: [], stats: { total_users: 0, started: 0, goal_approved: 0, final_done: 0 } });
 
-    const pPh = targetPeriodIds.map(() => '?').join(',');
-    const users = db.prepare(
-      "SELECT id, name, dept, title FROM users WHERE is_active=1 AND (account_status='approved' OR account_status IS NULL) ORDER BY dept, name"
-    ).all();
+    const users = await adminRepo.findActiveUsers();
 
-    const result = users.map(u => {
-      const cycles = db.prepare(`
-        SELECT ec.id as eval_id, ec.eval_year, ec.period_label, ec.phase,
-               ec.submitted_at, ec.approved_at, ec.locked,
-               COALESCE(ep.eval_mode, 'MBO') as eval_mode,
-               (SELECT COUNT(*) FROM goals    WHERE eval_id=ec.id) as goal_count,
-               (SELECT COUNT(*) FROM feedbacks WHERE eval_id=ec.id) as feedback_count,
-               fe.id as final_eval_id, fe.final_score, fe.final_grade
-        FROM eval_cycles ec
-        LEFT JOIN eval_periods ep ON ep.eval_year=ec.eval_year AND ep.period_label=ec.period_label
-        LEFT JOIN final_evaluations fe ON fe.eval_id=ec.id
-        WHERE ec.user_id=? AND ep.id IN (${pPh})
-        ORDER BY ec.eval_year DESC, ec.period_label DESC
-      `).all(u.id, ...targetPeriodIds);
+    const result = await Promise.all(users.map(async u => {
+      const cycles = await adminRepo.findUserEvalCycles(u.id, targetPeriodIds);
       return { ...u, cycles };
-    });
+    }));
 
     // 통계 (사용자 기준 — 선택 기간 중 가장 진행된 phase)
     const goalApprovedSet = new Set(['approved','final_self','final_mgr_pending','final_mgr2_pending','final_done']);
@@ -1810,48 +1797,28 @@ app.post('/api/settings/dashboard-depth', auth, adminOnly, (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 내 성과 요약
-app.get('/api/perf/my-summary', auth, (req, res) => {
+// 내 성과 요약 [INFRA-A6: adminRepo async 전환]
+app.get('/api/perf/my-summary', auth, async (req, res) => {
   try {
     const { period_id } = req.query;
     const userId = req.user.sub;
     const periods = period_id
-      ? [db.prepare('SELECT * FROM eval_periods WHERE id=?').get(period_id)]
-      : db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC').all();
+      ? [await evalPeriodRepo.findById(period_id)]
+      : await evalPeriodRepo.findActive();
 
-    const result = periods.filter(Boolean).map(period => {
-      const evals = db.prepare(`
-        SELECT e.*, fe.final_score, fe.selected_grade, fe.self_done, fe.mgr_done
-        FROM eval_cycles e
-        LEFT JOIN final_evaluations fe ON fe.eval_id=e.id
-        WHERE e.user_id=? AND e.period_label=? AND e.eval_year=?
-      `).all(userId, period.period_label, period.eval_year);
-
-      const reportCount = db.prepare(`
-        SELECT COUNT(*) as c FROM progress_reports pr
-        JOIN eval_cycles e ON pr.eval_id=e.id
-        WHERE e.user_id=? AND e.period_label=?
-      `).get(userId, period.period_label)?.c || 0;
-
-      const feedbackCount = db.prepare(`
-        SELECT COUNT(*) as c FROM feedbacks f
-        JOIN eval_cycles e ON f.eval_id=e.id
-        WHERE e.user_id=? AND e.period_label=?
-      `).get(userId, period.period_label)?.c || 0;
-
-      const okrCycles = db.prepare(`
-        SELECT oc.*, (SELECT COUNT(*) FROM okr_objectives WHERE cycle_id=oc.id) as obj_count
-        FROM okr_cycles oc
-        WHERE oc.user_id=? AND oc.period_label=?
-      `).all(userId, period.period_label);
+    const result = await Promise.all(periods.filter(Boolean).map(async period => {
+      const [evals, counts, okrData] = await Promise.all([
+        adminRepo.findEvalForUserAndPeriod(userId, period.period_label, period.eval_year),
+        adminRepo.getReportFeedbackCount(userId, period.period_label),
+        adminRepo.findOkrCycleWithDetails(userId, period.period_label, period.eval_year),
+      ]);
 
       let okrAvg = null;
-      if (okrCycles.length) {
+      if (okrData.length) {
         let totalKRs = 0, totalPct = 0;
-        okrCycles.forEach(cycle => {
-          const objs = db.prepare('SELECT * FROM okr_objectives WHERE cycle_id=?').all(cycle.id);
-          objs.forEach(obj => {
-            db.prepare('SELECT * FROM okr_key_results WHERE objective_id=?').all(obj.id).forEach(kr => {
+        okrData.forEach(cycle => {
+          (cycle.objectives || []).forEach(obj => {
+            (obj.key_results || []).forEach(kr => {
               totalKRs++;
               totalPct += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
             });
@@ -1867,57 +1834,47 @@ app.get('/api/perf/my-summary', auth, (req, res) => {
         eval_mode: period.eval_mode || 'MBO',
         mbo_score: evals[0]?.final_score || null,
         okr_avg: okrAvg,
-        report_count: reportCount,
-        feedback_count: feedbackCount,
+        report_count: counts.report_count,
+        feedback_count: counts.feedback_count,
         phase: evals[0]?.phase || null,
         self_done: evals[0]?.self_done || 0,
         mgr_done: evals[0]?.mgr_done || 0,
       };
-    });
+    }));
 
     res.json(result);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-// 팀 성과 요약 (조직장용)
-app.get('/api/perf/team-summary', auth, (req, res) => {
+// 팀 성과 요약 [INFRA-A6: adminRepo async 전환]
+app.get('/api/perf/team-summary', auth, async (req, res) => {
   try {
     const { period_id } = req.query;
     const userId = req.user.sub;
-    const maxDepth = parseInt(getSetting('dashboard_depth', '2')); // [INFRA-A5]
+    const maxDepth = parseInt(getSetting('dashboard_depth', '2'));
 
-    const myOrg = db.prepare('SELECT * FROM organizations WHERE leader_id=? AND is_active=1').get(userId);
+    const myOrg = await adminRepo.findOrgByLeader(userId);
     if (!myOrg) return res.json({ is_leader: false, teams: [] });
 
-    function getSubMembers(orgId, depth) {
-      if (depth > maxDepth) return [];
-      const members = db.prepare('SELECT id, name, title FROM users WHERE org_id=? AND is_active=1').all(orgId);
-      const subOrgs = db.prepare('SELECT * FROM organizations WHERE parent_id=? AND is_active=1').all(orgId);
-      return [...members, ...subOrgs.flatMap(o => getSubMembers(o.id, depth + 1))];
-    }
-    const members = getSubMembers(myOrg.id, 1);
+    const members = await adminRepo.findOrgMembers(myOrg.id, maxDepth);
 
     const periods = period_id
-      ? [db.prepare('SELECT * FROM eval_periods WHERE id=?').get(period_id)]
-      : db.prepare('SELECT * FROM eval_periods WHERE is_active=1 ORDER BY id DESC LIMIT 3').all();
+      ? [await evalPeriodRepo.findById(period_id)]
+      : (await evalPeriodRepo.findAll({ includeInactive: false })).slice(0, 3);
 
-    const teamData = periods.filter(Boolean).map(period => {
-      const memberStats = members.map(m => {
-        const ev = db.prepare(`
-          SELECT e.phase, fe.final_score, fe.mgr_done
-          FROM eval_cycles e
-          LEFT JOIN final_evaluations fe ON fe.eval_id=e.id
-          WHERE e.user_id=? AND e.period_label=?
-          ORDER BY e.id DESC LIMIT 1
-        `).get(m.id, period.period_label);
-
-        const okr = db.prepare('SELECT * FROM okr_cycles WHERE user_id=? AND period_label=?').all(m.id, period.period_label);
+    const teamData = await Promise.all(periods.filter(Boolean).map(async period => {
+      const memberStats = await Promise.all(members.map(async m => {
+        const [evRows, okrData] = await Promise.all([
+          adminRepo.findEvalForUserAndPeriod(m.id, period.period_label, period.eval_year),
+          adminRepo.findOkrCycleWithDetails(m.id, period.period_label, period.eval_year),
+        ]);
+        const ev = evRows[0] || null;
         let okrAvg = null;
-        if (okr.length) {
+        if (okrData.length) {
           let t = 0, p = 0;
-          okr.forEach(c => {
-            db.prepare('SELECT * FROM okr_objectives WHERE cycle_id=?').all(c.id).forEach(obj => {
-              db.prepare('SELECT * FROM okr_key_results WHERE objective_id=?').all(obj.id).forEach(kr => {
+          okrData.forEach(c => {
+            (c.objectives||[]).forEach(obj => {
+              (obj.key_results||[]).forEach(kr => {
                 t++;
                 p += kr.target_value > 0 ? (kr.current_value/kr.target_value)*100 : 0;
               });
@@ -1925,9 +1882,9 @@ app.get('/api/perf/team-summary', auth, (req, res) => {
           });
           okrAvg = t > 0 ? Math.round(p/t) : 0;
         }
-        return { user_id: m.id, name: m.name, title: m.title,
+        return { user_id: Number(m.id), name: m.name, title: m.title,
           phase: ev?.phase||null, final_score: ev?.final_score||null, okr_avg: okrAvg, mgr_done: ev?.mgr_done||0 };
-      });
+      }));
 
       const scored    = memberStats.filter(m => m.final_score !== null);
       const okrScored = memberStats.filter(m => m.okr_avg !== null);
@@ -1935,13 +1892,11 @@ app.get('/api/perf/team-summary', auth, (req, res) => {
         period_label: period.period_label, eval_year: period.eval_year,
         eval_mode: period.eval_mode || 'MBO',
         member_count: members.length,
-        team_avg_score: scored.length
-          ? Math.round(scored.reduce((a,m)=>a+m.final_score,0)/scored.length*10)/10 : null,
-        team_okr_avg: okrScored.length
-          ? Math.round(okrScored.reduce((a,m)=>a+m.okr_avg,0)/okrScored.length) : null,
+        team_avg_score: scored.length ? Math.round(scored.reduce((a,m)=>a+m.final_score,0)/scored.length*10)/10 : null,
+        team_okr_avg: okrScored.length ? Math.round(okrScored.reduce((a,m)=>a+m.okr_avg,0)/okrScored.length) : null,
         members: memberStats,
       };
-    });
+    }));
 
     res.json({ is_leader: true, org_name: myOrg.name, teams: teamData });
   } catch(err) { res.status(500).json({ error: err.message }); }
