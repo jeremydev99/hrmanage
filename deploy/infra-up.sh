@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# infra-up.sh — NCloud 인프라 최초 구성 스크립트 (INFRA-2D-1-FIX)
+# infra-up.sh — NCloud 인프라 최초 구성 스크립트 (INFRA-2D-1-FIX3)
 # 실행: bash deploy/infra-up.sh
 #
 # 전제:
@@ -30,7 +30,8 @@ fi
 echo "=== [1/6] Docker 설치 및 기동 ==="
 if ! command -v docker &>/dev/null; then
   sudo apt-get update -qq
-  sudo apt-get install -y docker.io docker-compose-plugin
+  # NCloud Ubuntu 저장소 기준: docker-compose-v2 (plugin 패키지명 없음)
+  sudo apt-get install -y docker.io docker-compose-v2
   sudo systemctl enable --now docker
   sudo usermod -aG docker "$USER"
   echo "Docker 설치 완료 — 재로그인 필요 (docker 그룹 적용)"
@@ -47,19 +48,22 @@ mkdir -p "$DEPLOY_DIR/data/postgres-backups" "$DEPLOY_DIR/nginx/conf.d"
 echo ""
 echo "=== [3/6] PostgreSQL 컨테이너 기동 (내부 네트워크만) ==="
 cd "$DEPLOY_DIR"
-docker compose --profile infra up -d postgres
+# postgres 서비스는 postgres 프로필 소속
+docker compose --profile postgres up -d postgres
 echo "PG 기동 대기 (15s)..."
 sleep 15
-docker compose --profile infra exec postgres \
+docker compose --profile postgres exec postgres \
   psql -U "${POSTGRES_USER:-hrmanage}" -d "${POSTGRES_DB:-hrmanage}" -c "\l"
 echo "PG 스모크 테스트..."
-docker compose --profile infra exec postgres \
+docker compose --profile postgres exec postgres \
   psql -U "${POSTGRES_USER:-hrmanage}" -d "${POSTGRES_DB:-hrmanage}" -c \
   "CREATE TABLE _smoke(id int); INSERT INTO _smoke VALUES(1); SELECT * FROM _smoke; DROP TABLE _smoke;"
 echo "PG OK"
 
 echo ""
-echo "=== [4/6] certbot 설치 + TLS 인증서 발급 ==="
+echo "=== [4/6] certbot 설치 + TLS 인증서 발급 (--standalone) ==="
+# 주의: certbot --standalone은 80 포트를 직접 점유하므로
+#       nginx 컨테이너를 올리기 전(=지금)에 실행. nginx는 step 5에서 기동.
 
 # dig 설치 확인 (DNS 검증에 사용)
 command -v dig &>/dev/null || sudo apt-get install -y dnsutils
@@ -67,7 +71,6 @@ command -v dig &>/dev/null || sudo apt-get install -y dnsutils
 if ! command -v certbot &>/dev/null; then
   sudo apt-get install -y certbot
 fi
-sudo mkdir -p /var/www/certbot
 
 # ── DNS 전파 가드 (레이트리밋 방지) ──────────────────────────
 THIS_IP="$(curl -sf https://ifconfig.me || hostname -I | awk '{print $1}')"
@@ -83,25 +86,21 @@ if [ -z "$RESOLVED" ] || [ "$RESOLVED" != "$THIS_IP" ]; then
 fi
 echo "DNS 일치 확인 OK"
 
-# Nginx를 80 포트로 먼저 기동 (webroot 검증용)
-docker compose --profile infra up -d nginx || true
-sleep 2
-
 # ── staging --dry-run 리허설 (레이트리밋 안전) ────────────────
-echo "certbot staging 리허설..."
+echo "certbot staging 리허설 (--standalone, nginx 미기동 상태)..."
 sudo certbot certonly \
-  --webroot -w /var/www/certbot \
+  --standalone \
   -d "$DOMAIN" \
   --staging --dry-run \
   --non-interactive --agree-tos \
   -m "$CERTBOT_EMAIL" \
-  || { echo "[중단] certbot staging 실패 — DNS·webroot 설정 확인 후 재실행"; exit 1; }
+  || { echo "[중단] certbot staging 실패 — DNS 확인 후 재실행"; exit 1; }
 echo "certbot staging OK"
 
 # ── 실 발급 ─────────────────────────────────────────────────
 echo "certbot 실 인증서 발급..."
 sudo certbot certonly \
-  --webroot -w /var/www/certbot \
+  --standalone \
   -d "$DOMAIN" \
   --non-interactive --agree-tos \
   -m "$CERTBOT_EMAIL"
@@ -111,17 +110,19 @@ sudo systemctl status certbot.timer --no-pager || \
   (sudo systemctl enable --now certbot.timer && echo "certbot.timer 활성화 완료")
 
 echo ""
-echo "=== [5/6] Nginx HTTPS 기동 ==="
+echo "=== [5/6] Nginx HTTPS 기동 (인증서 발급 후) ==="
+# 이 시점에 /etc/letsencrypt/live/$DOMAIN/fullchain.pem 존재 → nginx 정상 기동
 docker compose --profile infra up -d nginx
 sleep 3
 curl -sf "https://$DOMAIN/healthz" && echo "HTTPS /healthz OK" \
-  || echo "HTTPS 검증 실패 — 로그: docker compose logs nginx"
+  || echo "HTTPS 검증 실패 — 로그: docker compose --profile infra logs nginx"
 curl -s -o /dev/null -w "HTTP→HTTPS redirect: %{http_code}\n" "http://$DOMAIN/"
 
 echo ""
 echo "=== [6/6] 백업 리허설 ==="
 BACKUP_FILE="$DEPLOY_DIR/data/postgres-backups/smoke_$(date +%Y%m%d_%H%M%S).sql"
-docker compose --profile infra exec -T postgres \
+# postgres 서비스는 postgres 프로필 소속
+docker compose --profile postgres exec -T postgres \
   pg_dump -U "${POSTGRES_USER:-hrmanage}" "${POSTGRES_DB:-hrmanage}" > "$BACKUP_FILE"
 echo "백업 생성: $BACKUP_FILE ($(wc -c < "$BACKUP_FILE") bytes)"
 
@@ -129,11 +130,15 @@ echo ""
 echo "==============================="
 echo "INFRA-2D-1 구성 완료"
 echo "  HTTPS: https://$DOMAIN/healthz"
-echo "  PG: docker compose --profile infra exec postgres psql -U hrmanage"
+echo "  PG: docker compose --profile postgres exec postgres psql -U hrmanage"
 echo "  백업: $BACKUP_FILE"
 echo ""
 echo "Phase B 착지 시 할 일:"
 echo "  1. nginx/conf.d/hrpms.conf의 proxy_pass 주석 해제"
 echo "  2. .env의 DATABASE_URL을 postgresql://... 으로 변경"
 echo "  3. app 서비스 docker compose up -d"
+echo ""
+echo "certbot 갱신 안내:"
+echo "  갱신 시 nginx가 80 포트 점유 중 → standalone 갱신은 nginx 일시 중지 필요"
+echo "  (webroot 방식 전환: certbot renew --cert-name $DOMAIN --webroot -w /var/www/certbot)"
 echo "==============================="
