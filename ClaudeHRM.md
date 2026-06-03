@@ -574,6 +574,25 @@ docker compose --profile postgres up -d postgres
 
 **롤백**: `.env` DATABASE_URL을 SQLite로 되돌리고 Prisma schema provider 복원
 
+### BL-DOCS: 외부 판매 문서 산출물 (막판 과제)
+
+**우선순위**: Phase B(앱 착지) + 운영 안정화 직후, 외부 영업 직전 필수
+**현황** (2026-06-04):
+- `DEPLOY_MANUAL.md` 초안 생성 완료 — 설치·운영 매뉴얼 (러닝 문서, Claude Code 자동 갱신)
+- 현재 ✅ 완료 섹션: 아키텍처, 사전 요구사항, 설치(인터넷 환경), HTTPS·인증서, 운영(백업/기동/정지)
+- 🚧 진행중: 보안(GCM 전환, Vault/KMS), Nginx 도메인 자동화, certbot webroot 갱신 전환
+- ⬜ TODO: 트러블슈팅 보강, 업그레이드 절차, 모니터링, **폐쇄망(에어갭) 설치**(BL-AIRGAP), 부록
+
+**외부 영업 직전 필수 산출물 목록**:
+- `DEPLOY_MANUAL.md` 완성 → Word/PDF 렌더 (마일스톤: Phase B + 앱 착지 후)
+- 보안 백서(`SECURITY_WHITEPAPER.md`) — BL-003 연계
+- 기술 사양서(아키텍처 다이어그램 포함)
+- 폐쇄망 설치 가이드(`DEPLOY_MANUAL.md` 9장 확장)
+
+**관련 파일**: `DEPLOY_MANUAL.md` (repo 루트, 단일 소스)
+
+---
+
 ### BL-004: PC 전용 UI 최적화
 
 **우선순위**: 운영 안정화 후 (사용자 결정 2026-05-27, 우선순위 4)
