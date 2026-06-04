@@ -143,6 +143,83 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
     });
   }
 
+  // 헬퍼 지원 메서드 (A8-1)
+
+  async getFirstPolicyId() {
+    const p = await this.prisma.gradePolicy.findFirst({
+      orderBy: { id: 'asc' },
+      select: { id: true },
+    });
+    return p?.id || null;
+  }
+
+  // buildGradeMap용 criteria (grade_code, min_score, sort_order만)
+  async getCriteriaForGradeMap(policyId) {
+    const items = await this.prisma.gradePolicyCriteria.findMany({
+      where: { policyId: Number(policyId) },
+      select: { gradeCode: true, minScore: true, sortOrder: true },
+      orderBy: { minScore: 'desc' },
+    });
+    return items.map(c => ({ grade_code: c.gradeCode, min_score: c.minScore, sort_order: c.sortOrder }));
+  }
+
+  // getPolicyForEval용: evalCycle id → 연결된 grade policy + criteria
+  async getPolicyForEvalCycle(evalId) {
+    const ec = await this.prisma.evalCycle.findUnique({
+      where: { id: Number(evalId) },
+      select: { periodLabel: true, evalYear: true },
+    });
+    if (!ec?.periodLabel || !ec?.evalYear) return null;
+    const ep = await this.prisma.evalPeriod.findFirst({
+      where: { periodLabel: ec.periodLabel, evalYear: ec.evalYear, gradePolicyId: { not: null } },
+      include: {
+        gradePolicy: {
+          include: {
+            criteria: {
+              select: { gradeCode: true, gradeName: true, minScore: true, sortOrder: true },
+              orderBy: { minScore: 'desc' },
+            },
+          },
+        },
+      },
+    });
+    const gp = ep?.gradePolicy;
+    if (!gp) return null;
+    return {
+      id:       gp.id,
+      name:     gp.name,
+      criteria: gp.criteria.map(c => ({
+        grade_code: c.gradeCode,
+        grade_name: c.gradeName,
+        min_score:  c.minScore,
+        sort_order: c.sortOrder,
+      })),
+    };
+  }
+
+  // convertGradeWithPolicy용: policy id → name + criteria
+  async getPolicyWithCriteria(policyId) {
+    const p = await this.prisma.gradePolicy.findUnique({
+      where: { id: Number(policyId) },
+      include: {
+        criteria: {
+          select: { gradeCode: true, gradeName: true, minScore: true },
+          orderBy: { minScore: 'desc' },
+        },
+      },
+    });
+    if (!p) return null;
+    return {
+      id:       p.id,
+      name:     p.name,
+      criteria: p.criteria.map(c => ({
+        grade_code: c.gradeCode,
+        grade_name: c.gradeName,
+        min_score:  c.minScore,
+      })),
+    };
+  }
+
   // TX3: 바인딩된 eval_periods 초기화 + 정책 삭제 (반환값: 영향받은 기간 목록)
   async deletePolicy(policyId) {
     const pid = Number(policyId);

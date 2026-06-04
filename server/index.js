@@ -1119,7 +1119,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
         return res.status(400).json({ error: '관리자 점수가 입력되지 않았습니다.' });
       }
       const finalScore = Math.round(rawScore * 10) / 10;
-      const evalPolicy = getPolicyForEval(ev.id);
+      const evalPolicy = await getPolicyForEval(ev.id);
       const grade = scoreToGrade(finalScore, evalPolicy?.criteria || []);
       if (!grade) {
         return res.status(400).json({ error: '등급 산출 실패: 평가 기간에 등급 정책이 바인딩되지 않았거나 점수가 정책 범위 밖입니다.' });
@@ -1957,46 +1957,30 @@ function scoreToGrade(score, criteria) {
 }
 
 // 평가 ID → 적용 등급 정책 조회
-function getPolicyForEval(evalId) {
-  const row = db.prepare(`
-    SELECT gp.id, gp.name
-    FROM eval_cycles ec
-    JOIN eval_periods ep ON ep.period_label = ec.period_label AND ep.eval_year = ec.eval_year
-    JOIN grade_policies gp ON gp.id = ep.grade_policy_id
-    WHERE ec.id = ?
-  `).get(evalId);
-  if (!row) return null;
-  const criteria = db.prepare(
-    'SELECT grade_code, grade_name, min_score, sort_order FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
-  ).all(row.id);
-  return { id: row.id, name: row.name, criteria };
+async function getPolicyForEval(evalId) {
+  return await gradePolicyRepo.getPolicyForEvalCycle(evalId);
 }
 
 // 디폴트 정책 ID (fallback용)
-function getDefaultPolicyId() {
-  return db.prepare('SELECT id FROM grade_policies ORDER BY id LIMIT 1').get()?.id || null;
+async function getDefaultPolicyId() {
+  return await gradePolicyRepo.getFirstPolicyId();
 }
 
-function buildGradeMap(policyId) {
-  const pid = policyId || getDefaultPolicyId();
+async function buildGradeMap(policyId) {
+  const pid = policyId || await gradePolicyRepo.getFirstPolicyId();
   if (!pid) return { gradeCodes: [], maxScore: 100, scoreToGrade: () => null };
-  const criteria = db.prepare(
-    'SELECT grade_code, min_score, sort_order FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
-  ).all(pid);
+  const criteria = await gradePolicyRepo.getCriteriaForGradeMap(pid);
   if (!criteria.length) return { gradeCodes: [], maxScore: 100, scoreToGrade: () => null };
   const gradeCodes = criteria.map(c => c.grade_code);
   return { gradeCodes, maxScore: 100, scoreToGrade: (score) => scoreToGrade(score, criteria) };
 }
 
 // 점수를 임의 정책 cutoff로 가상 산출 (표시용, DB 저장 없음)
-function convertGradeWithPolicy(score, policyId) {
+async function convertGradeWithPolicy(score, policyId) {
   if (score == null || isNaN(score) || !policyId) return null;
-  const policy = db.prepare('SELECT id, name FROM grade_policies WHERE id = ?').get(policyId);
+  const policy = await gradePolicyRepo.getPolicyWithCriteria(policyId);
   if (!policy) return null;
-  const criteria = db.prepare(
-    'SELECT grade_code, grade_name, min_score FROM grade_policy_criteria WHERE policy_id=? ORDER BY min_score DESC'
-  ).all(policyId);
-  for (const c of criteria) {
+  for (const c of policy.criteria) {
     if (score >= c.min_score) return { grade_code: c.grade_code, grade_name: c.grade_name, policy_name: policy.name };
   }
   return null;
@@ -2139,7 +2123,7 @@ app.get('/api/perf/org-tree', auth, async (req, res) => {
     }
     const periodLabels = periodRows.map(p => p.period_label);
     const periodIds = periodRows.map(p => p.id);
-    const gm = buildGradeMap(periodRows[0]?.grade_policy_id || null);
+    const gm = await buildGradeMap(periodRows[0]?.grade_policy_id || null);
     let orgs = await adminRepo.findOrgsWithLeader();
     if (allowedIds) orgs = orgs.filter(o => allowedIds.includes(o.id));
     const orgMap = new Map(orgs.map(o => [o.id, o]));
@@ -2260,7 +2244,7 @@ app.get('/api/perf/quarterly-trend', auth, async (req, res) => {
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
     const periods = await adminRepo.findPeriodsByIds(pIdList, !effectiveInclInactive);
-    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
+    const gm = await buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds, orgName = '회사 전체';
     if (org_id) {
       const orgIdNum = parseInt(org_id);
@@ -2312,7 +2296,7 @@ app.get('/api/perf/grade-distribution', auth, async (req, res) => {
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
     const periods = await adminRepo.findPeriodsByIds(pIdList, !effectiveInclInactive);
-    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
+    const gm = await buildGradeMap(periods[0]?.grade_policy_id || null);
     let userIds;
     if (org_id) {
       const orgIdNum = parseInt(org_id);
@@ -2384,7 +2368,7 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const periodLabels = periods.map(p => p.period_label);
     const periodStr = periods.length
       ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';
-    const gm = buildGradeMap(periods[0]?.grade_policy_id || null);
+    const gm = await buildGradeMap(periods[0]?.grade_policy_id || null);
     const baseIds = isAdmin
       ? db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id)
       : getSubtreeUserIds(allowedIds[0]);
