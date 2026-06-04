@@ -12,6 +12,7 @@ const jwt      = require('jsonwebtoken');
 const cors     = require('cors');
 const helmet   = require('helmet');
 const Database = require('better-sqlite3');
+const { Prisma } = require('@prisma/client');
 
 // Repository Pattern
 const {
@@ -1507,7 +1508,7 @@ async function getMyOrgLeaderChainAsync(userId) {
     let currentOrgId = me.org_id;
     const prisma = evalPeriodRepo.prisma;
     for (let depth = 0; depth < 10; depth++) {
-      const rows = await prisma.$queryRawUnsafe('SELECT * FROM organizations WHERE id=? LIMIT 1', Number(currentOrgId));
+      const rows = await evalPeriodRepo.prisma.$queryRaw`SELECT * FROM organizations WHERE id=${Number(currentOrgId)} LIMIT 1`;
       const org = rows[0];
       if (!org) break;
       if (org.leader_id) chain.push(org.leader_id);
@@ -2023,13 +2024,11 @@ app.get('/api/perf/org-tree', auth, async (req, res) => {
       if (!org) return;
       const [uIds, directIds, s_raw] = await Promise.all([
         adminRepo.getSubtreeUserIds(orgId),
-        adminRepo.getSubtreeUserIds(orgId).then(() => // get direct members
-          adminRepo.prisma.$queryRawUnsafe('SELECT id FROM users WHERE org_id=? AND is_active=1', Number(orgId)).then(r => r.map(x => Number(x.id)))
-        ),
+        adminRepo.prisma.$queryRaw`SELECT id FROM users WHERE org_id=${Number(orgId)} AND is_active=1`.then(r => r.map(x => Number(x.id))),
         adminRepo.calcGradeStats(await adminRepo.getSubtreeUserIds(orgId), periodLabels, gm),
       ]);
       // direct members (simpler approach)
-      const directRows = await adminRepo.prisma.$queryRawUnsafe('SELECT id FROM users WHERE org_id=? AND is_active=1', Number(orgId));
+      const directRows = await adminRepo.prisma.$queryRaw`SELECT id FROM users WHERE org_id=${Number(orgId)} AND is_active=1`;
       const dIds = directRows.map(r => Number(r.id));
       const [s, c] = await Promise.all([
         adminRepo.calcGradeStats(uIds, periodLabels, gm),
@@ -2076,11 +2075,8 @@ app.get('/api/perf/employee-grades', auth, async (req, res) => {
     if (!ids.length) return res.status(400).json({ error: 'period_ids가 올바르지 않습니다.' });
 
     const includeInactive = isAdmin && String(inclInact) === 'true';
-    const activeFilter = includeInactive ? '' : 'AND ep.is_active = 1';
-
-    const ph = ids.map(() => '?').join(',');
-    const activeWhere = includeInactive ? '' : 'AND ep.is_active = 1';
-    const rows = await adminRepo.prisma.$queryRawUnsafe(`
+    const activeClause = includeInactive ? Prisma.empty : Prisma.sql`AND ep.is_active = 1`;
+    const rows = await adminRepo.prisma.$queryRaw`
       SELECT u.id AS user_id, u.name AS employee_name, u.dept,
              ec.period_label, ec.eval_year,
              fe.id AS final_eval_id, fe.final_score, fe.final_grade,
@@ -2089,13 +2085,13 @@ app.get('/api/perf/employee-grades', auth, async (req, res) => {
       JOIN eval_cycles ec ON fe.eval_id = ec.id
       JOIN users u ON ec.user_id = u.id
       JOIN eval_periods ep ON ep.period_label = ec.period_label AND ep.eval_year = ec.eval_year
-        AND ep.id IN (${ph}) ${activeWhere}
+        AND ep.id IN (${Prisma.join(ids)}) ${activeClause}
       LEFT JOIN grade_policies gp ON gp.id = ep.grade_policy_id
       WHERE fe.final_grade IS NOT NULL
       ORDER BY ec.eval_year DESC, ec.period_label DESC, u.name
-    `, ...ids);
+    `;
 
-    const policies = await adminRepo.prisma.$queryRawUnsafe('SELECT id, name FROM grade_policies ORDER BY id');
+    const policies = await adminRepo.prisma.$queryRaw`SELECT id, name FROM grade_policies ORDER BY id`;
     const policiesWithCriteria = await Promise.all(policies.map(async p => ({
       ...p, id: Number(p.id),
       criteria: await adminRepo.findGradePolicyCriteria(p.id),

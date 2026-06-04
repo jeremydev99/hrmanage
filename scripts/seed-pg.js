@@ -104,7 +104,7 @@ async function seedGoalCategories() {
       continue;
     }
     await prisma.goalCategory.create({
-      data: { ...c, isActive: 1, createdBy: 1 },
+      data: { ...c, isActive: 1, created_by: 1 },
     });
     console.log(`   ✅ 생성: ${c.name}`);
   }

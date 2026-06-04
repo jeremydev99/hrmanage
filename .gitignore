@@ -26,4 +26,4 @@ data/
 *.log
 
 # 컨테이너 빌드 캐시
-.docker-cache/
+.docker-cache/docker-compose.override.yml
