@@ -593,9 +593,7 @@ async function validateEvalGoals(evalId) {
     return { valid: false, error: '최소 1개 이상의 목표를 입력해주세요.' };
 
   // 활성 카테고리 조회
-  const activeCats = db.prepare(
-    'SELECT id, name, weight FROM goal_categories WHERE is_active=1 ORDER BY id'
-  ).all();
+  const activeCats = await goalCategoryRepo.findAllActive();
   if (activeCats.length === 0)
     return { valid: false, error: '활성 카테고리가 없습니다.' };
 
@@ -630,41 +628,9 @@ async function validateEvalGoals(evalId) {
 }
 
 // 공식: Σ(카테고리 가중치/100 × Σ(목표 점수/5×100 × 카테고리 내 weight/100))
-function calcFinalScore(evalId, scoreField = 'mgr_score') {
-  const valid = ['mgr_score', 'self_score', 'second_mgr_score'];
-  if (!valid.includes(scoreField)) throw new Error(`Invalid scoreField: ${scoreField}`);
-  const rows = db.prepare(
-    `SELECT g.weight, g.category_id, fes.${scoreField} AS score
-     FROM goals g
-     JOIN final_eval_scores fes ON fes.goal_id = g.id
-     WHERE g.eval_id = ? AND fes.${scoreField} IS NOT NULL`
-  ).all(evalId);
-  if (rows.length === 0) return null;
-
-  const catWeightMap = new Map(
-    db.prepare('SELECT id, weight FROM goal_categories WHERE is_active=1').all()
-      .map(c => [c.id, Number(c.weight) || 0])
-  );
-
-  const byCat = new Map();
-  for (const r of rows) {
-    if (!byCat.has(r.category_id)) byCat.set(r.category_id, []);
-    byCat.get(r.category_id).push(r);
-  }
-
-  let finalScore = 0, usedCatW = 0;
-  for (const [catId, catGoals] of byCat) {
-    const catW = catWeightMap.get(catId);
-    if (!catW) continue;
-    const totalInnerW = catGoals.reduce((a, g) => a + (Number(g.weight) || 0), 0) || 1;
-    const catScore = catGoals.reduce(
-      (a, g) => a + (Number(g.score) / 5 * 100) * (Number(g.weight) / totalInnerW), 0
-    );
-    finalScore += catScore * (catW / 100);
-    usedCatW += catW;
-  }
-  if (usedCatW > 0 && usedCatW < 100) finalScore = finalScore * (100 / usedCatW);
-  return Math.round(finalScore * 100) / 100;
+// scoreField 화이트리스트: adminRepo.calcFinalScore 내부에서 검증
+async function calcFinalScore(evalId, scoreField = 'mgr_score') {
+  return await adminRepo.calcFinalScore(evalId, scoreField);
 }
 
 // [PROMPT_40-A] Repository Pattern 적용
@@ -1114,7 +1080,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
       await finalEvalRepo.upsertScores(fe.id, scores, 'mgrScore');
 
       // 최종 점수 계산 (카테고리 가중치 기반 — PROMPT 61A)
-      const rawScore = calcFinalScore(ev.id, 'mgr_score');
+      const rawScore = await calcFinalScore(ev.id, 'mgr_score');
       if (rawScore === null) {
         return res.status(400).json({ error: '관리자 점수가 입력되지 않았습니다.' });
       }
@@ -1590,23 +1556,21 @@ app.get('/api/settings/my-eval-mode', auth, async (req, res) => {
 });
 
 // 조직장이 팀 평가 방식 설정
-app.post('/api/settings/team-eval-mode', auth, (req, res) => {
+app.post('/api/settings/team-eval-mode', auth, async (req, res) => {
   try {
     const { mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
-    const isManager = db.prepare('SELECT 1 FROM users WHERE manager_id=? LIMIT 1').get(req.user.sub);
+    const isManager = await adminRepo.hasDirectReports(req.user.sub);
     const isAdmin = ['master','admin'].includes(req.user.role);
     if (!isManager && !isAdmin)
       return res.status(403).json({ error: '하위 팀원이 없으면 설정할 수 없습니다.' });
-    const activeEval = db.prepare(
-      "SELECT 1 FROM eval_cycles WHERE user_id=? AND phase NOT IN ('final_done') LIMIT 1"
-    ).get(req.user.sub);
+    const activeEval = await adminRepo.hasActiveEval(req.user.sub);
     if (activeEval && !isAdmin)
       return res.status(400).json({
         error: '진행 중인 평가가 있어 평가 방식을 변경할 수 없습니다. 현재 평가 기간이 완료된 후 변경하세요.'
       });
-    db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.user.sub);
+    await adminRepo.updateUserEvalMode(req.user.sub, mode);
     auditLog(req.user.sub, 'TEAM_EVAL_MODE_CHANGED', req.user.sub, null,
       `팀 평가 방식 변경: ${mode}`, req.ip);
     if (activeEval && isAdmin)
@@ -1616,16 +1580,18 @@ app.post('/api/settings/team-eval-mode', auth, (req, res) => {
 });
 
 // 전사 기본 평가 방식 (admin+)
-app.get('/api/settings/eval-mode', auth, (req, res) => {
-  const mode = db.prepare("SELECT value FROM app_settings WHERE key='eval_mode'").get();
-  res.json({ mode: mode?.value || 'MBO' });
+app.get('/api/settings/eval-mode', auth, async (req, res) => {
+  try {
+    const value = await adminRepo.getAppSettingValue('eval_mode');
+    res.json({ mode: value || 'MBO' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/eval-mode', auth, adminOnly, (req, res) => {
+app.post('/api/settings/eval-mode', auth, adminOnly, async (req, res) => {
   try {
     const { mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
-    db.prepare("INSERT OR REPLACE INTO app_settings(key,value) VALUES('eval_mode',?)").run(mode);
+    await adminRepo.setAppSettingDirect('eval_mode', mode);
     auditLog(req.user.sub, 'GLOBAL_EVAL_MODE_CHANGED', null, null,
       `전사 평가 방식 변경: ${mode}`, req.ip);
     res.json({ success: true, mode });
@@ -1633,22 +1599,20 @@ app.post('/api/settings/eval-mode', auth, adminOnly, (req, res) => {
 });
 
 // 특정 사용자 평가 방식 설정 (admin+)
-app.patch('/api/users/:id/eval-mode', auth, adminOnly, (req, res) => {
+app.patch('/api/users/:id/eval-mode', auth, adminOnly, async (req, res) => {
   try {
     const { mode } = req.body;
     if (!['MBO','OKR','KPI'].includes(mode))
       return res.status(400).json({ error: '지원하지 않는 평가 방식입니다.' });
     const isMaster = req.user.role === 'master';
-    const activeEval = db.prepare(
-      "SELECT 1 FROM eval_cycles WHERE user_id=? AND phase NOT IN ('final_done') LIMIT 1"
-    ).get(req.params.id);
+    const activeEval = await adminRepo.hasActiveEval(req.params.id);
     if (activeEval && !isMaster)
       return res.status(400).json({
         error: '진행 중인 평가가 있어 평가 방식을 변경할 수 없습니다. 현재 평가 기간이 완료된 후 변경하세요.'
       });
-    db.prepare('UPDATE users SET eval_mode=? WHERE id=?').run(mode, req.params.id);
-    const target = db.prepare('SELECT name FROM users WHERE id=?').get(req.params.id);
-    auditLog(req.user.sub, 'USER_EVAL_MODE_CHANGED', req.params.id, target?.name,
+    await adminRepo.updateUserEvalMode(req.params.id, mode);
+    const targetName = await adminRepo.findUserNameById(req.params.id);
+    auditLog(req.user.sub, 'USER_EVAL_MODE_CHANGED', req.params.id, targetName,
       `평가 방식 변경: ${mode}`, req.ip);
     if (activeEval && isMaster)
       return res.json({ success: true, warning: '진행 중인 평가가 있는 사용자의 방식을 변경했습니다.' });
@@ -1657,43 +1621,19 @@ app.patch('/api/users/:id/eval-mode', auth, adminOnly, (req, res) => {
 });
 
 // OKR CRUD
-app.get('/api/okr', auth, (req, res) => {
+app.get('/api/okr', auth, async (req, res) => {
   try {
-    const cycles = db.prepare(
-      'SELECT * FROM okr_cycles WHERE user_id=? ORDER BY created_at DESC'
-    ).all(req.user.sub);
-    const result = cycles.map(c => ({
-      ...c,
-      objectives: db.prepare(
-        'SELECT * FROM okr_objectives WHERE cycle_id=? ORDER BY sort_order'
-      ).all(c.id).map(obj => ({
-        ...obj,
-        key_results: db.prepare(
-          'SELECT * FROM okr_key_results WHERE objective_id=? ORDER BY sort_order'
-        ).all(obj.id)
-      }))
-    }));
+    const result = await adminRepo.findAllOkrCycles(req.user.sub);
     res.json(result);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/okr', auth, (req, res) => {
+app.post('/api/okr', auth, async (req, res) => {
   try {
     const { period_label, eval_year, objectives } = req.body;
-    const r = db.prepare(
-      "INSERT INTO okr_cycles(user_id,period_label,eval_year) VALUES(?,?,?)"
-    ).run(req.user.sub, period_label, eval_year);
-    const cycleId = r.lastInsertRowid;
-    (objectives||[]).forEach((obj, oi) => {
-      const or = db.prepare(
-        'INSERT INTO okr_objectives(cycle_id,title,description,sort_order) VALUES(?,?,?,?)'
-      ).run(cycleId, obj.title, obj.description||'', oi);
-      (obj.key_results||[]).forEach((kr, ki) => {
-        db.prepare(
-          'INSERT INTO okr_key_results(objective_id,title,target_value,unit,weight,sort_order) VALUES(?,?,?,?,?,?)'
-        ).run(or.lastInsertRowid, kr.title, kr.target_value||100, kr.unit||'%', kr.weight||33, ki);
-      });
-    });
+    const cycleId = await adminRepo.createOkrCycleWithDetails(
+      req.user.sub, period_label, eval_year, objectives
+    );
     res.json({ id: cycleId });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });

@@ -271,6 +271,149 @@ class PrismaAdminRepository {
     return this._toNum(rows);
   }
 
+  // ── A9b 추가 메서드 ──────────────────────────────────────
+
+  // 최종 점수 계산 (scoreField 화이트리스트 필수)
+  async calcFinalScore(evalId, scoreField) {
+    const VALID = ['mgr_score', 'self_score', 'second_mgr_score'];
+    if (!VALID.includes(scoreField)) throw new Error(`Invalid scoreField: ${scoreField}`);
+    const rows = this._toNum(await this.prisma.$queryRawUnsafe(
+      `SELECT g.weight, g.category_id, fes.${scoreField} AS score
+       FROM goals g JOIN final_eval_scores fes ON fes.goal_id = g.id
+       WHERE g.eval_id = ? AND fes.${scoreField} IS NOT NULL`,
+      Number(evalId)
+    ));
+    if (!rows.length) return null;
+    const catRows = this._toNum(await this.prisma.$queryRawUnsafe(
+      'SELECT id, weight FROM goal_categories WHERE is_active=1'
+    ));
+    const catWeightMap = new Map(catRows.map(c => [c.id, Number(c.weight) || 0]));
+    const byCat = new Map();
+    for (const r of rows) {
+      if (!byCat.has(r.category_id)) byCat.set(r.category_id, []);
+      byCat.get(r.category_id).push(r);
+    }
+    let finalScore = 0, usedCatW = 0;
+    for (const [catId, catGoals] of byCat) {
+      const catW = catWeightMap.get(catId);
+      if (!catW) continue;
+      const totalInnerW = catGoals.reduce((a, g) => a + (Number(g.weight) || 0), 0) || 1;
+      const catScore = catGoals.reduce(
+        (a, g) => a + (Number(g.score) / 5 * 100) * (Number(g.weight) / totalInnerW), 0
+      );
+      finalScore += catScore * (catW / 100);
+      usedCatW += catW;
+    }
+    if (usedCatW > 0 && usedCatW < 100) finalScore = finalScore * (100 / usedCatW);
+    return Math.round(finalScore * 100) / 100;
+  }
+
+  // 사용자가 팀원을 가지는지 (isManager 체크)
+  async hasDirectReports(userId) {
+    const u = await this.prisma.user.findFirst({
+      where: { managerId: Number(userId) },
+      select: { id: true },
+    });
+    return !!u;
+  }
+
+  // 진행 중 평가 존재 여부 (final_done 제외)
+  async hasActiveEval(userId) {
+    const ev = await this.prisma.evalCycle.findFirst({
+      where: { userId: Number(userId), NOT: { phase: 'final_done' } },
+      select: { id: true },
+    });
+    return !!ev;
+  }
+
+  // 사용자 eval_mode 업데이트
+  async updateUserEvalMode(userId, mode) {
+    await this.prisma.user.update({
+      where: { id: Number(userId) },
+      data: { evalMode: mode },
+    });
+  }
+
+  // app_settings 단일 값 조회
+  async getAppSettingValue(key) {
+    const row = await this.prisma.appSetting.findUnique({ where: { key } });
+    return row?.value ?? null;
+  }
+
+  // app_settings upsert (단순 key/value — eval_mode 등)
+  async setAppSettingDirect(key, value) {
+    await this.prisma.appSetting.upsert({
+      where:  { key },
+      update: { value },
+      create: { key, value },
+    });
+  }
+
+  // 사용자 이름 조회
+  async findUserNameById(userId) {
+    const u = await this.prisma.user.findUnique({
+      where: { id: Number(userId) },
+      select: { name: true },
+    });
+    return u?.name || null;
+  }
+
+  // OKR 전체 사이클 조회 (objectives + key_results 포함)
+  async findAllOkrCycles(userId) {
+    const cycles = this._toNum(await this.prisma.$queryRawUnsafe(
+      'SELECT * FROM okr_cycles WHERE user_id=? ORDER BY created_at DESC',
+      Number(userId)
+    ));
+    for (const c of cycles) {
+      const objs = this._toNum(await this.prisma.$queryRawUnsafe(
+        'SELECT * FROM okr_objectives WHERE cycle_id=? ORDER BY sort_order',
+        Number(c.id)
+      ));
+      for (const obj of objs) {
+        obj.key_results = this._toNum(await this.prisma.$queryRawUnsafe(
+          'SELECT * FROM okr_key_results WHERE objective_id=? ORDER BY sort_order',
+          Number(obj.id)
+        ));
+      }
+      c.objectives = objs;
+    }
+    return cycles;
+  }
+
+  // OKR 사이클 생성 (objectives + key_results 포함, 원자 처리)
+  async createOkrCycleWithDetails(userId, periodLabel, evalYear, objectives) {
+    return await this.prisma.$transaction(async (tx) => {
+      const cycle = await tx.okrCycle.create({
+        data: { userId: Number(userId), periodLabel, evalYear },
+      });
+      for (let oi = 0; oi < (objectives || []).length; oi++) {
+        const obj = objectives[oi];
+        const objective = await tx.okrObjective.create({
+          data: {
+            cycleId:     cycle.id,
+            title:       obj.title,
+            description: obj.description || '',
+            sortOrder:   oi,
+          },
+        });
+        for (let ki = 0; ki < (obj.key_results || []).length; ki++) {
+          const kr = obj.key_results[ki];
+          await tx.okrKeyResult.create({
+            data: {
+              objectiveId: objective.id,
+              title:       kr.title,
+              targetValue: kr.target_value || 100,
+              unit:        kr.unit || '%',
+              weight:      kr.weight || 33,
+              sortOrder:   ki,
+            },
+          });
+        }
+      }
+      return cycle.id;
+    });
+  }
+
   // grade-distribution count by grade
   async countByGrade(userIds, periodLabel, grade) {
     if (!userIds.length) return 0;
