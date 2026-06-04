@@ -559,6 +559,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - **A9b 완료**: calcFinalScore(scoreField 화이트리스트·adminRepo 위임)+eval-mode 3핸들러 async+OKR GET/POST($transaction) ~17건, db.prepare 76→59
 - **A9c 완료**: getSetting/setSetting/getSettingRow/upsertSettingMeta async, 호출부 27곳 전수 await, sync 핸들러 16개 async 전환 → **런타임 raw 드라이버 호출 0 달성**, db.prepare 59→53
 - 잔여 53건: 전부 bootstrap/init(CREATE TABLE/ALTER/PRAGMA/시드 등) → Phase B(`prisma db push`)에서 흡수
+- **B1 완료**: DB_DRIVER 조건화(DB_DRIVER=postgres면 better-sqlite3/initDB/seed skip), scripts/seed-pg.js(Prisma 멱등) 작성, activation_blocked_at migrations 정비
+- 다음: **B2** ($queryRawUnsafe ? → $queryRaw 태그드 템플릿 ~48건, SQLite V3 그린 검증)
 - analytics/bootstrap은 Phase B(postgresql 전환)에서 Prisma 재구현 또는 prisma db push로 흡수 예정
 - Prisma schema.prisma 현재 provider="sqlite" 유지 (Phase B에서 postgresql로 전환)
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
@@ -595,6 +597,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2A-MIGRATE-B1 — DB_DRIVER 조건화(better-sqlite3/initDB/seedInitialData skip), seed-pg.js(Prisma 멱등) 작성, activation_blocked_at initDB 정비, provider=sqlite 유지, SQLite V3 그린 (PROMPT INFRA-2A-MIGRATE-B1) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A9c — getSetting 계열 4함수 async+adminRepo 위임, 호출부 27곳 전수 await, sync 핸들러 16개 async 전환, Promise 오염/분기 점검 그린, 런타임 raw 드라이버 0, db.prepare 59→53, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9c) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A9b — calcFinalScore(scoreField 화이트리스트)+eval-mode 3핸들러 async+OKR GET/POST($transaction) ~17건 어댑터 라우팅, 점수계산 회귀·인젝션 게이트 그린, db.prepare 76→59, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9b) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A9a — analytics 호출부(D:sync 함수 4건 제거)+perf/org-ai-summary(E:3건)+misc(G:5건, PRAGMA→bootstrap 재분류) 어댑터 라우팅, 분석수치 회귀 그린, db.prepare 88→76, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9a) | Claude Code |

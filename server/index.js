@@ -48,14 +48,24 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET     = process.env.JWT_SECRET || 'synap-hr-local-dev-secret-2025';
 const ENC_SECRET     = process.env.ENC_SECRET || 'synap-local-enc-secret-32bytes!!';
 const DB_PATH        = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'hrmanage.db');
+// DB_DRIVER: 'sqlite'(기본) | 'postgres'(Phase B3 이후)
+// postgres면 better-sqlite3/initDB/seedInitialData 블록 전체 skip
+// (스키마 = prisma db push, 시드 = scripts/seed-pg.js)
+const DB_DRIVER = process.env.DB_DRIVER || 'sqlite';
 
-// ── DB 초기화 ──────────────────────────────────────────────
-const db = new Database(DB_PATH);
-// journal_mode: 로컬은 WAL(성능 우위), Docker+Windows 바인드 마운트는 DELETE 필수
-// (SQLITE_IOERR_SHMOPEN 회피)
-db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
-db.pragma('foreign_keys = ON');
-initDB();
+// ── DB 초기화 (SQLite 전용 — PG는 prisma db push로 대체) ──
+let db = null;
+if (DB_DRIVER !== 'postgres') {
+  db = new Database(DB_PATH);
+  // journal_mode: 로컬은 WAL(성능 우위), Docker+Windows 바인드 마운트는 DELETE 필수
+  // (SQLITE_IOERR_SHMOPEN 회피)
+  db.pragma(`journal_mode = ${process.env.SQLITE_JOURNAL_MODE || 'WAL'}`);
+  db.pragma('foreign_keys = ON');
+  initDB();
+} else {
+  process.env.TZ = process.env.TZ || 'Asia/Seoul';
+  console.log(`✅ 시간대 설정: ${process.env.TZ} (PG mode — initDB skip)`);
+}
 
 function loadTimezone() {
   try {
@@ -2915,6 +2925,7 @@ function initDB() {
     "ALTER TABLE users ADD COLUMN org_id INTEGER",
     "ALTER TABLE app_settings ADD COLUMN updated_by INTEGER",
     "ALTER TABLE app_settings ADD COLUMN updated_at TEXT",
+    "ALTER TABLE eval_periods ADD COLUMN activation_blocked_at TEXT",
   ];
   migrations.forEach(sql => { try { db.prepare(sql).run(); } catch(e) {} });
 
