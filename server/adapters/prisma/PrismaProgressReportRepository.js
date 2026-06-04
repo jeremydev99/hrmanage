@@ -1,5 +1,6 @@
 const ProgressReportRepository = require('../../repositories/ProgressReportRepository');
 const crypto = require('crypto');
+const { Prisma } = require('@prisma/client');
 const { _toStr } = require('./_helpers');
 
 class PrismaProgressReportRepository extends ProgressReportRepository {
@@ -103,10 +104,11 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
       const insertedIds = [];
 
       const insertRow = async (content, goalId) => {
-        const rows = await tx.$queryRawUnsafe(
-          'INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round) VALUES (?, ?, ?, ?, ?) RETURNING id',
-          Number(eval_id), Number(author_id), this._encrypt(content), goalId || null, newRound
-        );
+        const rows = await tx.$queryRaw`
+          INSERT INTO progress_reports (eval_id, author_id, content, goal_id, round)
+          VALUES (${Number(eval_id)}, ${Number(author_id)}, ${this._encrypt(content)}, ${goalId || null}, ${newRound})
+          RETURNING id
+        `;
         const id = rows[0]?.id;
         if (id) insertedIds.push(id);
       };
@@ -138,24 +140,24 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
 
   // [INFRA-A6] goal_id/round/goal_name 포함 전체 조회 (enc _flatten 경유)
   async findByEvalIdFull(evalId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT pr.id, pr.eval_id, pr.author_id, pr.content,
              pr.goal_id, pr.round, pr.created_at, pr.updated_at,
              u.name AS author_name, g.name AS goal_name
       FROM progress_reports pr
       LEFT JOIN users u ON u.id = pr.author_id
       LEFT JOIN goals g ON g.id = pr.goal_id
-      WHERE pr.eval_id = ?
+      WHERE pr.eval_id = ${Number(evalId)}
       ORDER BY pr.round ASC, pr.goal_id ASC, pr.created_at ASC
-    `, Number(evalId));
+    `;
 
     const reportIds = rows.map(r => Number(r.id));
     let fileMap = {};
     if (reportIds.length) {
-      const files = await this.prisma.$queryRawUnsafe(
-        `SELECT id, report_id, file_name, file_type, file_size FROM report_files WHERE report_id IN (${reportIds.map(() => '?').join(',')})`,
-        ...reportIds
-      );
+      const files = await this.prisma.$queryRaw`
+        SELECT id, report_id, file_name, file_type, file_size
+        FROM report_files WHERE report_id IN (${Prisma.join(reportIds)})
+      `;
       files.forEach(f => {
         const rid = Number(f.report_id);
         if (!fileMap[rid]) fileMap[rid] = [];
@@ -175,10 +177,10 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
 
   // 보고 회차 카운트 (Prisma client에 round 미반영 → rawUnsafe)
   async getMaxRound(evalId, authorId) {
-    const rows = await this.prisma.$queryRawUnsafe(
-      'SELECT COALESCE(MAX(round), 0) AS max_round FROM progress_reports WHERE eval_id = ? AND author_id = ?',
-      Number(evalId), Number(authorId)
-    );
+    const rows = await this.prisma.$queryRaw`
+      SELECT COALESCE(MAX(round), 0) AS max_round
+      FROM progress_reports WHERE eval_id = ${Number(evalId)} AND author_id = ${Number(authorId)}
+    `;
     return Number(rows[0]?.max_round || 0);
   }
 

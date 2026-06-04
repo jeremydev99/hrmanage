@@ -2,6 +2,7 @@
  * PrismaEvalPeriodRepository — eval_periods 테이블 CRUD (INFRA-A6)
  * enc 필드 없음, tx 없음 — 저위험
  */
+const { Prisma } = require('@prisma/client');
 const { _toStr } = require('./_helpers');
 
 class PrismaEvalPeriodRepository {
@@ -135,24 +136,24 @@ class PrismaEvalPeriodRepository {
   }
 
   async findOrgModes(periodId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT em.manager_id, em.eval_mode, em.locked,
              u.name as leader_name, o.name as org_name
       FROM eval_period_modes em
       JOIN users u ON u.id = em.manager_id
       LEFT JOIN organizations o ON o.leader_id = em.manager_id AND o.is_active = 1
-      WHERE em.period_id = ?
+      WHERE em.period_id = ${Number(periodId)}
       ORDER BY u.name
-    `, Number(periodId));
+    `;
     return rows;
   }
 
   async setOrgMode(periodId, managerId, evalMode) {
-    await this.prisma.$queryRawUnsafe(`
+    await this.prisma.$executeRaw`
       INSERT INTO eval_period_modes(period_id, manager_id, eval_mode)
-      VALUES(?, ?, ?)
+      VALUES(${Number(periodId)}, ${Number(managerId)}, ${evalMode})
       ON CONFLICT(period_id, manager_id) DO UPDATE SET eval_mode = excluded.eval_mode
-    `, Number(periodId), Number(managerId), evalMode);
+    `;
   }
 
   async validateGradePolicy(id) {
@@ -161,40 +162,39 @@ class PrismaEvalPeriodRepository {
   }
 
   async checkInUse(periodLabel, evalYear) {
-    const rows = await this.prisma.$queryRawUnsafe(
-      'SELECT 1 FROM eval_cycles WHERE period_label=? AND eval_year=? LIMIT 1',
-      periodLabel, evalYear
-    );
+    const rows = await this.prisma.$queryRaw`
+      SELECT 1 FROM eval_cycles WHERE period_label=${periodLabel} AND eval_year=${evalYear} LIMIT 1
+    `;
     return rows.length > 0;
   }
 
   async deleteModes(periodId) {
-    await this.prisma.$queryRawUnsafe('DELETE FROM eval_period_modes WHERE period_id=?', Number(periodId));
+    await this.prisma.$executeRaw`DELETE FROM eval_period_modes WHERE period_id=${Number(periodId)}`;
   }
 
   async getOrgModeForManager(periodId, managerId) {
-    const rows = await this.prisma.$queryRawUnsafe(
-      'SELECT locked FROM eval_period_modes WHERE period_id=? AND manager_id=? LIMIT 1',
-      Number(periodId), Number(managerId)
-    );
+    const rows = await this.prisma.$queryRaw`
+      SELECT locked FROM eval_period_modes
+      WHERE period_id=${Number(periodId)} AND manager_id=${Number(managerId)} LIMIT 1
+    `;
     return rows[0] || null;
   }
 
   async lockOrgMode(periodId) {
-    await this.prisma.$queryRawUnsafe(
-      'UPDATE eval_period_modes SET locked=1 WHERE period_id=?', Number(periodId)
-    );
+    await this.prisma.$executeRaw`
+      UPDATE eval_period_modes SET locked=1 WHERE period_id=${Number(periodId)}
+    `;
     await this.prisma.evalPeriod.update({ where: { id: Number(periodId) }, data: { locked: 1 } });
   }
 
   async findMyModes(userId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT em.period_id, em.eval_mode, em.locked,
              ep.period_label, ep.eval_year, ep.is_active
       FROM eval_period_modes em
       JOIN eval_periods ep ON ep.id = em.period_id
-      WHERE em.manager_id = ? AND ep.is_active = 1
-    `, Number(userId));
+      WHERE em.manager_id = ${Number(userId)} AND ep.is_active = 1
+    `;
     return rows;
   }
 }

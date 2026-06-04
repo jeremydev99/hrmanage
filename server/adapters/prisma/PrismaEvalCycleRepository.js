@@ -1,5 +1,6 @@
 const EvalCycleRepository = require('../../repositories/EvalCycleRepository');
 const crypto = require('crypto');
+const { Prisma } = require('@prisma/client');
 const { _toStr } = require('./_helpers');
 
 /**
@@ -161,15 +162,15 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
   }
 
   async findFinalPendingByManager(managerId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT e.id, e.user_id, e.period_label, e.eval_year, e.phase, e.self_reason, e.reject_reason, e.locked,
              u.name as user_name, u.dept, u.grade, u.title, 0 as is_second
       FROM eval_cycles e
       JOIN users u ON e.user_id = u.id
       WHERE e.phase IN ('final_mgr_pending','final_mgr2_pending')
-        AND u.manager_id = ?
+        AND u.manager_id = ${Number(managerId)}
       ORDER BY e.created_at DESC
-    `, Number(managerId));
+    `;
     return rows.map(r => ({
       ...r,
       self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
@@ -178,7 +179,7 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
   }
 
   async findFinalPending2ndByManager(managerId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT e.id, e.user_id, e.period_label, e.eval_year, e.phase, e.self_reason, e.reject_reason, e.locked,
              u.name as user_name, u.dept, u.grade, u.title, 1 as is_second
       FROM eval_cycles e
@@ -186,9 +187,9 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       JOIN final_evaluations fe ON fe.eval_id = e.id
       WHERE e.phase IN ('final_mgr2_pending')
         AND fe.mgr_done = 1
-        AND u.manager_id IN (SELECT id FROM users WHERE manager_id = ?)
+        AND u.manager_id IN (SELECT id FROM users WHERE manager_id = ${Number(managerId)})
       ORDER BY e.created_at DESC
-    `, Number(managerId));
+    `;
     return rows.map(r => ({
       ...r,
       self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
@@ -222,11 +223,11 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
   }
 
   async findPendingWithUser() {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT e.*, u.name as user_name, u.dept, u.title, u.manager_id
       FROM eval_cycles e JOIN users u ON e.user_id = u.id
       WHERE e.phase='pending'
-    `);
+    `;
     return rows;
   }
 }

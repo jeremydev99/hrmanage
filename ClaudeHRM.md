@@ -560,7 +560,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - **A9c 완료**: getSetting/setSetting/getSettingRow/upsertSettingMeta async, 호출부 27곳 전수 await, sync 핸들러 16개 async 전환 → **런타임 raw 드라이버 호출 0 달성**, db.prepare 59→53
 - 잔여 53건: 전부 bootstrap/init(CREATE TABLE/ALTER/PRAGMA/시드 등) → Phase B(`prisma db push`)에서 흡수
 - **B1 완료**: DB_DRIVER 조건화(DB_DRIVER=postgres면 better-sqlite3/initDB/seed skip), scripts/seed-pg.js(Prisma 멱등) 작성, activation_blocked_at migrations 정비
-- 다음: **B2** ($queryRawUnsafe ? → $queryRaw 태그드 템플릿 ~48건, SQLite V3 그린 검증)
+- **B2 완료**: $queryRawUnsafe 47건 → $queryRaw 태그드 템플릿 전환(5개 어댑터 파일, Prisma 임포트 추가), PG 파라미터 호환 확보, SQLite V3 그린
+- 다음: **B3-local** (provider=postgresql + 로컬 docker PG + db push + seed-pg + V3 on PG) → B3-deploy(NCloud 실배포)
 - analytics/bootstrap은 Phase B(postgresql 전환)에서 Prisma 재구현 또는 prisma db push로 흡수 예정
 - Prisma schema.prisma 현재 provider="sqlite" 유지 (Phase B에서 postgresql로 전환)
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
@@ -597,6 +598,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2A-MIGRATE-B2 — $queryRawUnsafe 47건 → $queryRaw 태그드 템플릿 전환(값=${}, IN=Prisma.join, 동적WHERE=Prisma.sql/empty, 컬럼=Prisma.raw 화이트리스트), PG 파라미터 호환 확보, provider=sqlite, V3 그린 (PROMPT INFRA-2A-MIGRATE-B2) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B1 — DB_DRIVER 조건화(better-sqlite3/initDB/seedInitialData skip), seed-pg.js(Prisma 멱등) 작성, activation_blocked_at initDB 정비, provider=sqlite 유지, SQLite V3 그린 (PROMPT INFRA-2A-MIGRATE-B1) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A9c — getSetting 계열 4함수 async+adminRepo 위임, 호출부 27곳 전수 await, sync 핸들러 16개 async 전환, Promise 오염/분기 점검 그린, 런타임 raw 드라이버 0, db.prepare 59→53, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9c) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A9b — calcFinalScore(scoreField 화이트리스트)+eval-mode 3핸들러 async+OKR GET/POST($transaction) ~17건 어댑터 라우팅, 점수계산 회귀·인젝션 게이트 그린, db.prepare 76→59, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9b) | Claude Code |

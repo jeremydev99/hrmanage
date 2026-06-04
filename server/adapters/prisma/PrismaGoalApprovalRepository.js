@@ -3,6 +3,7 @@
  * enc 필드: note (AES-256-CBC, _flatten 경유)
  */
 const crypto = require('crypto');
+const { Prisma } = require('@prisma/client');
 const { _toStr } = require('./_helpers');
 
 class PrismaGoalApprovalRepository {
@@ -54,12 +55,12 @@ class PrismaGoalApprovalRepository {
   }
 
   async findByEvalId(evalId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT a.id, a.eval_id, a.approver_id, a.level, a.action, a.note, a.created_at,
              u.name as approver_name, u.title as approver_title
       FROM goal_approvals a LEFT JOIN users u ON a.approver_id = u.id
-      WHERE a.eval_id = ? ORDER BY a.created_at ASC
-    `, Number(evalId));
+      WHERE a.eval_id = ${Number(evalId)} ORDER BY a.created_at ASC
+    `;
     return rows.map(a => ({
       id: a.id, eval_id: a.eval_id, approver_id: a.approver_id,
       level: a.level, action: a.action,
@@ -71,12 +72,12 @@ class PrismaGoalApprovalRepository {
   }
 
   async findByEvalIdOrdered(evalId) {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT a.id, a.eval_id, a.approver_id, a.level, a.action, a.note, a.created_at,
              u.name as approver_name, u.title as approver_title
       FROM goal_approvals a LEFT JOIN users u ON a.approver_id = u.id
-      WHERE a.eval_id = ? ORDER BY a.level ASC
-    `, Number(evalId));
+      WHERE a.eval_id = ${Number(evalId)} ORDER BY a.level ASC
+    `;
     return rows.map(a => ({
       id: a.id, eval_id: a.eval_id, approver_id: a.approver_id,
       level: a.level, action: a.action,
@@ -129,29 +130,30 @@ class PrismaGoalApprovalRepository {
 
   // 복잡 조회: 내 승인 이력 (동적 필터)
   async findHistoryByApprover(approverId, { periodLabel, evalYear } = {}) {
-    let sql = `
+    const periodFilter = periodLabel ? Prisma.sql` AND e.period_label=${periodLabel}` : Prisma.empty;
+    const yearFilter   = evalYear    ? Prisma.sql` AND e.eval_year=${evalYear}`       : Prisma.empty;
+    const rows = await this.prisma.$queryRaw`
       SELECT a.id, a.eval_id, a.approver_id, a.level, a.action, a.note, a.created_at,
              e.user_id, e.period_label, e.eval_year, e.phase,
              u.name as target_name, u.dept as target_dept, u.title as target_title, u.grade as target_grade
       FROM goal_approvals a
       JOIN eval_cycles e ON a.eval_id = e.id
       JOIN users u ON e.user_id = u.id
-      WHERE a.approver_id = ?`;
-    const params = [Number(approverId)];
-    if (periodLabel) { sql += ' AND e.period_label=?'; params.push(periodLabel); }
-    if (evalYear)    { sql += ' AND e.eval_year=?';    params.push(evalYear); }
-    sql += ' ORDER BY a.created_at DESC';
-    const rows = await this.prisma.$queryRawUnsafe(sql, ...params);
+      WHERE a.approver_id = ${Number(approverId)}
+      ${periodFilter}
+      ${yearFilter}
+      ORDER BY a.created_at DESC
+    `;
     return rows.map(r => ({ ...r, note: r.note ? this._decrypt(r.note) : '' }));
   }
 
   // pending 조회: phase='pending' eval 목록 (user join)
   async findPendingEvals() {
-    const rows = await this.prisma.$queryRawUnsafe(`
+    const rows = await this.prisma.$queryRaw`
       SELECT e.*, u.name as user_name, u.dept, u.title, u.manager_id
       FROM eval_cycles e JOIN users u ON e.user_id = u.id
       WHERE e.phase='pending'
-    `);
+    `;
     return rows;
   }
 }
