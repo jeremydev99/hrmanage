@@ -27,3 +27,5 @@ data/
 
 # 컨테이너 빌드 캐시
 .docker-cache/
+# nginx 렌더 결과 (환경별 산출물 — 커밋 제외)
+nginx/conf.d/hrpms.conf

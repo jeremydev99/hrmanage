@@ -109,7 +109,10 @@ bash deploy/infra-up.sh
 
 - **자동 발급(인터넷 환경)**: Let's Encrypt, `deploy/infra-up.sh`에 포함. 자동 갱신 타이머(`certbot.timer`) 등록됨.
 - **인증서 주입(폐쇄망)**: 고객 사내 CA 발급 인증서 파일 투입 ⬜ TODO (9장)
-- Nginx 설정은 `$DOMAIN` 기반 템플릿으로 도메인 자동 반영 🚧 (FIX4 예정 — 현재 도메인 직접 수정 필요)
+- Nginx 설정은 `nginx/templates/hrpms.conf.template` → 배포 시 `envsubst '${DOMAIN}'`으로 `nginx/conf.d/hrpms.conf` 자동 렌더 ✅
+  - `infra-up.sh` 5단계에서 자동 실행 (`DOMAIN` 변수로 도메인 자동 반영)
+  - nginx 변수(`$host`, `$request_uri`, `$scheme` 등)는 allowlist 방식으로 보존
+  - 고객사 배포: `DOMAIN=hr.고객사.com ./infra-up.sh` 만으로 인증서 경로·서버명 자동 대응
 
 > **갱신 주의**: 현재 발급 방식(standalone)은 갱신 시 80 포트 일시 해제 필요. 운영 안정화 후 webroot 방식 또는 renew hook 적용 권장 🚧
 

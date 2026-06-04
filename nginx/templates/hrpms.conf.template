@@ -1,10 +1,11 @@
-# ── hrpms.synap.co.kr — Nginx 리버스 프록시 설정 ──
-# INFRA-2D-1: 앱 독립 리허설 단계 (Phase B에서 proxy_pass + CORS 활성화)
+# ── ${DOMAIN} — Nginx 리버스 프록시 설정 ──
+# 템플릿: ${DOMAIN}만 envsubst로 치환 (nginx 변수 $host 등은 보존)
+# 렌더: envsubst '${DOMAIN}' < hrpms.conf.template > nginx/conf.d/hrpms.conf
 
 # HTTP → HTTPS 301 리다이렉트 + certbot webroot 검증 경로
 server {
     listen 80;
-    server_name hrpms.synap.co.kr;
+    server_name ${DOMAIN};
 
     # Let's Encrypt webroot 검증 (인증서 발급/갱신 시 필요)
     location /.well-known/acme-challenge/ {
@@ -21,11 +22,11 @@ server {
 server {
     listen 443 ssl;
     http2 on;
-    server_name hrpms.synap.co.kr;
+    server_name ${DOMAIN};
 
     # Let's Encrypt 인증서 (certbot 발급 후 경로 일치 확인)
-    ssl_certificate     /etc/letsencrypt/live/hrpms.synap.co.kr/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/hrpms.synap.co.kr/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
     # TLS 보안 설정
     ssl_protocols TLSv1.2 TLSv1.3;
@@ -56,6 +57,6 @@ server {
     #     proxy_cache_bypass $http_upgrade;
     #
     #     # CORS 화이트리스트 (Phase B에서 실 도메인으로 채움)
-    #     # add_header Access-Control-Allow-Origin "https://hrpms.synap.co.kr" always;
+    #     # add_header Access-Control-Allow-Origin "https://${DOMAIN}" always;
     # }
 }

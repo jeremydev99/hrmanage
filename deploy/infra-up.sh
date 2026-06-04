@@ -111,6 +111,13 @@ sudo systemctl status certbot.timer --no-pager || \
 
 echo ""
 echo "=== [5/6] Nginx HTTPS 기동 (인증서 발급 후) ==="
+# 템플릿 → 실제 conf 렌더 (${DOMAIN}만 치환, nginx $host/$scheme 등 보존)
+command -v envsubst &>/dev/null || sudo apt-get install -y gettext-base
+mkdir -p "$DEPLOY_DIR/nginx/conf.d"
+DOMAIN="$DOMAIN" envsubst '${DOMAIN}' \
+  < "$DEPLOY_DIR/nginx/templates/hrpms.conf.template" \
+  > "$DEPLOY_DIR/nginx/conf.d/hrpms.conf"
+echo "nginx conf 렌더 완료: $DEPLOY_DIR/nginx/conf.d/hrpms.conf (DOMAIN=$DOMAIN)"
 # 이 시점에 /etc/letsencrypt/live/$DOMAIN/fullchain.pem 존재 → nginx 정상 기동
 docker compose --profile infra up -d nginx
 sleep 3
