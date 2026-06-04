@@ -349,6 +349,26 @@ class PrismaAdminRepository {
     });
   }
 
+  // app_settings 전체 행 반환 (value + updated_by + updated_at)
+  async getSettingRow(key) {
+    const row = await this.prisma.appSetting.findUnique({
+      where: { key },
+      select: { value: true, updatedBy: true, updatedAt: true },
+    });
+    if (!row) return null;
+    return { value: row.value, updated_by: row.updatedBy, updated_at: row.updatedAt };
+  }
+
+  // app_settings upsert (updated_by + updated_at 포함 — notice/session-policy 등)
+  async upsertSettingMeta(key, value, userId) {
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    await this.prisma.appSetting.upsert({
+      where:  { key },
+      update: { value, updatedBy: userId ? Number(userId) : null, updatedAt: now },
+      create: { key, value, updatedBy: userId ? Number(userId) : null, updatedAt: now },
+    });
+  }
+
   // 사용자 이름 조회
   async findUserNameById(userId) {
     const u = await this.prisma.user.findUnique({

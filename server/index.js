@@ -174,7 +174,7 @@ function masterOnly(req, res, next) {
 // [INFRA-A2] notice/settings 6건 → getSettingRow/upsertSettingMeta/userRepo async 전환
 app.get('/api/notice', async (req, res) => {
   try {
-    const notice = getSettingRow('notice');
+    const notice = await getSettingRow('notice');
     if (!notice) return res.json({ content: '', author_name: '', author_title: '', updated_at: '' });
     const author = notice.updated_by ? await userRepo.findById(notice.updated_by) : null;
     res.json({
@@ -190,7 +190,7 @@ app.get('/api/notice', async (req, res) => {
 app.post('/api/notice', auth, adminOnly, async (req, res) => {
   try {
     const { content } = req.body;
-    upsertSettingMeta('notice', content || '', req.user.sub);
+    await upsertSettingMeta('notice', content || '', req.user.sub);
     auditLog(req.user.sub, 'NOTICE_UPDATED', null, null,
       `공지사항 수정 (${(content||'').length}자)`, req.ip);
     const author = await userRepo.findById(req.user.sub);
@@ -199,22 +199,22 @@ app.post('/api/notice', auth, adminOnly, async (req, res) => {
 });
 
 // 세션 정책 조회
-app.get('/api/settings/session-policy', auth, (req, res) => {
+app.get('/api/settings/session-policy', auth, async (req, res) => {
   try {
-    const value = getSetting('session_policy', null);
+    const value = await getSetting('session_policy', null);
     res.json(JSON.parse(value || '{"close_on_browser_close":false,"timeout_minutes":480}'));
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 세션 정책 설정 (master만)
-app.post('/api/settings/session-policy', auth, masterOnly, (req, res) => {
+app.post('/api/settings/session-policy', auth, masterOnly, async (req, res) => {
   try {
     const { close_on_browser_close, timeout_minutes } = req.body;
     const safeTimeout = Math.min(parseInt(timeout_minutes) || 480, 480);
     if (safeTimeout < 1)
       return res.status(400).json({ error: '최소 1분 이상이어야 합니다.' });
     const policy = { close_on_browser_close: !!close_on_browser_close, timeout_minutes: safeTimeout };
-    upsertSettingMeta('session_policy', JSON.stringify(policy), req.user.sub);
+    await upsertSettingMeta('session_policy', JSON.stringify(policy), req.user.sub);
     auditLog(req.user.sub, 'SESSION_POLICY_CHANGED', null, null,
       `세션 정책 변경: 브라우저종료=${policy.close_on_browser_close}, 만료=${safeTimeout}분`, req.ip);
     res.json({ success: true, policy });
@@ -727,7 +727,7 @@ app.get('/api/approvals/my-history', auth, async (req, res) => {
 // 승인 의견 수정 [INFRA-A4]
 app.patch('/api/approvals/:approvalId', auth, async (req, res) => {
   try {
-    const editAllowed = getSetting('approval_edit', '0') === '1';
+    const editAllowed = (await getSetting('approval_edit', '0')) === '1';
     if (!editAllowed) return res.status(403).json({ error: '승인 수정이 허용되지 않은 상태입니다.' });
     const appr = await approvalRepo.findById(req.params.approvalId);
     if (!appr) return res.status(404).json({ error: '없음' });
@@ -747,7 +747,7 @@ app.patch('/api/approvals/:approvalId', auth, async (req, res) => {
 // 승인 취소 [INFRA-A4]
 app.delete('/api/approvals/:approvalId', auth, async (req, res) => {
   try {
-    const editAllowed = getSetting('approval_edit', '0') === '1';
+    const editAllowed = (await getSetting('approval_edit', '0')) === '1';
     if (!editAllowed)
       return res.status(403).json({ error: '승인 취소가 허용되지 않은 상태입니다.' });
     // [INFRA-A4] DELETE approval → approvalRepo
@@ -919,7 +919,7 @@ app.post('/api/feedback/:evalId', auth, async (req, res) => {
       return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
 
     // 64A: 피드백 회차 제한 강제 [INFRA-A3: feedbackRepo.countByAuthor]
-    const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
+    const feedbackLimit = parseInt(await getSetting('feedback_limit', '0'));
     if (feedbackLimit > 0) {
       const currentCount = await feedbackRepo.countByAuthor(req.params.evalId, req.user.sub);
       if (currentCount >= feedbackLimit) {
@@ -1021,7 +1021,7 @@ app.post('/api/final/:evalId/mgr', auth, async (req, res) => {
     const isAdmin    = ['master','admin'].includes(req.user.role);
     const isDirect   = String(targetUser?.manager_id) === String(req.user.sub);
 
-    const secondEnabled = getSetting('second_final', '0') === '1';
+    const secondEnabled = (await getSetting('second_final', '0')) === '1';
     let isSecond = false;
     if (secondEnabled) {
       const directMgr = targetUser?.manager_id
@@ -1376,7 +1376,7 @@ app.post('/api/reports/:evalId', auth, async (req, res) => {
       return res.status(400).json({ error: '목표 확정 후 작성 가능합니다.' });
 
     // 회차 제한 확인
-    const feedbackLimit = parseInt(getSetting('feedback_limit', '0'));
+    const feedbackLimit = parseInt(await getSetting('feedback_limit', '0'));
     const currentRound = await progressReportRepo.getMaxRound(evalId, req.user.sub);
     if (feedbackLimit > 0 && currentRound >= feedbackLimit) {
       return res.status(400).json({
@@ -1536,7 +1536,7 @@ app.get('/api/settings/my-eval-mode', auth, async (req, res) => {
     const activePeriods = await evalPeriodRepo.findActive();
 
     if (!activePeriods.length) {
-      return res.json({ mode: getSetting('eval_mode', 'MBO'), source: 'global' });
+      return res.json({ mode: await getSetting('eval_mode', 'MBO'), source: 'global' });
     }
 
     const leaderChain = await getMyOrgLeaderChainAsync(req.user.sub);
@@ -1551,7 +1551,7 @@ app.get('/api/settings/my-eval-mode', auth, async (req, res) => {
         return res.json({ mode: period.eval_mode, source: 'period', period: period.period_label });
     }
 
-    res.json({ mode: getSetting('eval_mode', 'MBO'), source: 'global' });
+    res.json({ mode: await getSetting('eval_mode', 'MBO'), source: 'global' });
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1722,16 +1722,18 @@ app.get('/api/admin/eval-detail/:userId', auth, adminOnly, async (req, res) => {
 // ── 성과관리 API ──────────────────────────────────────────
 
 // 대시보드 계층 설정 [INFRA-A5: getSetting 헬퍼 경유]
-app.get('/api/settings/dashboard-depth', auth, (req, res) => {
-  res.json({ depth: parseInt(getSetting('dashboard_depth', '2')) });
+app.get('/api/settings/dashboard-depth', auth, async (req, res) => {
+  try {
+    res.json({ depth: parseInt(await getSetting('dashboard_depth', '2')) });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/settings/dashboard-depth', auth, adminOnly, (req, res) => {
+app.post('/api/settings/dashboard-depth', auth, adminOnly, async (req, res) => {
   try {
     const depth = parseInt(req.body.depth);
     if (![1,2,3].includes(depth))
       return res.status(400).json({ error: '1~3단계만 설정 가능합니다. (4단계 미지원)' });
-    upsertSettingMeta('dashboard_depth', depth.toString(), req.user.sub); // [INFRA-A5]
+    await upsertSettingMeta('dashboard_depth', depth.toString(), req.user.sub);
     auditLog(req.user.sub, 'DASHBOARD_DEPTH_CHANGED', null, null,
       `대시보드 계층 변경: ${depth}단계`, req.ip);
     res.json({ success: true, depth });
@@ -1792,7 +1794,7 @@ app.get('/api/perf/team-summary', auth, async (req, res) => {
   try {
     const { period_id } = req.query;
     const userId = req.user.sub;
-    const maxDepth = parseInt(getSetting('dashboard_depth', '2'));
+    const maxDepth = parseInt(await getSetting('dashboard_depth', '2'));
 
     const myOrg = await adminRepo.findOrgByLeader(userId);
     if (!myOrg) return res.json({ is_leader: false, teams: [] });
@@ -2366,82 +2368,91 @@ app.patch('/api/users/:id/org', auth, adminOnly, async (req, res) => {
 
 // ── 앱 설정 API ──────────────────────────────────────────
 
-function getSetting(key, defaultVal) {
+async function getSetting(key, defaultVal) {
   try {
-    const row = db.prepare("SELECT value FROM app_settings WHERE key=?").get(key);
-    return row ? row.value : defaultVal;
+    const v = await adminRepo.getAppSettingValue(key);
+    return v !== null && v !== undefined ? v : defaultVal;
   } catch(e) { return defaultVal; }
 }
 
-function setSetting(key, value) {
+async function setSetting(key, value) {
   try {
-    const exists = db.prepare("SELECT 1 FROM app_settings WHERE key=?").get(key);
-    if (exists) db.prepare("UPDATE app_settings SET value=? WHERE key=?").run(value, key);
-    else db.prepare("INSERT INTO app_settings(key,value) VALUES(?,?)").run(key, value);
+    await adminRepo.setAppSettingDirect(key, value);
   } catch(e) { console.error('[setSetting]', e.message); }
 }
 // app_settings 전체 행 반환 (value + updated_by + updated_at 포함)
-function getSettingRow(key) {
+async function getSettingRow(key) {
   try {
-    return db.prepare("SELECT value, updated_by, updated_at FROM app_settings WHERE key=?").get(key);
+    return await adminRepo.getSettingRow(key);
   } catch(e) { return null; }
 }
 // app_settings upsert (updated_by·updated_at 포함) — notice/session-policy 등
-function upsertSettingMeta(key, value, userId) {
+async function upsertSettingMeta(key, value, userId) {
   try {
-    db.prepare(`
-      INSERT INTO app_settings(key, value, updated_by, updated_at)
-      VALUES(?, ?, ?, datetime('now'))
-      ON CONFLICT(key) DO UPDATE SET
-        value=excluded.value,
-        updated_by=excluded.updated_by,
-        updated_at=excluded.updated_at
-    `).run(key, value, userId);
+    await adminRepo.upsertSettingMeta(key, value, userId);
   } catch(e) { console.error('[upsertSettingMeta]', e.message); }
 }
 
 // 이력 공개 설정
-app.get('/api/settings/history-visibility', auth, (req, res) => {
-  res.json({ enabled: getSetting('history_visibility', '1') === '1' });
+app.get('/api/settings/history-visibility', auth, async (req, res) => {
+  try {
+    res.json({ enabled: (await getSetting('history_visibility', '1')) === '1' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/history-visibility', auth, adminOnly, (req, res) => {
-  setSetting('history_visibility', req.body.enabled ? '1' : '0');
-  res.json({ success: true });
+app.post('/api/settings/history-visibility', auth, adminOnly, async (req, res) => {
+  try {
+    await setSetting('history_visibility', req.body.enabled ? '1' : '0');
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 비활성 기간 이력 공개
-app.get('/api/settings/history-inactive', auth, (req, res) => {
-  res.json({ enabled: getSetting('history_inactive', '0') === '1' });
+app.get('/api/settings/history-inactive', auth, async (req, res) => {
+  try {
+    res.json({ enabled: (await getSetting('history_inactive', '0')) === '1' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/history-inactive', auth, adminOnly, (req, res) => {
-  setSetting('history_inactive', req.body.enabled ? '1' : '0');
-  res.json({ success: true });
+app.post('/api/settings/history-inactive', auth, adminOnly, async (req, res) => {
+  try {
+    await setSetting('history_inactive', req.body.enabled ? '1' : '0');
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 피드백 횟수 제한
-app.get('/api/settings/feedback-limit', auth, (req, res) => {
-  res.json({ limit: parseInt(getSetting('feedback_limit', '0')) });
+app.get('/api/settings/feedback-limit', auth, async (req, res) => {
+  try {
+    res.json({ limit: parseInt(await getSetting('feedback_limit', '0')) });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/feedback-limit', auth, adminOnly, (req, res) => {
-  setSetting('feedback_limit', String(parseInt(req.body.limit) || 0));
-  res.json({ success: true });
+app.post('/api/settings/feedback-limit', auth, adminOnly, async (req, res) => {
+  try {
+    await setSetting('feedback_limit', String(parseInt(req.body.limit) || 0));
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 승인 수정/취소 허용
 // 2차 최종평가 허용 설정
-app.get('/api/settings/second-final', auth, (req, res) => {
-  res.json({ enabled: getSetting('second_final', '0') === '1' });
+app.get('/api/settings/second-final', auth, async (req, res) => {
+  try {
+    res.json({ enabled: (await getSetting('second_final', '0')) === '1' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/second-final', auth, adminOnly, (req, res) => {
-  setSetting('second_final', req.body.enabled ? '1' : '0');
-  res.json({ success: true });
+app.post('/api/settings/second-final', auth, adminOnly, async (req, res) => {
+  try {
+    await setSetting('second_final', req.body.enabled ? '1' : '0');
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // 시간대 설정 [INFRA-A2: 2건 → getSetting/setSetting 헬퍼 경유]
-app.get('/api/settings/timezone', auth, (req, res) => {
-  res.json({ timezone: getSetting('timezone', 'Asia/Seoul') });
+app.get('/api/settings/timezone', auth, async (req, res) => {
+  try {
+    res.json({ timezone: await getSetting('timezone', 'Asia/Seoul') });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
+app.post('/api/settings/timezone', auth, masterOnly, async (req, res) => {
   try {
     const { timezone } = req.body;
     const validTimezones = [
@@ -2453,7 +2464,7 @@ app.post('/api/settings/timezone', auth, masterOnly, (req, res) => {
     ];
     if (!validTimezones.includes(timezone))
       return res.status(400).json({ error: '지원하지 않는 시간대입니다.' });
-    setSetting('timezone', timezone);
+    await setSetting('timezone', timezone);
     process.env.TZ = timezone;
     auditLog(req.user.sub, 'TIMEZONE_CHANGED', null, null,
       `시간대 변경: ${timezone}`, req.ip);
@@ -2468,7 +2479,7 @@ app.get('/api/evals/my-mgr-pending', auth, async (req, res) => {
   try {
     const directRows = await evalCycleRepo.findFinalPendingByManager(req.user.sub);
 
-    const secondEnabled = getSetting('second_final', '0') === '1';
+    const secondEnabled = (await getSetting('second_final', '0')) === '1';
     let secondRows = [];
     if (secondEnabled) {
       secondRows = await evalCycleRepo.findFinalPending2ndByManager(req.user.sub);
@@ -2625,12 +2636,16 @@ app.delete('/api/grade-policies/:id', auth, adminOnly, async (req, res) => {
   }
 });
 
-app.get('/api/settings/approval-edit', auth, (req, res) => {
-  res.json({ enabled: getSetting('approval_edit', '0') === '1' });
+app.get('/api/settings/approval-edit', auth, async (req, res) => {
+  try {
+    res.json({ enabled: (await getSetting('approval_edit', '0')) === '1' });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
-app.post('/api/settings/approval-edit', auth, adminOnly, (req, res) => {
-  setSetting('approval_edit', req.body.enabled ? '1' : '0');
-  res.json({ success: true });
+app.post('/api/settings/approval-edit', auth, adminOnly, async (req, res) => {
+  try {
+    await setSetting('approval_edit', req.body.enabled ? '1' : '0');
+    res.json({ success: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 app.get('/api/admin/audit', auth, adminOnly, async (req, res) => {
