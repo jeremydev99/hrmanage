@@ -18,6 +18,7 @@ const PrismaProgressReportRepository = require('../adapters/prisma/PrismaProgres
 const PrismaGoalApprovalRepository   = require('../adapters/prisma/PrismaGoalApprovalRepository');
 const PrismaEvalPeriodRepository     = require('../adapters/prisma/PrismaEvalPeriodRepository');
 const PrismaAdminRepository          = require('../adapters/prisma/PrismaAdminRepository');
+const PrismaGradePolicyRepository    = require('../adapters/prisma/PrismaGradePolicyRepository');
 // 향후 추가:
 // const DirectSqlUserRepository = require('../adapters/direct-sql/DirectSqlUserRepository');
 
@@ -147,6 +148,15 @@ function getGoalApprovalRepository() {
   }
 }
 
+function getGradePolicyRepository() {
+  switch (ADAPTER) {
+    case 'prisma':
+      return new PrismaGradePolicyRepository(getSharedPrismaClient());
+    default:
+      throw new Error(`Unknown DATA_ADAPTER: ${ADAPTER}`);
+  }
+}
+
 module.exports = {
   getUserRepository,
   getGoalCategoryRepository,
@@ -160,5 +170,6 @@ module.exports = {
   getGoalApprovalRepository,
   getEvalPeriodRepository,
   getAdminRepository,
+  getGradePolicyRepository,
   getSharedPrismaClient,
 };

@@ -27,6 +27,7 @@ const {
   getGoalApprovalRepository,
   getEvalPeriodRepository,
   getAdminRepository,
+  getGradePolicyRepository,
 } = require('./config/repository-factory');
 const userRepo = getUserRepository();
 const goalCategoryRepo = getGoalCategoryRepository();
@@ -40,6 +41,7 @@ const progressReportRepo  = getProgressReportRepository();
 const approvalRepo        = getGoalApprovalRepository();
 const evalPeriodRepo      = getEvalPeriodRepository();
 const adminRepo           = getAdminRepository();
+const gradePolicyRepo     = getGradePolicyRepository();
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -2640,50 +2642,32 @@ app.all('/api/grade-criteria/:id', (req, res) => {
 });
 
 // GET /api/grade-policies — 등급 정책 목록 + criteria + applied_periods
-app.get('/api/grade-policies', auth, adminOnly, (req, res) => {
+app.get('/api/grade-policies', auth, adminOnly, async (req, res) => {
   try {
-    const policies = db.prepare('SELECT id, name, description, created_at, created_by FROM grade_policies ORDER BY id').all();
-    for (const p of policies) {
-      p.criteria = db.prepare(
-        'SELECT id, grade_code, grade_name, min_score, sort_order, description, note FROM grade_policy_criteria WHERE policy_id=? ORDER BY sort_order'
-      ).all(p.id);
-      p.applied_periods = db.prepare(
-        'SELECT id, eval_year, period_label, is_active FROM eval_periods WHERE grade_policy_id=? ORDER BY eval_year DESC, id DESC'
-      ).all(p.id);
-    }
+    const policies = await gradePolicyRepo.findAll();
     res.json(policies);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
 // POST /api/grade-policies — 신규 정책 생성
-app.post('/api/grade-policies', auth, adminOnly, (req, res) => {
+app.post('/api/grade-policies', auth, adminOnly, async (req, res) => {
   const { name, description, criteria } = req.body;
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: '정책 이름은 필수입니다.' });
   }
-  const existing = db.prepare('SELECT id FROM grade_policies WHERE name = ?').get(name.trim());
-  if (existing) {
-    return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
-  }
-  const validation = validateGradePolicyCriteria(criteria);
-  if (!validation.ok) {
-    return res.status(400).json({ error: validation.error });
-  }
-  const tx = db.transaction(() => {
-    const result = db.prepare(
-      'INSERT INTO grade_policies (name, description, created_by) VALUES (?, ?, ?)'
-    ).run(name.trim(), description || null, req.user.sub);
-    const policyId = result.lastInsertRowid;
-    const insertCriteria = db.prepare(
-      'INSERT INTO grade_policy_criteria (policy_id, grade_code, grade_name, min_score, sort_order, description, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
-    for (const c of criteria) {
-      insertCriteria.run(policyId, c.grade_code.trim(), c.grade_name.trim(), c.min_score, c.sort_order, c.description || null, c.note || null);
-    }
-    return policyId;
-  });
   try {
-    const policyId = tx();
+    const existing = await gradePolicyRepo.findByName(name.trim());
+    if (existing) {
+      return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
+    }
+    const validation = validateGradePolicyCriteria(criteria);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
+    const policyId = await gradePolicyRepo.createWithCriteria(
+      { name: name.trim(), description: description || null, created_by: req.user.sub },
+      criteria
+    );
     auditLog(req.user.sub, 'GRADE_POLICY_CREATED', policyId, name.trim(),
       JSON.stringify({ criteria_count: criteria.length, criteria: criteria.map(c => ({ code: c.grade_code, min_score: c.min_score })) }), req.ip);
     res.status(201).json({ id: policyId, name: name.trim() });
@@ -2693,65 +2677,48 @@ app.post('/api/grade-policies', auth, adminOnly, (req, res) => {
 });
 
 // PUT /api/grade-policies/:id — 정책 수정 (이름·description은 항상 허용, criteria는 미바인딩 시에만)
-app.put('/api/grade-policies/:id', auth, adminOnly, (req, res) => {
+app.put('/api/grade-policies/:id', auth, adminOnly, async (req, res) => {
   const policyId = parseInt(req.params.id);
   if (!Number.isInteger(policyId)) {
     return res.status(400).json({ error: '유효하지 않은 정책 ID' });
   }
-  const target = db.prepare('SELECT id, name, description FROM grade_policies WHERE id = ?').get(policyId);
-  if (!target) {
-    return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
-  }
-  const { name, description, criteria } = req.body;
-  const hasNameOrDesc = (name !== undefined) || (description !== undefined);
-  const hasCriteria = criteria !== undefined;
-  if (!hasNameOrDesc && !hasCriteria) {
-    return res.status(400).json({ error: '수정할 필드가 없습니다.' });
-  }
-  if (hasCriteria) {
-    const appliedCount = db.prepare('SELECT COUNT(*) AS cnt FROM eval_periods WHERE grade_policy_id = ?').get(policyId).cnt;
-    if (appliedCount > 0) {
-      const appliedPeriods = db.prepare(
-        'SELECT id, eval_year, period_label FROM eval_periods WHERE grade_policy_id = ? ORDER BY eval_year DESC, id DESC'
-      ).all(policyId);
-      return res.status(409).json({
-        error: `이 정책은 ${appliedCount}개 평가 기간에 적용 중이므로 cutoff(등급 기준)를 수정할 수 없습니다. 신규 정책을 만들고 새 기간에 바인딩하세요.`,
-        applied_periods: appliedPeriods,
-        hint: '정책 이름·description은 수정 가능합니다.'
-      });
+  try {
+    const target = await gradePolicyRepo.findById(policyId);
+    if (!target) {
+      return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
     }
-    const validation = validateGradePolicyCriteria(criteria);
-    if (!validation.ok) {
-      return res.status(400).json({ error: validation.error });
-    }
-  }
-  if (name !== undefined && name.trim() !== target.name) {
-    const dup = db.prepare('SELECT id FROM grade_policies WHERE name = ? AND id != ?').get(name.trim(), policyId);
-    if (dup) {
-      return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
-    }
-  }
-  const tx = db.transaction(() => {
-    const updates = [];
-    const params = [];
-    if (name !== undefined) { updates.push('name = ?'); params.push(name.trim()); }
-    if (description !== undefined) { updates.push('description = ?'); params.push(description || null); }
-    if (updates.length > 0) {
-      params.push(policyId);
-      db.prepare(`UPDATE grade_policies SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    const { name, description, criteria } = req.body;
+    const hasNameOrDesc = (name !== undefined) || (description !== undefined);
+    const hasCriteria = criteria !== undefined;
+    if (!hasNameOrDesc && !hasCriteria) {
+      return res.status(400).json({ error: '수정할 필드가 없습니다.' });
     }
     if (hasCriteria) {
-      db.prepare('DELETE FROM grade_policy_criteria WHERE policy_id = ?').run(policyId);
-      const insert = db.prepare(
-        'INSERT INTO grade_policy_criteria (policy_id, grade_code, grade_name, min_score, sort_order, description, note) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      );
-      for (const c of criteria) {
-        insert.run(policyId, c.grade_code.trim(), c.grade_name.trim(), c.min_score, c.sort_order, c.description || null, c.note || null);
+      // 잠금가드: applied_periods ≥ 1이면 criteria 수정 차단
+      const appliedCount = await gradePolicyRepo.getAppliedCount(policyId);
+      if (appliedCount > 0) {
+        const appliedPeriods = await gradePolicyRepo.getAppliedPeriods(policyId);
+        return res.status(409).json({
+          error: `이 정책은 ${appliedCount}개 평가 기간에 적용 중이므로 cutoff(등급 기준)를 수정할 수 없습니다. 신규 정책을 만들고 새 기간에 바인딩하세요.`,
+          applied_periods: appliedPeriods,
+          hint: '정책 이름·description은 수정 가능합니다.'
+        });
+      }
+      const validation = validateGradePolicyCriteria(criteria);
+      if (!validation.ok) {
+        return res.status(400).json({ error: validation.error });
       }
     }
-  });
-  try {
-    tx();
+    if (name !== undefined && name.trim() !== target.name) {
+      const dup = await gradePolicyRepo.findByNameExcluding(name.trim(), policyId);
+      if (dup) {
+        return res.status(409).json({ error: `이미 존재하는 정책 이름입니다: ${name}` });
+      }
+    }
+    const metaUpdates = {};
+    if (name        !== undefined) metaUpdates.name        = name.trim();
+    if (description !== undefined) metaUpdates.description = description || null;
+    await gradePolicyRepo.updateWithCriteria(policyId, metaUpdates, hasCriteria ? criteria : null);
     const resolvedName = name !== undefined ? name.trim() : target.name;
     if (hasNameOrDesc) {
       auditLog(req.user.sub, 'GRADE_POLICY_UPDATED', policyId, target.name,
@@ -2768,26 +2735,18 @@ app.put('/api/grade-policies/:id', auth, adminOnly, (req, res) => {
 });
 
 // DELETE /api/grade-policies/:id — 정책 삭제 (applied_periods 강제 초기화 + 비활성화)
-app.delete('/api/grade-policies/:id', auth, adminOnly, (req, res) => {
+app.delete('/api/grade-policies/:id', auth, adminOnly, async (req, res) => {
   const policyId = parseInt(req.params.id);
   if (!Number.isInteger(policyId)) {
     return res.status(400).json({ error: '유효하지 않은 정책 ID' });
   }
-  const target = db.prepare('SELECT id, name FROM grade_policies WHERE id = ?').get(policyId);
-  if (!target) {
-    return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
-  }
-  const appliedPeriods = db.prepare(
-    'SELECT id, eval_year, period_label, is_active FROM eval_periods WHERE grade_policy_id = ?'
-  ).all(policyId);
-  const tx = db.transaction(() => {
-    if (appliedPeriods.length > 0) {
-      db.prepare('UPDATE eval_periods SET grade_policy_id = NULL, is_active = 0 WHERE grade_policy_id = ?').run(policyId);
-    }
-    db.prepare('DELETE FROM grade_policies WHERE id = ?').run(policyId);
-  });
   try {
-    tx();
+    const target = await gradePolicyRepo.findById(policyId);
+    if (!target) {
+      return res.status(404).json({ error: '정책을 찾을 수 없습니다.' });
+    }
+    // TX3: eval_periods 바인딩 해제 + 정책 삭제 (원자 처리), 영향받은 기간 반환
+    const appliedPeriods = await gradePolicyRepo.deletePolicy(policyId);
     auditLog(req.user.sub, 'GRADE_POLICY_DELETED', policyId, target.name,
       JSON.stringify({ affected_period_count: appliedPeriods.length, affected_periods: appliedPeriods.map(p => ({ id: p.id, label: `${p.eval_year}년 ${p.period_label}`, was_active: p.is_active === 1 })) }), req.ip);
     for (const p of appliedPeriods) {

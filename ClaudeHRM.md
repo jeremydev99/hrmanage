@@ -549,15 +549,14 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 **전략**: Phase A(provider 불변, async 전환) → Phase B(provider postgresql, SQL 방언 fix, V3 on PG)
 **데이터 이관 폐기**: 시드 데이터는 운영 데이터 아님 → Phase B에서 `prisma db push` + 시드 스크립트로 재생성
 
-**현황** (2026-06-02):
-- server/index.js `better-sqlite3` 직접 호출: 286 → **272건** (A1 완료: users 14건 → userRepo async)
-- A1 완료 도메인: users 14건 (findAll, findSignupRequests, createAdmin, updatePartial, approveSignup, rejectSignup, toggleActive, getApproverChain 신설)
-- A2 완료 도메인: auth 3건(createSignup 신설) + notice/settings 6건(getSettingRow/upsertSettingMeta 헬퍼) + settings-simple 2건(getSetting/setSetting 경유) = 11건 전환
-- A2 전수 재분류 결과: 246 실 호출(비주석), 나머지 26건은 주석처리 코드
-- A3 완료: organizations 3건 + evals/goals 1건 + feedback 1건 + final-eval 10건 = 15건 전환 (updateOrgId/countByAuthor/updatePhaseAndLocked 신설)
-- Prisma 어댑터는 설계되어 있으나 실제 쿼리 경로에서 사용 중인 곳은 0건
+**현황** (2026-06-04):
+- server/index.js `better-sqlite3` 직접 호출: 286 → **94건** (A7 완료)
+- A1: users 14건, A2: auth/notice/settings 11건, A3: organizations/evals 15건
+- A4: approvals 40건(enc11), A5: enc+tx 혼합 19건, A6: eval-periods/settings/perf 78건
+- **A7 완료**: grade-policies 17건(tx3) GradePolicyRepository 신설, V3+V3.15 풀 그린
+- 잔여 분해: helpers(getPolicyForEval/buildGradeMap 등 6건) + bootstrap(CREATE TABLE/INSERT 등 21건) + init 기타 ~9건
+- Prisma schema.prisma 현재 provider="sqlite" 유지 (Phase B에서 postgresql로 전환)
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
-- Prisma schema.prisma는 현재 provider="sqlite" 유지
 
 **PROMPT INFRA-2A-MIGRATE 작업 범위**:
 1. 286건 `db.prepare()` → Prisma 또는 `pg.query()` 전환 (sync → async 전면 리팩토링)
@@ -591,6 +590,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2A-MIGRATE-A7 — grade-policies 17건(tx3) GradePolicyRepository 신설·어댑터 경유 async 전환, 트랜잭션 $transaction 캡슐화, 잠금가드 보존, db.prepare 111→94, DB 불변, V3+V3.15 그린 (PROMPT INFRA-2A-MIGRATE-A7) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A6 — 저위험 대량 압축(eval-periods 41건+settings/okr 21건+perf 16건) adminRepo/evalPeriodRepo 신설, db.prepare 189→111, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A6) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A5 — enc+tx 혼합 19건(eval-detail/reports/mgr-pending/dashboard) 어댑터 경유, createMulti $transaction 캡슐화, db.prepare 208→189, V3.14+V3.15 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A5) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A4 — approvals 암호화 도메인 40건(enc11) PrismaGoalApprovalRepository 신설+어댑터 경유, _flatten enc보호, db.prepare 248→208, V3.14 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A4) | Claude Code |
