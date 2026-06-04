@@ -104,30 +104,20 @@ function decrypt(text) {
   } catch { return '[복호화 오류]'; }
 }
 
-// ── 감사 로그 헬퍼 ──────────────────────────────────────
-let _auditStmt = null; // prepare 캐싱
+// ── 감사 로그 헬퍼 (Prisma — SQLite/PG 공용, fire-and-forget) ──────────
 function auditLog(userId, action, targetId, targetName, detail, ip) {
-  try {
-    if (!_auditStmt) {
-      _auditStmt = db.prepare(
-        "INSERT INTO audit_logs(user_id,action,target_id,target_name,detail,ip) VALUES(?,?,?,?,?,?)"
-      );
-    }
-    _auditStmt.run(userId, action, targetId||null, targetName||null, detail||null, ip||null);
-  } catch(e) {
-    // 컬럼 추가 후 재시도
-    try {
-      try { db.prepare("ALTER TABLE audit_logs ADD COLUMN target_id INTEGER").run(); } catch(e2) {}
-      try { db.prepare("ALTER TABLE audit_logs ADD COLUMN target_name TEXT").run(); } catch(e3) {}
-      try { db.prepare("ALTER TABLE audit_logs ADD COLUMN detail TEXT").run(); } catch(e4) {}
-      _auditStmt = db.prepare(
-        "INSERT INTO audit_logs(user_id,action,target_id,target_name,detail,ip) VALUES(?,?,?,?,?,?)"
-      );
-      _auditStmt.run(userId, action, targetId||null, targetName||null, detail||null, ip||null);
-    } catch(e5) {
-      console.error('[auditLog]', e5.message);
-    }
-  }
+  const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  adminRepo.prisma.auditLog.create({
+    data: {
+      userId:     userId     ? Number(userId)     : null,
+      action:     action     || null,
+      targetId:   targetId   ? Number(targetId)   : null,
+      targetName: targetName || null,
+      detail:     detail     || null,
+      ip:         ip         || null,
+      created_at: now,
+    },
+  }).catch(e => console.error('[auditLog] 기록 실패:', e.message));
 }
 
 // ── 비밀번호 정책 검증 ────────────────────────────────────

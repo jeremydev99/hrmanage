@@ -619,6 +619,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | FIX-AUDITLOG — 감사로그 WRITE db.prepare→Prisma 전환(PG모드 db=null 오류 해소), created_at 타임스탬프 추가, 무음catch→.catch(console.error) 가시화, 액션→적재→표시 PG 검증 (PROMPT FIX-AUDITLOG) | Claude Code |
 | 2026-06-04 | SEED-DEMO — 테스트서버 리얼 데모 데이터(35명·12조직, 2024Q1~2026Q1 9분기 최종완료 315건+2026Q2 진행중 35건), 큐레이션 콘텐츠, 앱 calcFinalScore·scoreToGrade 재사용 정합성, IR min→40, 리셋 가능 (PROMPT SEED-DEMO) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B3-deploy-prep — app 컨테이너 PG화(DB_DRIVER/DATABASE_URL 내부호스트, JWT/ENC .env 외부화=BL-005 부분), nginx proxy_pass 해제, Dockerfile npm start, .env.example Phase B, 로컬 도커 풀스택 PG 그린 (PROMPT B3-deploy-prep) | Claude Code |
 | 2026-06-04 | INFRA-2D-1-FIX4 — nginx conf $DOMAIN 템플릿화(envsubst allowlist, nginx 변수 보존, 고객 도메인 자동 대응), DEPLOY_MANUAL 4장 갱신 (PROMPT FIX4) | Claude Code |
