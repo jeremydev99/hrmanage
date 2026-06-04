@@ -26,4 +26,8 @@ data/
 *.log
 
 # 컨테이너 빌드 캐시
-.docker-cache/docker-compose.override.yml
+.docker-cache/
+# 로컬 docker-compose 오버라이드 (포트 재매핑 등 — 환경별, 커밋 제외)
+docker-compose.override.yml
+# nginx 렌더 결과 (환경별 산출물 — 커밋 제외)
+nginx/conf.d/hrpms.conf

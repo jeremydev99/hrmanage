@@ -33,30 +33,61 @@ services:
       retries: 3
       start_period: 10s
 
-  # ── PostgreSQL 16 (운영 전환 준비 — PROMPT INFRA-2A-MIGRATE 시 활성화) ──
-  # 현재 app은 better-sqlite3 직접 사용(286건), DB 레이어 전환 완료 후 가동
-  # 가동: docker compose up -d postgres
+  # ── PostgreSQL 16 (로컬: --profile postgres / 운영 NCloud: profile 없음) ──
   postgres:
     image: postgres:16-alpine
     container_name: hrmanage-postgres
     profiles:
-      - postgres          # 기본 docker compose up 에서 제외 (명시적 --profile postgres 필요)
+      - postgres          # 로컬 개발: docker compose --profile postgres up -d
     restart: unless-stopped
     environment:
-      POSTGRES_DB: hrmanage
-      POSTGRES_USER: hrmanage_user
+      POSTGRES_DB: ${POSTGRES_DB:-hrmanage}
+      POSTGRES_USER: ${POSTGRES_USER:-hrmanage_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev_password_2026}
       TZ: Asia/Seoul
-    ports:
-      - "5432:5432"
+    # 운영(NCloud)에서는 외부 포트 미노출 — 컨테이너 내부 네트워크만
+    # ports:
+    #   - "5432:5432"   # 로컬 테스트 시에만 주석 해제
+    networks:
+      - backend
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./data/postgres-backups:/backups
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hrmanage_user -d hrmanage"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrmanage_user} -d ${POSTGRES_DB:-hrmanage}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ── Nginx 리버스 프록시 + TLS (운영 NCloud — INFRA-2D-1) ──
+  # 로컬 개발에서는 사용하지 않음
+  # 가동: docker compose --profile infra up -d nginx
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: hrmanage-nginx
+    profiles:
+      - infra
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    networks:
+      - backend
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
   postgres_data:

@@ -582,6 +582,25 @@ docker compose --profile postgres up -d postgres
 
 **롤백**: `.env` DATABASE_URL을 SQLite로 되돌리고 Prisma schema provider 복원
 
+### BL-DOCS: 외부 판매 문서 산출물 (막판 과제)
+
+**우선순위**: Phase B(앱 착지) + 운영 안정화 직후, 외부 영업 직전 필수
+**현황** (2026-06-04):
+- `DEPLOY_MANUAL.md` 초안 생성 완료 — 설치·운영 매뉴얼 (러닝 문서, Claude Code 자동 갱신)
+- 현재 ✅ 완료 섹션: 아키텍처, 사전 요구사항, 설치(인터넷 환경), HTTPS·인증서, 운영(백업/기동/정지)
+- 🚧 진행중: 보안(GCM 전환, Vault/KMS), Nginx 도메인 자동화, certbot webroot 갱신 전환
+- ⬜ TODO: 트러블슈팅 보강, 업그레이드 절차, 모니터링, **폐쇄망(에어갭) 설치**(BL-AIRGAP), 부록
+
+**외부 영업 직전 필수 산출물 목록**:
+- `DEPLOY_MANUAL.md` 완성 → Word/PDF 렌더 (마일스톤: Phase B + 앱 착지 후)
+- 보안 백서(`SECURITY_WHITEPAPER.md`) — BL-003 연계
+- 기술 사양서(아키텍처 다이어그램 포함)
+- 폐쇄망 설치 가이드(`DEPLOY_MANUAL.md` 9장 확장)
+
+**관련 파일**: `DEPLOY_MANUAL.md` (repo 루트, 단일 소스)
+
+---
+
 ### BL-004: PC 전용 UI 최적화
 
 **우선순위**: 운영 안정화 후 (사용자 결정 2026-05-27, 우선순위 4)
@@ -599,6 +618,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2D-1-FIX4 — nginx conf $DOMAIN 템플릿화(envsubst allowlist, nginx 변수 보존, 고객 도메인 자동 대응), DEPLOY_MANUAL 4장 갱신 (PROMPT FIX4) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B3-local — provider sqlite→postgresql 플립, 로컬 docker PG db push(21테이블)+seed-pg+서버 PG모드 기동, index.js $queryRawUnsafe 5건 추가 변환·Prisma 임포트, V3 on PG 그린(BigInt/WITH RECURSIVE/동적WHERE 방언 확인) (PROMPT INFRA-2A-MIGRATE-B3-local) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B2 — $queryRawUnsafe 47건 → $queryRaw 태그드 템플릿 전환(값=${}, IN=Prisma.join, 동적WHERE=Prisma.sql/empty, 컬럼=Prisma.raw 화이트리스트), PG 파라미터 호환 확보, provider=sqlite, V3 그린 (PROMPT INFRA-2A-MIGRATE-B2) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B1 — DB_DRIVER 조건화(better-sqlite3/initDB/seedInitialData skip), seed-pg.js(Prisma 멱등) 작성, activation_blocked_at initDB 정비, provider=sqlite 유지, SQLite V3 그린 (PROMPT INFRA-2A-MIGRATE-B1) | Claude Code |
@@ -608,6 +628,8 @@ docker compose --profile postgres up -d postgres
 | 2026-06-04 | INFRA-2A-MIGRATE-A8-1 — 등급계산 헬퍼 6건(getPolicyForEval/buildGradeMap 등) 어댑터 async 전환, 호출부 5곳 전수 await, 등급계산·시드일치 회귀 그린, db.prepare 94→88, DB 불변 (PROMPT INFRA-2A-MIGRATE-A8-1) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A7 — grade-policies 17건(tx3) GradePolicyRepository 신설·어댑터 경유 async 전환, 트랜잭션 $transaction 캡슐화, 잠금가드 보존, db.prepare 111→94, DB 불변, V3+V3.15 그린 (PROMPT INFRA-2A-MIGRATE-A7) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A6 — 저위험 대량 압축(eval-periods 41건+settings/okr 21건+perf 16건) adminRepo/evalPeriodRepo 신설, db.prepare 189→111, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A6) | Claude Code |
+| 2026-06-02 | INFRA-2D-1-FIX — deploy 대본 안전화(scp→git clone PII 유출 차단, DNS 전파 가드, certbot staging 리허설, .env 단계 정리) (PROMPT INFRA-2D-1-FIX) | Claude Code |
+| 2026-06-02 | INFRA-2D-1 — NCloud 인프라 파이프라인 설정 파일 준비(docker-compose+Nginx+certbot, .env.example, infra-up.sh, pg-backup.sh), 앱 독립 리허설 구조 완성 (PROMPT INFRA-2D-1) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A5 — enc+tx 혼합 19건(eval-detail/reports/mgr-pending/dashboard) 어댑터 경유, createMulti $transaction 캡슐화, db.prepare 208→189, V3.14+V3.15 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A5) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A4 — approvals 암호화 도메인 40건(enc11) PrismaGoalApprovalRepository 신설+어댑터 경유, _flatten enc보호, db.prepare 248→208, V3.14 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A4) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A3 — 분류표 정확 마감(237=합계, 28건=주석) + Aggregate 캡슐화O + organizations/feedback/final-eval/evals 15건 async, db.prepare 263→248, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A3) | Claude Code |
@@ -884,6 +906,7 @@ docker compose --profile postgres up -d postgres
 
 - [x] 호스팅 선정: NCloud (INFRA_HOSTING_COMPARISON 참조, 2026-05-21)
 - [x] 호스팅 검증: Vercel + Supabase·Railway 비교 후 NCloud 유지 결정 (INFRA_NCLOUD_VS_SUPABASE_VERCEL, 2026-05-27)
+- [x] **인프라 설정 파일 준비** (docker-compose.yml Nginx 추가 + nginx/conf.d/hrpms.conf + deploy/infra-up.sh + deploy/pg-backup.sh + .env.example, INFRA-2D-1, feat/infra-ncloud 브랜치)
 - [ ] NCloud 무료 평가판 신청 (7~30일)
 - [ ] Server 인스턴스 셋업 (2vCPU/4GB, ₩60,000/월)
 - [ ] 추가 디스크 50GB 마운트 (DB 데이터 + 첨부 파일)

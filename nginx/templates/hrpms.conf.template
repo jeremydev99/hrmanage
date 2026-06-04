@@ -1,0 +1,62 @@
+# ── ${DOMAIN} — Nginx 리버스 프록시 설정 ──
+# 템플릿: ${DOMAIN}만 envsubst로 치환 (nginx 변수 $host 등은 보존)
+# 렌더: envsubst '${DOMAIN}' < hrpms.conf.template > nginx/conf.d/hrpms.conf
+
+# HTTP → HTTPS 301 리다이렉트 + certbot webroot 검증 경로
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Let's Encrypt webroot 검증 (인증서 발급/갱신 시 필요)
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # 그 외 모든 HTTP 요청 → HTTPS 리다이렉트
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS 서버
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    # Let's Encrypt 인증서 (certbot 발급 후 경로 일치 확인)
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    # TLS 보안 설정
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:10m;
+
+    # HSTS (6개월, 운영 안정화 후 max-age 연장)
+    add_header Strict-Transport-Security "max-age=15768000" always;
+
+    # 인프라 헬스 엔드포인트 (앱 없이 TLS 동작 확인용)
+    location /healthz {
+        return 200 'ok';
+        add_header Content-Type text/plain;
+    }
+
+    # ── Phase B: 앱 착지 시 아래 주석 해제 ──
+    # location / {
+    #     proxy_pass http://app:3000;
+    #     proxy_http_version 1.1;
+    #     proxy_set_header Upgrade $http_upgrade;
+    #     proxy_set_header Connection 'upgrade';
+    #     proxy_set_header Host $host;
+    #     proxy_set_header X-Real-IP $remote_addr;
+    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    #     proxy_set_header X-Forwarded-Proto $scheme;
+    #     proxy_cache_bypass $http_upgrade;
+    #
+    #     # CORS 화이트리스트 (Phase B에서 실 도메인으로 채움)
+    #     # add_header Access-Control-Allow-Origin "https://${DOMAIN}" always;
+    # }
+}
