@@ -555,7 +555,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - A4: approvals 40건(enc11), A5: enc+tx 혼합 19건, A6: eval-periods/settings/perf 78건
 - **A7 완료**: grade-policies 17건(tx3) GradePolicyRepository 신설, V3+V3.15 풀 그린
 - **A8-1 완료**: 등급계산 헬퍼 6건 async 전환 (getPolicyForEval/getDefaultPolicyId/buildGradeMap/convertGradeWithPolicy), 호출부 5곳 전수 await
-- 잔여 88건: analytics 런타임쿼리(getSubtreeUserIds WITH RECURSIVE/calcGradeStats/calcFinalScore 등 ~58건) + bootstrap(CREATE TABLE/ALTER TABLE 등 ~21건) + init 기타 ~9건
+- **A9a 완료**: analytics 호출부(D:4건 sync 정의 제거)+org-ai-summary(E:3건)+misc(G:5건) 라우팅, db.prepare 88→76
+- 잔여 76건: A9b(calcFinalScore+eval-mode+OKR ~17건) + A9c(getSetting/setSetting 6건+호출부20+핸들러10) + bootstrap/init ~30건(Phase B 흡수)
 - analytics/bootstrap은 Phase B(postgresql 전환)에서 Prisma 재구현 또는 prisma db push로 흡수 예정
 - Prisma schema.prisma 현재 provider="sqlite" 유지 (Phase B에서 postgresql로 전환)
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
@@ -592,6 +593,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2A-MIGRATE-A9a — analytics 호출부(D:sync 함수 4건 제거)+perf/org-ai-summary(E:3건)+misc(G:5건, PRAGMA→bootstrap 재분류) 어댑터 라우팅, 분석수치 회귀 그린, db.prepare 88→76, DB 불변 (PROMPT INFRA-2A-MIGRATE-A9a) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A8-1 — 등급계산 헬퍼 6건(getPolicyForEval/buildGradeMap 등) 어댑터 async 전환, 호출부 5곳 전수 await, 등급계산·시드일치 회귀 그린, db.prepare 94→88, DB 불변 (PROMPT INFRA-2A-MIGRATE-A8-1) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-A7 — grade-policies 17건(tx3) GradePolicyRepository 신설·어댑터 경유 async 전환, 트랜잭션 $transaction 캡슐화, 잠금가드 보존, db.prepare 111→94, DB 불변, V3+V3.15 그린 (PROMPT INFRA-2A-MIGRATE-A7) | Claude Code |
 | 2026-06-02 | INFRA-2A-MIGRATE-A6 — 저위험 대량 압축(eval-periods 41건+settings/okr 21건+perf 16건) adminRepo/evalPeriodRepo 신설, db.prepare 189→111, V3 풀 그린, DB 불변 (PROMPT INFRA-2A-MIGRATE-A6) | Claude Code |

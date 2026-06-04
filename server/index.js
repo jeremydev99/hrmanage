@@ -1507,8 +1507,7 @@ app.post('/api/admin/eval/:evalId/force-phase', auth, adminOnly, async (req, res
       });
     }
 
-    const target = db.prepare('SELECT u.name FROM eval_cycles e JOIN users u ON e.user_id=u.id WHERE e.id=?').get(req.params.evalId);
-    auditLog(req.user.sub, 'FORCE_PHASE_CHANGE', req.params.evalId, target?.name,
+    auditLog(req.user.sub, 'FORCE_PHASE_CHANGE', req.params.evalId, ev?.user_name,
       `평가 단계 강제 변경: ${ev.phase} → ${phase}`, req.ip);
 
     res.json({ success: true });
@@ -2031,68 +2030,6 @@ function validateGradePolicyCriteria(criteria) {
   return { ok: true };
 }
 
-function getLeaderOrgIds(userId) {
-  return db.prepare(`
-    WITH RECURSIVE t AS (
-      SELECT id FROM organizations WHERE leader_id=? AND is_active=1
-      UNION ALL
-      SELECT o.id FROM organizations o INNER JOIN t ON o.parent_id=t.id WHERE o.is_active=1
-    )
-    SELECT id FROM t
-  `).all(userId).map(r => r.id);
-}
-
-function getSubtreeUserIds(orgId) {
-  return db.prepare(`
-    WITH RECURSIVE t AS (
-      SELECT id FROM organizations WHERE id=? AND is_active=1
-      UNION ALL
-      SELECT o.id FROM organizations o INNER JOIN t ON o.parent_id=t.id WHERE o.is_active=1
-    )
-    SELECT u.id FROM users u INNER JOIN t ON u.org_id=t.id WHERE u.is_active=1
-  `).all(orgId).map(r => r.id);
-}
-
-function calcGradeStats(userIds, periodLabels, { maxScore, scoreToGrade }) {
-  const empty = { total: userIds.length, evaluated: 0, avg_score: null, avg_grade: null, dist: {}, avg_score_max: maxScore };
-  if (!userIds.length || !periodLabels.length) return empty;
-  const uPh = userIds.map(() => '?').join(',');
-  const pPh = periodLabels.map(() => '?').join(',');
-  const rows = db.prepare(`
-    SELECT fe.selected_grade, fe.final_score FROM final_evaluations fe
-    JOIN eval_cycles ec ON fe.eval_id=ec.id
-    WHERE ec.user_id IN (${uPh}) AND ec.period_label IN (${pPh})
-      AND fe.selected_grade IS NOT NULL AND fe.selected_grade != 'NC'
-  `).all(...userIds, ...periodLabels);
-  const dist = {};
-  let sum = 0, cnt = 0;
-  rows.forEach(r => {
-    dist[r.selected_grade] = (dist[r.selected_grade] || 0) + 1;
-    if (r.final_score !== null) { sum += r.final_score; cnt++; }
-  });
-  const ev = rows.length;
-  // 내부 계산 4자리 정밀, 표시는 프론트에서 2자리
-  const avg = cnt > 0 ? Math.round((sum / cnt) * 10000) / 10000 : null;
-  return { total: userIds.length, evaluated: ev, avg_score: avg, avg_score_max: maxScore, avg_grade: scoreToGrade(avg), dist };
-}
-
-function calcCompletionStats(directUserIds, periodIds) {
-  const totalExpected = directUserIds.length * periodIds.length;
-  if (totalExpected === 0) return { completed: 0, total: 0, rate: 0 };
-  const uPh = directUserIds.map(() => '?').join(',');
-  const pPh = periodIds.map(() => '?').join(',');
-  const completed = db.prepare(`
-    SELECT COUNT(*) as cnt
-    FROM eval_cycles ec
-    JOIN final_evaluations fe ON fe.eval_id = ec.id
-    JOIN eval_periods ep ON ep.eval_year = ec.eval_year AND ep.period_label = ec.period_label
-    WHERE ec.user_id IN (${uPh})
-      AND ep.id IN (${pPh})
-      AND ec.phase = 'final_done'
-      AND fe.locked = 1
-  `).get(...directUserIds, ...periodIds).cnt;
-  return { completed, total: totalExpected, rate: Math.round(completed / totalExpected * 100) };
-}
 
 // [INFRA-A6] perf/org-tree → adminRepo async 전환
 app.get('/api/perf/org-tree', auth, async (req, res) => {
@@ -2347,7 +2284,7 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const isAdmin = ['master','admin'].includes(req.user.role);
     let allowedIds = null;
     if (!isAdmin) {
-      const lIds = getLeaderOrgIds(userId);
+      const lIds = await adminRepo.getLeaderOrgIds(userId);
       if (!lIds.length) return res.status(403).json({ error: '조직 분석 접근 권한이 없습니다.' });
       allowedIds = lIds;
     }
@@ -2362,28 +2299,27 @@ app.post('/api/perf/org-ai-summary', auth, async (req, res) => {
     const pIdList = String(period_ids).split(',').map(Number).filter(n => !isNaN(n) && n > 0);
     if (!pIdList.length) return res.status(400).json({ error: 'period_ids가 유효하지 않습니다.' });
     if (pIdList.length > 8) return res.status(400).json({ error: '최대 8개 기간까지 조회 가능합니다.' });
-    const pPh = pIdList.map(() => '?').join(',');
-    const activeFilter3 = effectiveInclInactive ? '' : 'AND is_active = 1';
-    const periods = db.prepare(`SELECT * FROM eval_periods WHERE id IN (${pPh}) ${activeFilter3} ORDER BY eval_year, period_label`).all(...pIdList);
+    const periods = await adminRepo.findPeriodsByIds(pIdList, !effectiveInclInactive);
     const periodLabels = periods.map(p => p.period_label);
     const periodStr = periods.length
       ? `${periods[0].period_label} ~ ${periods[periods.length-1].period_label}` : '(없음)';
     const gm = await buildGradeMap(periods[0]?.grade_policy_id || null);
     const baseIds = isAdmin
-      ? db.prepare('SELECT id FROM users WHERE is_active=1').all().map(r => r.id)
-      : getSubtreeUserIds(allowedIds[0]);
-    const compStats = calcGradeStats(baseIds, periodLabels, gm);
-    const subOrgs = db.prepare(
-      'SELECT id, name FROM organizations WHERE is_active=1 AND parent_id IS NOT NULL ORDER BY sort_order, id'
-    ).all().filter(o => !allowedIds || allowedIds.includes(o.id));
-    const orgSArr = subOrgs.map(o => {
-      const s = calcGradeStats(getSubtreeUserIds(o.id), periodLabels, gm);
+      ? await adminRepo.findAllActiveUserIds()
+      : await adminRepo.getSubtreeUserIds(allowedIds[0]);
+    const compStats = await adminRepo.calcGradeStats(baseIds, periodLabels, gm);
+    const subOrgs = (await adminRepo.findOrgsWithLeader())
+      .filter(o => o.parent_id !== null)
+      .filter(o => !allowedIds || allowedIds.includes(o.id));
+    const orgSArr = await Promise.all(subOrgs.map(async o => {
+      const ids = await adminRepo.getSubtreeUserIds(o.id);
+      const s = await adminRepo.calcGradeStats(ids, periodLabels, gm);
       return { name: o.name, total: s.total, avg_score: s.avg_score, avg_grade: s.avg_grade };
-    });
-    const trendArr = periods.map(p => {
-      const s = calcGradeStats(baseIds, [p.period_label], gm);
+    }));
+    const trendArr = await Promise.all(periods.map(async p => {
+      const s = await adminRepo.calcGradeStats(baseIds, [p.period_label], gm);
       return { label: p.period_label, avg_score: s.avg_score, avg_grade: s.avg_grade };
-    });
+    }));
     const evalRate = compStats.total > 0 ? Math.round(compStats.evaluated/compStats.total*100) : 0;
     const distStr = Object.entries(compStats.dist).map(([g,c]) => `${g}: ${c}명`).join(', ') || '없음';
     const prompt = buildOrgAIPrompt(level, { periodStr, gm, compStats, evalRate, distStr, orgSArr, trendArr });
@@ -2757,29 +2693,10 @@ app.post('/api/settings/approval-edit', auth, adminOnly, (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/admin/audit', auth, adminOnly, (req, res) => {
+app.get('/api/admin/audit', auth, adminOnly, async (req, res) => {
   try {
     const { action, limit = 300 } = req.query;
-    // 컬럼 존재 여부 확인
-    const cols = db.prepare("PRAGMA table_info(audit_logs)").all().map(c => c.name);
-    const hasDetail     = cols.includes('detail');
-    const hasTargetName = cols.includes('target_name');
-    const hasTargetId   = cols.includes('target_id');
-
-    const selectCols = [
-      'a.id', 'a.user_id', 'a.action', 'a.ip', 'a.created_at',
-      hasTargetId   ? 'a.target_id'   : 'NULL as target_id',
-      hasTargetName ? 'a.target_name' : 'NULL as target_name',
-      hasDetail     ? 'a.detail'      : 'NULL as detail',
-      'u.name as actor_name', 'u.dept as actor_dept',
-    ].join(', ');
-
-    let sql = `SELECT ${selectCols} FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id`;
-    const params = [];
-    if (action) { sql += ' WHERE a.action=?'; params.push(action); }
-    sql += ' ORDER BY a.created_at DESC LIMIT ?';
-    params.push(parseInt(limit));
-    const logs = db.prepare(sql).all(...params);
+    const logs = await adminRepo.getAuditLogs({ action: action || null, limit: parseInt(limit) });
     res.json(logs);
   } catch(err) {
     console.error('[audit]', err);
@@ -2830,9 +2747,8 @@ app.post('/api/admin/final/:id/unlock', auth, masterOnly, async (req, res) => {
     // eval_cycles → final_self, 잠금 해제
     await evalCycleRepo.updatePhaseAndLocked(fe.eval_id, 'final_self', 0);
 
-    const ev = db.prepare('SELECT user_id, period_label FROM eval_cycles WHERE id=?').get(fe.eval_id);
-    const target = ev ? db.prepare('SELECT name FROM users WHERE id=?').get(ev.user_id) : null;
-    auditLog(req.user.sub, 'FINAL_EVAL_UNLOCKED', fe.eval_id, target?.name,
+    const ev = await evalCycleRepo.findById(fe.eval_id);
+    auditLog(req.user.sub, 'FINAL_EVAL_UNLOCKED', fe.eval_id, ev?.user_name,
       `최종평가 잠금 해제 및 초기화 (${ev?.period_label||''})`, req.ip);
     res.json({ success: true });
   } catch(err) {

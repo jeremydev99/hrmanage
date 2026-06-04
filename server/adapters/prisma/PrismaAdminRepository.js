@@ -254,6 +254,23 @@ class PrismaAdminRepository {
     return rows;
   }
 
+  // audit_logs 조회 (동적 action 필터 + limit)
+  async getAuditLogs({ action = null, limit = 300 }) {
+    const params = [];
+    const where = action ? 'WHERE a.action=?' : '';
+    if (action) params.push(action);
+    params.push(Number(limit));
+    const rows = await this.prisma.$queryRawUnsafe(`
+      SELECT a.id, a.user_id, a.action, a.ip, a.created_at,
+             a.target_id, a.target_name, a.detail,
+             u.name as actor_name, u.dept as actor_dept
+      FROM audit_logs a LEFT JOIN users u ON a.user_id = u.id
+      ${where}
+      ORDER BY a.created_at DESC LIMIT ?
+    `, ...params);
+    return this._toNum(rows);
+  }
+
   // grade-distribution count by grade
   async countByGrade(userIds, periodLabel, grade) {
     if (!userIds.length) return 0;
