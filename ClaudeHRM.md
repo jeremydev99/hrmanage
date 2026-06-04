@@ -619,6 +619,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | SEED-DEMO — 테스트서버 리얼 데모 데이터(35명·12조직, 2024Q1~2026Q1 9분기 최종완료 315건+2026Q2 진행중 35건), 큐레이션 콘텐츠, 앱 calcFinalScore·scoreToGrade 재사용 정합성, IR min→40, 리셋 가능 (PROMPT SEED-DEMO) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B3-deploy-prep — app 컨테이너 PG화(DB_DRIVER/DATABASE_URL 내부호스트, JWT/ENC .env 외부화=BL-005 부분), nginx proxy_pass 해제, Dockerfile npm start, .env.example Phase B, 로컬 도커 풀스택 PG 그린 (PROMPT B3-deploy-prep) | Claude Code |
 | 2026-06-04 | INFRA-2D-1-FIX4 — nginx conf $DOMAIN 템플릿화(envsubst allowlist, nginx 변수 보존, 고객 도메인 자동 대응), DEPLOY_MANUAL 4장 갱신 (PROMPT FIX4) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B3-local — provider sqlite→postgresql 플립, 로컬 docker PG db push(21테이블)+seed-pg+서버 PG모드 기동, index.js $queryRawUnsafe 5건 추가 변환·Prisma 임포트, V3 on PG 그린(BigInt/WITH RECURSIVE/동적WHERE 방언 확인) (PROMPT INFRA-2A-MIGRATE-B3-local) | Claude Code |
