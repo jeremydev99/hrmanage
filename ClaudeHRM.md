@@ -562,7 +562,8 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 - **B1 완료**: DB_DRIVER 조건화(DB_DRIVER=postgres면 better-sqlite3/initDB/seed skip), scripts/seed-pg.js(Prisma 멱등) 작성, activation_blocked_at migrations 정비
 - **B2 완료**: $queryRawUnsafe 47건 → $queryRaw 태그드 템플릿 전환(5개 어댑터 파일, Prisma 임포트 추가), PG 파라미터 호환 확보, SQLite V3 그린
 - **B3-local 완료**: provider=postgresql 플립, 로컬 PG(docker:5433) db push 21테이블 + seed-pg + V3 on PG 그린. 발견 이슈: index.js $queryRawUnsafe 5건(org-tree/employee-grades/getMyOrgLeaderChain) 추가 변환·Prisma 임포트, seed-pg createdBy→created_by 수정
-- 다음: **B3-deploy** (FIX4 nginx + 브랜치 병합 → NCloud 테스트서버 실배포)
+- **B3-deploy-prep 완료**: app 컨테이너 PG화(DB_DRIVER/DATABASE_URL 내부호스트, NODE_ENV=production), JWT/ENC 시크릿 .env 외부화(compose 하드코딩 0), nginx proxy_pass 해제, Dockerfile CMD→npm start, 로컬 도커 풀스택 PG 그린(healthy+로그인+BigInt 0)
+- 다음: **B3-deploy** (테스트서버 git pull → infra-up.sh → https://hrpms-test.synap.co.kr/)
 - analytics/bootstrap은 Phase B(postgresql 전환)에서 Prisma 재구현 또는 prisma db push로 흡수 예정
 - Prisma schema.prisma 현재 provider="sqlite" 유지 (Phase B에서 postgresql로 전환)
 - docker-compose.yml에 `postgres:16-alpine` 서비스 추가 완료 (profile=postgres, 미가동)
@@ -618,6 +619,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-04 | INFRA-2A-MIGRATE-B3-deploy-prep — app 컨테이너 PG화(DB_DRIVER/DATABASE_URL 내부호스트, JWT/ENC .env 외부화=BL-005 부분), nginx proxy_pass 해제, Dockerfile npm start, .env.example Phase B, 로컬 도커 풀스택 PG 그린 (PROMPT B3-deploy-prep) | Claude Code |
 | 2026-06-04 | INFRA-2D-1-FIX4 — nginx conf $DOMAIN 템플릿화(envsubst allowlist, nginx 변수 보존, 고객 도메인 자동 대응), DEPLOY_MANUAL 4장 갱신 (PROMPT FIX4) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B3-local — provider sqlite→postgresql 플립, 로컬 docker PG db push(21테이블)+seed-pg+서버 PG모드 기동, index.js $queryRawUnsafe 5건 추가 변환·Prisma 임포트, V3 on PG 그린(BigInt/WITH RECURSIVE/동적WHERE 방언 확인) (PROMPT INFRA-2A-MIGRATE-B3-local) | Claude Code |
 | 2026-06-04 | INFRA-2A-MIGRATE-B2 — $queryRawUnsafe 47건 → $queryRaw 태그드 템플릿 전환(값=${}, IN=Prisma.join, 동적WHERE=Prisma.sql/empty, 컬럼=Prisma.raw 화이트리스트), PG 파라미터 호환 확보, provider=sqlite, V3 그린 (PROMPT INFRA-2A-MIGRATE-B2) | Claude Code |

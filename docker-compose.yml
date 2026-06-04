@@ -5,33 +5,32 @@ services:
     build: .
     container_name: hrmanage_app
     env_file:
-      - .env
+      - .env          # JWT_SECRET, ENC_SECRET, POSTGRES_*, DOMAIN 외부 주입
     ports:
       - "3000:3000"
     volumes:
-      # DB 영속화 (호스트와 공유)
-      - ./data:/app/data
-      # 코드 hot-reload (호스트 변경 시 컨테이너 즉시 반영)
+      # 코드 hot-reload (서버에선 제거 가능 — 이미 빌드된 이미지 사용)
       - ./server:/app/server
       - ./public:/app/public
       - ./prisma:/app/prisma
       - ./scripts:/app/scripts
     environment:
       - PORT=3000
-      - DATABASE_URL=file:/app/data/hrmanage.db
-      - DB_PATH=/app/data/hrmanage.db
-      - JWT_SECRET=synap-hr-local-dev-secret-2025
-      - ENC_SECRET=synap-local-enc-secret-32bytes!!
+      - NODE_ENV=production
       - TZ=Asia/Seoul
-      - NODE_ENV=development
-      - SQLITE_JOURNAL_MODE=DELETE  # Windows 바인드 마운트 호환 (SQLITE_IOERR_SHMOPEN 회피)
+      # PG 연결 (서비스명 postgres = 내부 호스트명)
+      - DB_DRIVER=postgres
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-hrmanage_user}:${POSTGRES_PASSWORD:-localdev_password_2026}@postgres:5432/${POSTGRES_DB:-hrmanage}
+      # JWT_SECRET / ENC_SECRET 는 .env에서 주입 (env_file) — 여기엔 하드코딩 금지
+    networks:
+      - backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/notice"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 20s
 
   # ── PostgreSQL 16 (로컬: --profile postgres / 운영 NCloud: profile 없음) ──
   postgres:
@@ -78,7 +77,8 @@ services:
     networks:
       - backend
     depends_on:
-      - postgres
+      app:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/healthz"]
       interval: 30s

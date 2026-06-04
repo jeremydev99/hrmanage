@@ -156,16 +156,42 @@ docker compose down                                        # 정지
 
 ---
 
-## 7. 앱 배포 (Phase B) 🚧
+## 7. 앱 배포 (Phase B) ✅
 
-설치 인프라 위에 애플리케이션을 착지하는 단계.
-1. PostgreSQL로 스키마 생성: `prisma db push`
-2. 초기 데이터 시드
-3. Nginx 설정에서 앱 프록시(`proxy_pass`) 활성화
-4. `.env`의 `DATABASE_URL`을 PostgreSQL로 설정
-5. 앱 컨테이너 기동: `docker compose up -d app`
+인프라(PG + nginx HTTPS) 위에 애플리케이션을 착지하는 단계.
 
-> 상세 절차 ⬜ TODO (Phase B 완료 후 작성)
+### 전제 조건
+- `.env` 작성 완료: `JWT_SECRET`, `ENC_SECRET`, `DB_DRIVER=postgres`, `DATABASE_URL=postgresql://...@postgres:5432/...`, `DOMAIN`
+- ⚠️ `ENC_SECRET` 불변 원칙: 최초 설정 후 절대 변경 금지 (기존 암호화 데이터 복호화 불가)
+
+### 배포 절차
+
+```bash
+# 1. PG 스키마 생성 (최초 1회)
+docker compose --profile postgres run --rm app npx prisma db push
+
+# 2. 초기 데이터 시드 (최초 1회)
+docker compose --profile postgres run --rm app node scripts/seed-pg.js
+
+# 3. 앱 컨테이너 기동 (DB_DRIVER=postgres, compose.yml에서 자동 적용)
+docker compose --profile postgres up -d app
+
+# 4. 앱 healthy 확인 후 nginx 기동 (nginx는 proxy_pass로 app:3000 전달)
+docker compose --profile postgres --profile infra up -d nginx
+```
+
+### 검증
+```bash
+# 앱 컨테이너 상태
+docker compose ps
+
+# 로그 (PG mode 확인)
+docker logs hrmanage_app | grep "시간대\|PG mode"
+
+# HTTPS 엔드포인트
+curl -sf https://$DOMAIN/healthz   # nginx healthcheck
+curl -sf https://$DOMAIN/api/notice   # 앱 응답 = 착지 성공
+```
 
 ---
 

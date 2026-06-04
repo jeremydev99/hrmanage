@@ -1,5 +1,5 @@
 # ============================================================
-# hrmanage — Node.js + SQLite 컨테이너
+# hrmanage — Node.js + PostgreSQL 컨테이너 (B3-deploy-prep)
 # ============================================================
 
 # Alpine Linux 기반 Node.js 20 (가볍고 빠름)
@@ -37,5 +37,5 @@ ENV TZ=Asia/Seoul
 # 포트 노출
 EXPOSE 3000
 
-# 실행 명령
-CMD ["npm", "run", "dev"]
+# 실행 명령 (production: node server/index.js)
+CMD ["npm", "start"]
