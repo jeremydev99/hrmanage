@@ -2500,6 +2500,79 @@ app.get('/api/evals/my-mgr-pending', auth, async (req, res) => {
 //   res.json(grades);
 // });
 
+// ── RF-VIEW-1: 보고·피드백 역할 판정 + 자동 모드 데이터 ───────────────────────
+// GET /api/rf/auto?period=<period_label>
+// 반환: { mode:'self'|'team_auto'|'search', team:[{user,eval,is_self,reports,feedbacks}] }
+app.get('/api/rf/auto', auth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const { period } = req.query;
+
+    // 1. 역할 판정
+    let mode = 'self';
+    let leaderOrgIds = [];
+    if (isAdmin) {
+      mode = 'search';
+    } else {
+      leaderOrgIds = await adminRepo.getLeaderOrgIds(userId);
+      if (leaderOrgIds.length > 0) {
+        const hasChildren = await adminRepo.hasChildOrgs(leaderOrgIds);
+        mode = hasChildren ? 'search' : 'team_auto';
+      }
+    }
+
+    // period 없으면 mode만 반환 (탭 렌더 전 모드 판정용)
+    if (!period) return res.json({ mode });
+
+    // 2. 대상 사용자 산출
+    let targetUserIds = [Number(userId)];
+    if (mode === 'team_auto') {
+      for (const orgId of leaderOrgIds) {
+        const members = await adminRepo.getSubtreeUserIds(orgId);
+        targetUserIds.push(...members);
+      }
+      targetUserIds = [...new Set(targetUserIds)].map(Number);
+    }
+
+    // search 모드: 데이터 없이 mode만 반환
+    if (mode === 'search') return res.json({ mode, team: [] });
+
+    // self 모드: 본인 eval만 (기존 페이지가 처리, team:[])
+    if (mode === 'self') return res.json({ mode, team: [] });
+
+    // 3. team_auto: 하부 사용자들의 eval + 보고/피드백
+    const evals = await adminRepo.findEvalsByUsersAndPeriod(targetUserIds, period);
+    const team = [];
+
+    for (const ev of evals) {
+      const isSelf = String(ev.user_id) === String(userId);
+      const [reports, feedbacks] = await Promise.all([
+        progressReportRepo.findByEvalIdFull(ev.id),
+        feedbackRepo.findByEvalId(ev.id),
+      ]);
+      team.push({
+        user: { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
+        eval: { id: ev.id, phase: ev.phase, period_label: ev.period_label },
+        is_self: isSelf,
+        reports,
+        feedbacks,
+      });
+    }
+
+    // 본인 먼저, 나머지 이름순
+    team.sort((a, b) => {
+      if (a.is_self !== b.is_self) return a.is_self ? -1 : 1;
+      return (a.user.name || '').localeCompare(b.user.name || '');
+    });
+
+    res.json({ mode, team });
+  } catch(err) {
+    console.error('[rf/auto]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // grade_criteria API 폐기 (PROMPT 63A) — /api/grade-policies 사용
 app.all('/api/grade-criteria', (req, res) => {
   res.status(410).json({ error: 'grade_criteria API는 폐기되었습니다. /api/grade-policies를 사용하세요.' });

@@ -5,6 +5,10 @@ Pages.myReportFeedback = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
+    // RF-VIEW-1: 역할 모드 판정 (self / team_auto / search)
+    const rfMode = await API.get('/rf/auto').catch(() => ({ mode: 'self' }));
+    window._rfMode = rfMode.mode || 'self';
+
     const evs = await API.get('/evals');
     const myEvs = (typeof sortPeriodsDesc === 'function'
       ? sortPeriodsDesc(evs.filter(e =>
@@ -16,12 +20,24 @@ Pages.myReportFeedback = async function() {
           ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
         ));
 
-    if (!myEvs.length) {
-      area.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
-      return;
+    area.innerHTML = '';
+
+    // search 모드: 안내 배너
+    if (window._rfMode === 'search') {
+      const banner = document.createElement('div');
+      banner.className = 'alert alert-orange';
+      banner.style.marginBottom = '12px';
+      banner.innerHTML = `<strong>🔍 관리자·본부장 전체 검색 모드</strong><br>
+        <span style="font-size:13px">사람·기간 선택 검색 기능은 다음 업데이트에서 제공됩니다.<br>현재는 본인 보고·피드백만 표시됩니다.</span>`;
+      area.appendChild(banner);
     }
 
-    area.innerHTML = '';
+    if (!myEvs.length) {
+      const empty = document.createElement('div');
+      empty.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
+      area.appendChild(empty);
+      return;
+    }
 
     window._rfEvs = myEvs;  // lazy 렌더링용 캐시
     if (myEvs.length > 1) {
@@ -79,14 +95,15 @@ async function renderRFPane(ev) {
     const parsed        = parseLegacyReports(legacyReports, goals);
     const reportsByGoal = groupByGoalId([...newReports, ...parsed.byGoal]);
     const fbsByGoal     = groupFeedbacksByGoal(feedbacks, goals);
-    const summaryReports = reports.filter(r => (r.goal_id === null || r.goal_id === undefined) && !legacyReports.includes(r));
 
     const canReport = ['approved','final_self','final_mgr_pending'].includes(ev.phase);
 
-    let html = `<div style="font-size:13px;color:var(--muted);margin-bottom:12px">${ev.period_label} · ${ev.eval_mode||'MBO'}</div>`;
+    let html = `<div style="font-size:13px;color:var(--muted);margin-bottom:12px">${ev.period_label} · ${ev.eval_mode||'MBO'}`;
+    if (window._rfMode === 'team_auto') html += ` <span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px">팀장 자동</span>`;
+    html += `</div>`;
 
     goals.forEach(g => {
-      html += renderGoalCard(g, reportsByGoal[g.id] || [], fbsByGoal[g.id] || []);
+      html += renderGoalCard(g, reportsByGoal[g.id] || [], fbsByGoal[g.id] || [], true);
     });
 
     html += renderSummaryCard([...parsed.summary], reports.filter(r => r.goal_id === null && !legacyReports.find(lr=>lr.id===r.id)).concat([]), feedbacks);
@@ -94,8 +111,71 @@ async function renderRFPane(ev) {
     if (canReport) html += renderWriteForm(ev, goals);
 
     el.innerHTML = html;
+
+    // RF-VIEW-1: team_auto 모드 — 팀원 섹션 추가
+    if (window._rfMode === 'team_auto') {
+      renderRFTeamSection(el, ev.period_label);
+    }
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
+  }
+}
+
+/* ── RF-VIEW-1: 팀원 섹션 렌더 (team_auto 모드) ── */
+async function renderRFTeamSection(el, periodLabel) {
+  const teamDiv = document.createElement('div');
+  teamDiv.id = 'rf-team-section';
+  teamDiv.innerHTML = '<div class="spinner" style="font-size:12px">팀원 현황 로딩...</div>';
+  el.appendChild(teamDiv);
+
+  try {
+    const data = await API.get(`/rf/auto?period=${encodeURIComponent(periodLabel)}`);
+    const members = (data.team || []).filter(m => !m.is_self);
+    if (!members.length) { teamDiv.remove(); return; }
+
+    let html = `<div style="margin-top:16px;border-top:2px solid var(--o100);padding-top:12px">
+      <div style="font-size:13px;font-weight:600;color:var(--o700);margin-bottom:10px">👥 팀원 보고·피드백 현황</div>`;
+
+    members.forEach(m => {
+      const phaseLabel = {
+        draft:'목표작성중', pending:'승인대기', approved:'목표확정',
+        final_self:'자기평가중', final_mgr_pending:'상사평가대기', final_done:'평가완료'
+      }[m.eval?.phase] || m.eval?.phase || '';
+
+      const rList = (m.reports || []).map(r => {
+        const d = (r.created_at||'').slice(0,10);
+        const gn = r.goal_name ? `<span style="font-size:10px;color:var(--muted)">[${escapeHtml(r.goal_name)}]</span> ` : '';
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--o50);font-size:12px">
+          📝 ${gn}${escapeHtml(r.content||'').slice(0,60)}${(r.content||'').length>60?'…':''} <span style="color:var(--muted)">${d}</span>
+        </div>`;
+      }).join('');
+
+      const fbList = (m.feedbacks || []).map(fb => {
+        const sc = fb.items?.reduce((a,it)=>a+(it.score||0),0) || 0;
+        const cnt = fb.items?.length || 0;
+        const avg = cnt ? (sc/cnt).toFixed(1) : '-';
+        return `<div style="padding:4px 0;border-bottom:1px solid var(--o50);font-size:12px">
+          💬 피드백 — 평균 ${avg}점 <span style="color:var(--muted)">${(fb.created_at||'').slice(0,10)}</span>
+        </div>`;
+      }).join('');
+
+      html += `<div class="card" style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div class="avatar" style="width:28px;height:28px;font-size:10px;background:var(--o100);color:var(--o800);flex-shrink:0">${(m.user.name||'?').slice(0,2)}</div>
+          <div>
+            <span style="font-weight:600;font-size:13px">${escapeHtml(m.user.name||'')}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px">${escapeHtml(m.user.dept||'')} · ${escapeHtml(m.user.title||'')}</span>
+          </div>
+          <span class="bd" style="margin-left:auto;font-size:10px">${phaseLabel}</span>
+        </div>
+        ${rList || fbList ? `<div>${rList}${fbList}</div>` : `<div style="font-size:12px;color:var(--muted)">이 기간에 보고·피드백이 없습니다.</div>`}
+      </div>`;
+    });
+
+    html += '</div>';
+    teamDiv.innerHTML = html;
+  } catch(e) {
+    teamDiv.innerHTML = `<div style="font-size:12px;color:var(--muted)">팀원 현황 로드 실패: ${e.message}</div>`;
   }
 }
 
@@ -187,7 +267,7 @@ function mergeByRound(reports, feedbackItems) {
 }
 
 /* ── 목표별 카드 ── */
-function renderGoalCard(goal, reports, feedbackItems) {
+function renderGoalCard(goal, reports, feedbackItems, isSelf) {
   const rounds = mergeByRound(reports, feedbackItems);
   const totalRounds = rounds.length;
   if (totalRounds === 0) {
@@ -223,15 +303,16 @@ function renderRoundBlock(round) {
   return `<div class="round-block" data-round="${round.round}">
     <div class="round-header"><strong>${round.round}회차</strong></div>
     <div class="round-items">
-      ${items.map(item => item.type === 'report' ? renderReportItem(item) : renderFeedbackItem(item)).join('')}
+      ${items.map(item => item.type === 'report' ? renderReportItem(item, window._rfMode === 'team_auto') : renderFeedbackItem(item)).join('')}
     </div>
   </div>`;
 }
 
-function renderReportItem(item) {
+function renderReportItem(item, isSelf) {
   const d = (item.created_at||'').slice(0,16).replace('T',' ');
+  const selfBadge = isSelf ? '<span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px;margin-left:4px">본인</span>' : '';
   return `<div class="item-block report-block">
-    <div class="item-header">📝 보고 · ${d}${item.is_legacy?'<span class="bd-legacy">레거시</span>':''}</div>
+    <div class="item-header">📝 보고 · ${d}${item.is_legacy?'<span class="bd-legacy">레거시</span>':''}${selfBadge}</div>
     <div class="item-content">${escapeHtml(item.content||'')}</div>
   </div>`;
 }

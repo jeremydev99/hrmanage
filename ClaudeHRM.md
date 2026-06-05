@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | RF-VIEW-1 — 보고·피드백 역할 판정(self/team_auto/search, getLeaderOrgIds+hasChildOrgs 재사용) + 팀장 자동(본인+하부) + 소유자 라벨, GET /api/rf/auto 신설. 본부장+ 검색은 RF-VIEW-2 (PROMPT RF-VIEW-1) | Claude Code |
 | 2026-06-05 | ORGCHART-SAVE-FIX — 조직도 차트 toolbar+canvas를 flex-column 컨테이너로 묶어 배치저장 버튼 항상 상단 고정(page scroll 무관), canvas flex:1 내부스크롤, padding-bottom:20px 하단노드 가림 해소 (PROMPT ORGCHART-SAVE-FIX) | Claude Code |
 | 2026-06-05 | FIX-UI-1 — (A)내 평가 홈·승인 이력 평가기간 정렬 최근순(sortPeriodsDesc 적용) (B)조직도 캔버스 max-height 제거→calc(100vh-300px)+min-height, 전체화면 복원 하드코딩 수정, 상호작용 보존 (PROMPT FIX-UI-1) | Claude Code |
 | 2026-06-05 | DEMO-ACCOUNTS — 박기술/정플랫/한개발 비번 고정(admin1234/user1234), 로그인 공지 데모 계정 노출, seed-demo 반영. 공지 비번 하드코딩은 데모 전용→운영 전 제거(정리목록) (PROMPT DEMO-ACCOUNTS) | Claude Code |

@@ -425,6 +425,31 @@ class PrismaAdminRepository {
     });
   }
 
+  // RF-VIEW-1: 조직 목록 중 하위 조직이 하나라도 있는지 (팀장 vs 본부장 판정용)
+  async hasChildOrgs(orgIds) {
+    if (!orgIds.length) return false;
+    const rows = await this.prisma.$queryRaw`
+      SELECT 1 FROM organizations WHERE parent_id IN (${Prisma.join(orgIds)}) AND is_active=1 LIMIT 1
+    `;
+    return rows.length > 0;
+  }
+
+  // RF-VIEW-1: 특정 기간 특정 사용자들의 eval 목록 (보고/피드백 포함)
+  async findEvalsByUsersAndPeriod(userIds, periodLabel) {
+    if (!userIds.length) return [];
+    const rows = await this.prisma.$queryRaw`
+      SELECT ec.id, ec.user_id, ec.period_label, ec.eval_year, ec.phase,
+             u.name AS user_name, u.dept, u.title
+      FROM eval_cycles ec
+      JOIN users u ON u.id = ec.user_id
+      WHERE ec.user_id IN (${Prisma.join(userIds)})
+        AND ec.period_label = ${periodLabel}
+        AND ec.phase IN ('approved','final_self','final_mgr_pending','final_mgr2_pending','final_done')
+      ORDER BY u.name
+    `;
+    return this._toNum(rows);
+  }
+
   // grade-distribution count by grade
   async countByGrade(userIds, periodLabel, grade) {
     if (!userIds.length) return 0;
