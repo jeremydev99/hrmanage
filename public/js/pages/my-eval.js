@@ -160,8 +160,8 @@ Pages.myEval = async function() {
           abar.innerHTML = `<span style="font-size:13px;color:var(--muted)">승인자 검토 중...</span>`;
         } else if (['approved','final_self','final_mgr_pending','final_mgr2_pending'].includes(phase)) {
           abar.innerHTML = `
-            <button class="btn btn-ghost" onclick="App.navigate('progress')">중간 보고 →</button>
-            <button class="btn btn-teal" onclick="App.navigate('feedback')">중간 피드백 →</button>
+            <button class="btn btn-ghost" onclick="window._rfInitialEvalId=${ev.id};App.navigate('myReportFeedback')">중간 보고 →</button>
+            <button class="btn btn-teal" onclick="window._rfInitialEvalId=${ev.id};App.navigate('myReportFeedback')">중간 피드백 →</button>
             <button class="btn btn-purple" onclick="App.navigate('final')">최종 평가 →</button>`;
         }
 
@@ -586,7 +586,7 @@ function renderApprovedView(ev) {
     <div class="card-header"><div><div class="card-header-t">${phaseLabels[ev.phase]||ev.phase}</div><div class="card-header-s">${ev.period_label}</div></div></div>
     <div class="alert alert-green">목표가 확정되었습니다. 중간 피드백과 최종 평가를 진행하세요.</div>
     <div class="abar">
-      <button class="btn btn-teal" onclick="App.navigate('feedback')">중간 피드백 →</button>
+      <button class="btn btn-teal" onclick="window._rfInitialEvalId=${ev.id};App.navigate('myReportFeedback')">중간 피드백 →</button>
       ${ev.phase==='approved'?`<button class="btn btn-purple" onclick="App.navigate('final')">최종 평가 시작 →</button>`:''}
     </div>`;
   area.appendChild(card);

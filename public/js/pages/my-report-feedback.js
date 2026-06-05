@@ -4,6 +4,11 @@ var Pages = window.Pages || {};
 Pages.myReportFeedback = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
+
+  // UNIFY-1: 내 평가 홈에서 전달된 초기 evalId (소비 후 초기화)
+  const initialEvalId = window._rfInitialEvalId || null;
+  window._rfInitialEvalId = null;
+
   try {
     // RF-VIEW-1: 역할 모드 판정 (self / team_auto / search)
     const rfMode = await API.get('/rf/auto').catch(() => ({ mode: 'self' }));
@@ -35,12 +40,17 @@ Pages.myReportFeedback = async function() {
       return;
     }
 
+    // UNIFY-1: 전달된 evalId로 초기 활성 기간 결정 (없으면 최신 기간)
+    const initialEv = initialEvalId
+      ? (myEvs.find(e => String(e.id) === String(initialEvalId)) || myEvs[0])
+      : myEvs[0];
+
     window._rfEvs = myEvs;  // lazy 렌더링용 캐시
     if (myEvs.length > 1) {
       const tabEl = document.createElement('div');
       tabEl.className = 'stabs';
-      tabEl.innerHTML = myEvs.map((ev, i) =>
-        `<button class="stb${i===0?' active':''}" id="stb-rf-${ev.id}" onclick="switchRFTab(${ev.id})">${ev.period_label}</button>`
+      tabEl.innerHTML = myEvs.map(ev =>
+        `<button class="stb${ev.id === initialEv.id ? ' active' : ''}" id="stb-rf-${ev.id}" onclick="switchRFTab(${ev.id})">${ev.period_label}</button>`
       ).join('');
       area.appendChild(tabEl);
     }
@@ -49,12 +59,12 @@ Pages.myReportFeedback = async function() {
       const ev = myEvs[i];
       const sp = document.createElement('div');
       sp.id = 'rf-pane-' + ev.id;
-      sp.className = i === 0 ? '' : 'rf-hidden';
+      sp.className = ev.id === initialEv.id ? '' : 'rf-hidden';
       sp.innerHTML = '<div class="spinner">로딩 중...</div>';
       area.appendChild(sp);
     }
-    // 첫 pane만 즉시 렌더, 나머지는 탭 클릭 시 lazy
-    renderRFPane(myEvs[0]);
+    // 초기 활성 pane만 즉시 렌더, 나머지는 탭 클릭 시 lazy
+    renderRFPane(initialEv);
   } catch(e) {
     area.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
