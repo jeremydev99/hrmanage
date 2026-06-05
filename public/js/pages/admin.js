@@ -669,7 +669,7 @@ function _renderOrgChart(users, el) {
 
   const wrap = document.createElement('div');
   wrap.id = 'org-chart-wrap';
-  wrap.style.cssText = 'position:relative;width:100%;height:calc(100vh - 280px);max-height:600px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
+  wrap.style.cssText = 'position:relative;width:100%;height:calc(100vh - 300px);min-height:320px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
 
   // 연결선 SVG — pointer-events:none은 SVG 전체가 아닌 가시선에만 적용
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -928,7 +928,7 @@ function _orgFullscreen() {
   if (!document.fullscreenElement) {
     wrap.requestFullscreen().then(()=>{ wrap.style.height='100vh'; wrap.style.borderRadius='0'; }).catch(()=>{});
   } else {
-    document.exitFullscreen().then(()=>{ wrap.style.height='620px'; wrap.style.borderRadius='8px'; }).catch(()=>{});
+    document.exitFullscreen().then(()=>{ wrap.style.height='calc(100vh - 300px)'; wrap.style.borderRadius='8px'; }).catch(()=>{});
   }
 }
 

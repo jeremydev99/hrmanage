@@ -123,7 +123,7 @@ async function renderMyApprovalHistory() {
           <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">평가 기간</label>
           <select id="aphr-period" style="height:34px;font-size:13px;width:100%">
             <option value="">전체 기간</option>
-            ${Array.isArray(periods) ? periods.map(p =>
+            ${Array.isArray(periods) ? sortPeriodsDesc(periods).map(p =>
               `<option value="${p.period_label}|${p.eval_year}"
                 ${_apprHistFilter.label===p.period_label?'selected':''}>${p.period_label}</option>`
             ).join('') : ''}

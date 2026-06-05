@@ -51,8 +51,8 @@ Pages.myEval = async function() {
       area.appendChild(banner);
     }
 
-    // 활성 기간 중 아직 시작 안 한 것 표시
-    safeActivePeriods.forEach(p => {
+    // 활성 기간 중 아직 시작 안 한 것 표시 (최근순)
+    sortPeriodsDesc(safeActivePeriods).forEach(p => {
       const ev = myEvs.find(e => e.period_label === p.period_label && e.eval_year === p.eval_year);
       if (!ev) {
         // 해당 기간의 평가방식 확인
@@ -98,7 +98,7 @@ Pages.myEval = async function() {
       header.textContent = myEvs.length > 1 ? '진행 중인 평가' : '';
       if (myEvs.length > 1) area.appendChild(header);
 
-      myEvs.forEach(ev => {
+      sortPeriodsDesc(myEvs).forEach(ev => {
         const phase = ev.phase || 'draft';
         const card = document.createElement('div');
         card.className = 'card';

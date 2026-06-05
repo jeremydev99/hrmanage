@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | FIX-UI-1 — (A)내 평가 홈·승인 이력 평가기간 정렬 최근순(sortPeriodsDesc 적용) (B)조직도 캔버스 max-height 제거→calc(100vh-300px)+min-height, 전체화면 복원 하드코딩 수정, 상호작용 보존 (PROMPT FIX-UI-1) | Claude Code |
 | 2026-06-05 | DEMO-ACCOUNTS — 박기술/정플랫/한개발 비번 고정(admin1234/user1234), 로그인 공지 데모 계정 노출, seed-demo 반영. 공지 비번 하드코딩은 데모 전용→운영 전 제거(정리목록) (PROMPT DEMO-ACCOUNTS) | Claude Code |
 | 2026-06-05 | F1-FIX — Prisma 인자 camelCase→snake 타깃 스윕(findSignupRequests orderBy createdAt→created_at), schema 무변경, 계정승인·V3 PG 검증. @map 통일은 BL-CONVENTION으로 deferral (PROMPT F1-FIX) | Claude Code |
 | 2026-06-04 | FIX-LOGIN-PREFILL — 로그인 prefill dev3→ceo(admin1234). 단 prefill 자체는 데모 전용→외부판매 전 제거 필요(정리목록) (PROMPT FIX-LOGIN-PREFILL) | Claude Code |
