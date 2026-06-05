@@ -657,19 +657,24 @@ function _renderOrgChart(users, el) {
   // 저장된 위치가 없는 사용자가 있으면 자동 레이아웃 실행
   if (users.some(u => !positions[String(u.id)])) positions = _orgAutoLayout(users);
 
+  // ── 차트 컨테이너: toolbar + canvas를 묶어 page scroll과 무관하게 toolbar 항상 노출
   el.innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
-      <button class="btn btn-ghost btn-sm" onclick="_orgAutoArrange()">⚡ 자동 정렬</button>
-      <button class="btn btn-ghost btn-sm" onclick="_orgSaveLayout()">💾 배치 저장</button>
-      <button class="btn btn-ghost btn-sm" onclick="_orgFullscreen()">⛶ 전체화면</button>
-      <span style="font-size:12px;color:var(--muted);align-self:center">
-        노드 드래그=이동 · 하단 점 드래그=상위 연결 · 연결선 클릭=해제
-      </span>
+    <div id="org-chart-container" style="display:flex;flex-direction:column;height:calc(100vh - 250px);min-height:360px">
+      <div id="org-chart-toolbar" style="display:flex;gap:8px;padding:6px 0 8px;flex-wrap:wrap;align-items:center;flex-shrink:0;background:var(--bg,#fff)">
+        <button class="btn btn-ghost btn-sm" onclick="_orgAutoArrange()">⚡ 자동 정렬</button>
+        <button class="btn btn-ghost btn-sm" onclick="_orgSaveLayout()">💾 배치 저장</button>
+        <button class="btn btn-ghost btn-sm" onclick="_orgFullscreen()">⛶ 전체화면</button>
+        <span style="font-size:12px;color:var(--muted);align-self:center">
+          노드 드래그=이동 · 하단 점 드래그=상위 연결 · 연결선 클릭=해제
+        </span>
+      </div>
     </div>`;
 
+  const container = document.getElementById('org-chart-container');
   const wrap = document.createElement('div');
   wrap.id = 'org-chart-wrap';
-  wrap.style.cssText = 'position:relative;width:100%;height:calc(100vh - 300px);min-height:320px;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa';
+  // flex:1 → toolbar 제외 나머지 높이 전부 사용, 하단 노드 패딩으로 스크롤바 가림 방지
+  wrap.style.cssText = 'position:relative;flex:1;min-height:0;border:1px solid var(--border);border-radius:8px;overflow:auto;background:#f8f9fa;padding-bottom:20px';
 
   // 연결선 SVG — pointer-events:none은 SVG 전체가 아닌 가시선에만 적용
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
@@ -717,7 +722,7 @@ function _renderOrgChart(users, el) {
     wrap.appendChild(node);
   });
 
-  el.appendChild(wrap);
+  container.appendChild(wrap);
   // DOM 렌더링 후 연결선 그리기 (offsetHeight 사용을 위해 약간 대기)
   setTimeout(() => { _drawOrgLines(users); _setupOrgChartEvents(users, positions); }, 80);
 }
@@ -926,9 +931,9 @@ function _orgFullscreen() {
   const wrap = document.getElementById('org-chart-wrap');
   if (!wrap) return;
   if (!document.fullscreenElement) {
-    wrap.requestFullscreen().then(()=>{ wrap.style.height='100vh'; wrap.style.borderRadius='0'; }).catch(()=>{});
+    wrap.requestFullscreen().then(()=>{ wrap.style.flex='none'; wrap.style.height='100vh'; wrap.style.borderRadius='0'; }).catch(()=>{});
   } else {
-    document.exitFullscreen().then(()=>{ wrap.style.height='calc(100vh - 300px)'; wrap.style.borderRadius='8px'; }).catch(()=>{});
+    document.exitFullscreen().then(()=>{ wrap.style.flex='1'; wrap.style.height=''; wrap.style.borderRadius='8px'; }).catch(()=>{});
   }
 }
 
