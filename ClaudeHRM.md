@@ -624,6 +624,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | F1-FIX — Prisma 인자 camelCase→snake 타깃 스윕(findSignupRequests orderBy createdAt→created_at), schema 무변경, 계정승인·V3 PG 검증. @map 통일은 BL-CONVENTION으로 deferral (PROMPT F1-FIX) | Claude Code |
 | 2026-06-04 | FIX-LOGIN-PREFILL — 로그인 prefill dev3→ceo(admin1234). 단 prefill 자체는 데모 전용→외부판매 전 제거 필요(정리목록) (PROMPT FIX-LOGIN-PREFILL) | Claude Code |
 | 2026-06-04 | FIX-AUDITLOG — 감사로그 WRITE db.prepare→Prisma 전환(PG모드 db=null 오류 해소), created_at 타임스탬프 추가, 무음catch→.catch(console.error) 가시화, 액션→적재→표시 PG 검증 (PROMPT FIX-AUDITLOG) | Claude Code |
 | 2026-06-04 | SEED-DEMO — 테스트서버 리얼 데모 데이터(35명·12조직, 2024Q1~2026Q1 9분기 최종완료 315건+2026Q2 진행중 35건), 큐레이션 콘텐츠, 앱 calcFinalScore·scoreToGrade 재사용 정합성, IR min→40, 리셋 가능 (PROMPT SEED-DEMO) | Claude Code |

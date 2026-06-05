@@ -129,7 +129,7 @@ class PrismaUserRepository extends UserRepository {
   async findSignupRequests() {
     const users = await this.prisma.user.findMany({
       where: { accountStatus: { in: ['pending', 'rejected'] } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { created_at: 'desc' },
     });
     return users.map(u => ({
       id: u.id, name: u.name, email: u.email, dept: u.dept, title: u.title,
