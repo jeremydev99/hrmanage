@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | DECRYPT-FIX — 승인 대기 '직원 의견' 복호화 누락(암호문 노출) 수정: PrismaEvalCycleRepository.findPendingWithUser에 self_reason/reject_reason decrypt 추가. findPendingEvals 형제도 예방 수정 (PROMPT DECRYPT-FIX) | Claude Code |
 | 2026-06-05 | UNIFY-1 — 내 평가 홈 중간보고/중간피드백 → myReportFeedback 직접 연결 + window._rfInitialEvalId로 선택 기간(evalId) 전달·해당 탭 활성화. 옛 progress/feedback은 UNIFY-3까지 유지 (PROMPT UNIFY-1) | Claude Code |
 | 2026-06-05 | SEED-DEMO-2CHA — seed-demo에 2026 2분기 일부(한개발·임개발) "1차완료·2차대기" 상태 추가 + second_final on 시드, 박기술 2차 평가 시연용. 앱 calcFinalScore/등급 로직 재사용 (PROMPT SEED-DEMO-2CHA) | Claude Code |
 | 2026-06-05 | FB-WRITE-PERIOD — 피드백 작성/받은 피드백 화면이 선택 기간 무시하고 최오래된(2024Q1) 표시하던 버그 수정. 원인: PG null created_at NULLS FIRST+find/비교 오류. 수정: periodSortKey 기반 최신 eval 선택 (PROMPT FB-WRITE-PERIOD) | Claude Code |

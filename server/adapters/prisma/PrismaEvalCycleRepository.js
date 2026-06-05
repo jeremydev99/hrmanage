@@ -228,7 +228,12 @@ class PrismaEvalCycleRepository extends EvalCycleRepository {
       FROM eval_cycles e JOIN users u ON e.user_id = u.id
       WHERE e.phase='pending'
     `;
-    return rows;
+    // self_reason / reject_reason 복호화 (findFinalPendingByManager와 동일 패턴)
+    return rows.map(r => ({
+      ...r,
+      self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
+      reject_reason: r.reject_reason ? this._decrypt(r.reject_reason) : '',
+    }));
   }
 }
 

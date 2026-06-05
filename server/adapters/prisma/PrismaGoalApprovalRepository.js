@@ -154,7 +154,12 @@ class PrismaGoalApprovalRepository {
       FROM eval_cycles e JOIN users u ON e.user_id = u.id
       WHERE e.phase='pending'
     `;
-    return rows;
+    // self_reason / reject_reason 복호화 (예방적 — 향후 사용 대비)
+    return rows.map(r => ({
+      ...r,
+      self_reason:   r.self_reason   ? this._decrypt(r.self_reason)   : '',
+      reject_reason: r.reject_reason ? this._decrypt(r.reject_reason) : '',
+    }));
   }
 }
 
