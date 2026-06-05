@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | FB-WRITE-PERIOD — 피드백 작성/받은 피드백 화면이 선택 기간 무시하고 최오래된(2024Q1) 표시하던 버그 수정. 원인: PG null created_at NULLS FIRST+find/비교 오류. 수정: periodSortKey 기반 최신 eval 선택 (PROMPT FB-WRITE-PERIOD) | Claude Code |
 | 2026-06-05 | RF-VIEW-2B — 보고·피드백 검색 확장: 대상자 미선택+기간→권한범위 전원, 조직(팀/본부 산하포함) 검색 추가, 3필터 UI(조직/대상자/기간), 권한 가드 유지(403). 백로그:전원조회 페이지네이션(BL-PERF) (PROMPT RF-VIEW-2B) | Claude Code |
 | 2026-06-05 | RF-VIEW-2 — 보고·피드백 검색 모드(본부장/관리자/CEO): GET /api/my-subordinates + /api/rf/search(권한 가드 403) + 사람·기간 검색 UI, RF-VIEW-1 렌더 재사용 (PROMPT RF-VIEW-2) | Claude Code |
 | 2026-06-05 | ORGCHART-REVERT — ORGCHART-SAVE-FIX(19f841f) 되돌림. '저장버튼 가림'은 실재하지 않는 문제였음(캔버스 하단 주황 막대=가로 스크롤바를 버튼으로 오인). 차트 저장은 상단 배치저장뿐, 가림 없음 (PROMPT ORGCHART-REVERT) | Claude Code |

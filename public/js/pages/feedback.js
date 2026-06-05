@@ -3,9 +3,17 @@ Pages.feedback = async function() {
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
 
   const evs = await API.get('/evals');
-  const myEv = evs.find(e => String(e.user_id) === String(App.user.id));
 
-  // 내가 승인자인 직원들 — 직원별 최신 eval 1개만 (중복 방지)
+  // 내 eval 중 가장 최신 활성 기간 선택 (periodSortKey 이용 — created_at null 대응)
+  const myEvCandidates = evs.filter(e =>
+    String(e.user_id) === String(App.user.id) &&
+    ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+  );
+  const myEv = (typeof sortPeriodsDesc === 'function')
+    ? sortPeriodsDesc(myEvCandidates)[0]
+    : myEvCandidates[0];
+
+  // 내가 승인자인 직원들 — 직원별 가장 최신 eval 1개만 (periodSortKey 기준, created_at null 대응)
   const reporteeRaw = evs.filter(e =>
     String(e.user_id) !== String(App.user.id) &&
     ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
@@ -13,8 +21,14 @@ Pages.feedback = async function() {
   const reporteeMap = {};
   reporteeRaw.forEach(e => {
     const uid = String(e.user_id);
-    if (!reporteeMap[uid] || new Date(e.created_at) > new Date(reporteeMap[uid].created_at))
+    if (!reporteeMap[uid]) {
       reporteeMap[uid] = e;
+    } else {
+      const prev = reporteeMap[uid];
+      const prevKey = typeof periodSortKey === 'function' ? periodSortKey(prev) : 0;
+      const curKey  = typeof periodSortKey === 'function' ? periodSortKey(e)    : 0;
+      if (curKey > prevKey) reporteeMap[uid] = e;
+    }
   });
   const reporteeEvs = Object.values(reporteeMap);
 
