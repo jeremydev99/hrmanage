@@ -2585,7 +2585,7 @@ app.get('/api/rf/auto', auth, async (req, res) => {
 });
 
 // ── RF-VIEW-2: 검색 대상 사람 목록 ────────────────────────────────────────
-// GET /api/my-subordinates → [{id,name,dept,title}]
+// GET /api/my-subordinates → {users:[{id,name,dept,title,org_id}], orgs:[{id,name,parent_id}]}
 // 권한: admin/master=전사, 본부장=본인+하부, self/team_auto=403
 app.get('/api/my-subordinates', auth, async (req, res) => {
   try {
@@ -2593,63 +2593,94 @@ app.get('/api/my-subordinates', auth, async (req, res) => {
     const { mode, leaderOrgIds, isAdmin } = await getRFMode(userId, req.user.role);
     if (mode !== 'search') return res.status(403).json({ error: '검색 모드가 아닙니다.' });
 
-    let users;
+    const allUsers = await userRepo.findAllActive();
+    const allOrgs  = await adminRepo.findOrgsWithLeader();  // [{id, name, parent_id, ...}]
+
+    let users, orgs;
     if (isAdmin) {
-      // 전사 활성 사용자
-      users = (await adminRepo.findAllActiveUserIds()).map(id => ({ id }));
-      const allUsers = await userRepo.findAllActive();
-      users = allUsers.map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title }));
+      users = allUsers.map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title, org_id: u.org_id }));
+      orgs  = allOrgs.map(o => ({ id: o.id, name: o.name, parent_id: o.parent_id }));
     } else {
-      // 본인 + 하부 조직 전체
       const ids = await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
-      const allUsers = await userRepo.findAllActive();
       users = allUsers.filter(u => ids.has(Number(u.id)))
-        .map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title }));
+        .map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title, org_id: u.org_id }));
+      // 권한 범위 조직 = leaderOrgIds + 하위 (getSubtreeUserIds는 user IDs지만 조직은 리더 조직 기준)
+      const allowedOrgIds = new Set();
+      for (const orgId of leaderOrgIds) {
+        allowedOrgIds.add(Number(orgId));
+        // 하위 조직도 포함 (users의 org_id로 역추론)
+      }
+      // users가 속한 org_id를 모아 조직 필터
+      const userOrgIds = new Set(users.map(u => Number(u.org_id)).filter(Boolean));
+      orgs = allOrgs.filter(o => userOrgIds.has(Number(o.id)))
+        .map(o => ({ id: o.id, name: o.name, parent_id: o.parent_id }));
     }
     users.sort((a, b) => (a.dept || '').localeCompare(b.dept || '') || (a.name || '').localeCompare(b.name || ''));
-    res.json(users);
+    orgs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    res.json({ users, orgs });
   } catch(err) {
     console.error('[my-subordinates]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ── RF-VIEW-2: 단일 사용자 보고·피드백 검색 ──────────────────────────────
-// GET /api/rf/search?user_id=X&period=<label>
-// 권한 가드: 요청자가 X를 조회 가능한지 (자신의 하부 or admin)
+// ── RF-VIEW-2B: 보고·피드백 검색 (기간 필수, org_id·user_id 선택) ─────────
+// GET /api/rf/search?period=<label>[&org_id=X][&user_id=Y]
+// 미선택=권한범위 전원, org_id=그 조직+산하, user_id=1명. 권한 가드 필수.
 app.get('/api/rf/search', auth, async (req, res) => {
   try {
-    const userId = req.user.sub;
-    const targetId = Number(req.query.user_id);
-    const period   = req.query.period;
-    if (!targetId || !period) return res.status(400).json({ error: 'user_id와 period 필수' });
+    const userId  = req.user.sub;
+    const period  = req.query.period;
+    const orgId   = req.query.org_id ? Number(req.query.org_id) : null;
+    const targetId= req.query.user_id ? Number(req.query.user_id) : null;
+    if (!period) return res.status(400).json({ error: 'period 필수' });
 
     const { mode, leaderOrgIds, isAdmin } = await getRFMode(userId, req.user.role);
     if (mode !== 'search') return res.status(403).json({ error: '검색 권한 없음' });
 
-    // 권한 가드: 본부장이면 하부 포함 여부 확인
-    if (!isAdmin) {
-      const allowedIds = await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
-      if (!allowedIds.has(targetId)) return res.status(403).json({ error: '해당 사용자 조회 권한 없음' });
+    // 권한 범위 집합 (본부장: 본인+하부 / admin: null=무제한)
+    const allowedIds = isAdmin ? null : await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
+
+    // 대상 사용자 집합 결정
+    let targetIds;
+    if (targetId) {
+      // 개인 지정
+      if (allowedIds && !allowedIds.has(targetId)) return res.status(403).json({ error: '해당 사용자 조회 권한 없음' });
+      targetIds = [targetId];
+    } else if (orgId) {
+      // 조직 지정 → 산하 전원
+      const orgUserIds = await adminRepo.getSubtreeUserIds(orgId);
+      if (allowedIds) {
+        const filtered = orgUserIds.filter(id => allowedIds.has(Number(id)));
+        if (!filtered.length) return res.status(403).json({ error: '해당 조직 조회 권한 없음' });
+        targetIds = filtered;
+      } else {
+        targetIds = orgUserIds;
+      }
+    } else {
+      // 전원(권한 범위)
+      targetIds = allowedIds ? [...allowedIds] : await adminRepo.findAllActiveUserIds();
     }
+    if (!targetIds.length) return res.json([]);
 
-    // 해당 기간 eval 조회
-    const evals = await adminRepo.findEvalsByUsersAndPeriod([targetId], period);
-    if (!evals.length) return res.json({ user: null, eval: null, reports: [], feedbacks: [] });
-
-    const ev = evals[0];
-    const [reports, feedbacks] = await Promise.all([
-      progressReportRepo.findByEvalIdFull(ev.id),
-      feedbackRepo.findByEvalId(ev.id),
-    ]);
-
-    res.json({
-      user:      { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
-      eval:      { id: ev.id, phase: ev.phase, period_label: ev.period_label },
-      is_self:   String(ev.user_id) === String(userId),
-      reports,
-      feedbacks,
-    });
+    // 기간별 eval 조회 + 보고/피드백
+    const evals = await adminRepo.findEvalsByUsersAndPeriod(targetIds.map(Number), period);
+    const results = [];
+    for (const ev of evals) {
+      const [reports, feedbacks] = await Promise.all([
+        progressReportRepo.findByEvalIdFull(ev.id),
+        feedbackRepo.findByEvalId(ev.id),
+      ]);
+      results.push({
+        user:     { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
+        eval:     { id: ev.id, phase: ev.phase, period_label: ev.period_label },
+        is_self:  String(ev.user_id) === String(userId),
+        reports,
+        feedbacks,
+      });
+    }
+    results.sort((a, b) => a.is_self ? -1 : b.is_self ? 1 : (a.user.name||'').localeCompare(b.user.name||''));
+    res.json(results);
   } catch(err) {
     console.error('[rf/search]', err);
     res.status(500).json({ error: err.message });

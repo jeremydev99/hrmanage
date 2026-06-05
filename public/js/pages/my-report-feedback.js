@@ -459,35 +459,46 @@ async function submitRFReport(evalId) {
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
-/* ── RF-VIEW-2: 검색 패널 (search 모드 — 본부장/관리자/CEO) ── */
+/* ── RF-VIEW-2B: 검색 패널 (search 모드 — 3필터: 조직/대상자/기간) ── */
+let _rfSubData = null;  // 캐시: { users, orgs }
+
 async function renderRFSearchPanel(area) {
-  // 사람 목록 + 기간 목록 병렬 로드
   const panel = document.createElement('div');
   panel.id = 'rf-search-panel';
   panel.innerHTML = '<div class="spinner">검색 패널 로딩...</div>';
   area.appendChild(panel);
 
   try {
-    const [subordinates, periods] = await Promise.all([
+    const [scData, periods] = await Promise.all([
       API.get('/my-subordinates'),
       API.get('/eval-periods'),
     ]);
+    _rfSubData = scData;  // {users, orgs}
+    const users = scData.users || [];
+    const orgs  = scData.orgs  || [];
     const sortedPeriods = typeof sortPeriodsDesc === 'function' ? sortPeriodsDesc(periods) : periods;
 
     panel.innerHTML = `
       <div class="card" style="margin-bottom:12px">
         <div class="card-header"><div><div class="card-header-t">🔍 보고·피드백 검색</div>
-          <div class="card-header-s">사람과 기간을 선택해 조회하세요</div></div></div>
+          <div class="card-header-s">기간은 필수, 조직·대상자는 선택 (미선택=권한 범위 전원)</div></div></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+          <div style="flex:1;min-width:140px">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">조직</label>
+            <select id="rf-search-org" style="width:100%;height:34px;font-size:13px" onchange="rfOrgFilter()">
+              <option value="">전체</option>
+              ${orgs.map(o => `<option value="${o.id}">${o.name}</option>`).join('')}
+            </select>
+          </div>
           <div style="flex:1;min-width:160px">
             <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">대상자</label>
             <select id="rf-search-user" style="width:100%;height:34px;font-size:13px">
-              <option value="">선택하세요</option>
-              ${subordinates.map(u => `<option value="${u.id}">${u.name} (${u.dept||'-'} · ${u.title||'-'})</option>`).join('')}
+              <option value="">전체</option>
+              ${users.map(u => `<option value="${u.id}" data-org="${u.org_id||''}">${u.name} (${u.dept||'-'} · ${u.title||'-'})</option>`).join('')}
             </select>
           </div>
-          <div style="flex:1;min-width:140px">
-            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">평가 기간</label>
+          <div style="flex:1;min-width:130px">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">평가 기간 <span style="color:var(--red)">*</span></label>
             <select id="rf-search-period" style="width:100%;height:34px;font-size:13px">
               <option value="">선택하세요</option>
               ${sortedPeriods.map(p => `<option value="${encodeURIComponent(p.period_label)}">${p.period_label}</option>`).join('')}
@@ -502,62 +513,91 @@ async function renderRFSearchPanel(area) {
   }
 }
 
+// 조직 선택 시 대상자 드롭다운 필터
+function rfOrgFilter() {
+  const orgId = document.getElementById('rf-search-org')?.value;
+  const userSel = document.getElementById('rf-search-user');
+  if (!userSel) return;
+  userSel.querySelectorAll('option').forEach(opt => {
+    if (!opt.value) { opt.hidden = false; return; }  // 전체 옵션 항상 표시
+    opt.hidden = orgId ? String(opt.dataset.org) !== String(orgId) : false;
+  });
+  // 현재 선택이 숨겨진 경우 초기화
+  if (userSel.selectedOptions[0]?.hidden) userSel.value = '';
+}
+
 async function executeRFSearch() {
+  const orgId   = document.getElementById('rf-search-org')?.value;
   const userId  = document.getElementById('rf-search-user')?.value;
   const periodE = document.getElementById('rf-search-period')?.value;
   const result  = document.getElementById('rf-search-result');
-  if (!userId || !periodE) { showAlert('대상자와 기간을 선택하세요.', 'orange'); return; }
+  if (!periodE) { showAlert('기간을 선택하세요.', 'orange'); return; }
   const period = decodeURIComponent(periodE);
   result.innerHTML = '<div class="spinner">조회 중...</div>';
   try {
-    const data = await API.get(`/rf/search?user_id=${userId}&period=${encodeURIComponent(period)}`);
-    if (!data.eval) {
-      result.innerHTML = `<div class="card"><div class="alert alert-orange">해당 기간에 평가 데이터가 없습니다.</div></div>`;
+    let url = `/rf/search?period=${encodeURIComponent(period)}`;
+    if (userId)  url += `&user_id=${userId}`;
+    else if (orgId) url += `&org_id=${orgId}`;
+
+    const data = await API.get(url);  // 항상 배열 반환
+    const items = Array.isArray(data) ? data : (data.eval ? [data] : []);
+
+    if (!items.length) {
+      result.innerHTML = `<div class="card"><div class="alert alert-orange">해당 조건에 평가 데이터가 없습니다.</div></div>`;
       return;
     }
 
-    const phaseLabel = {
-      draft:'목표작성중', pending:'승인대기', approved:'목표확정',
-      final_self:'자기평가중', final_mgr_pending:'상사평가대기',
-      final_mgr2_pending:'2차평가대기', final_done:'평가완료'
-    }[data.eval.phase] || data.eval.phase;
-
-    // RF-VIEW-1 renderRFTeamSection 렌더 패턴 재사용: 카드 + 보고/피드백 목록
-    const m = data;
-    const rList = (m.reports || []).map(r => {
-      const d = (r.created_at||'').slice(0,10);
-      const gn = r.goal_name ? `<span style="font-size:10px;color:var(--muted)">[${escapeHtml(r.goal_name)}]</span> ` : '';
-      const selfBadge = m.is_self ? '<span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px;margin-left:4px">본인</span>' : '';
-      return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
-        📝 ${gn}${escapeHtml(r.content||'')}${selfBadge} <span style="color:var(--muted);font-size:11px">${d}</span>
-      </div>`;
-    }).join('');
-
-    const fbList = (m.feedbacks || []).flatMap(fb => (fb.items||[]).map(it => {
-      const sc = it.score || 0;
-      const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
-      return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
-        💬 ${escapeHtml(it.note||'(내용 없음)')} ${stars}(${sc}점)
-        <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
-      </div>`;
-    })).join('');
-
-    result.innerHTML = `<div class="card">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-        <div class="avatar" style="width:32px;height:32px;font-size:11px;background:var(--o100);color:var(--o800);flex-shrink:0">${(m.user.name||'?').slice(0,2)}</div>
-        <div>
-          <span style="font-weight:600">${escapeHtml(m.user.name||'')}</span>
-          <span style="font-size:12px;color:var(--muted);margin-left:6px">${escapeHtml(m.user.dept||'')} · ${escapeHtml(m.user.title||'')}</span>
-        </div>
-        <span class="bd" style="margin-left:auto">${phaseLabel}</span>
-        <span style="font-size:12px;color:var(--muted)">${escapeHtml(period)}</span>
-      </div>
-      ${rList || fbList
-        ? `<div>${rList || '<div style="color:var(--muted);font-size:12px;padding:4px 0">보고 없음</div>'}
-               ${fbList || '<div style="color:var(--muted);font-size:12px;padding:4px 0">피드백 없음</div>'}</div>`
-        : '<div class="alert alert-orange" style="font-size:12px">보고·피드백이 없습니다.</div>'}
+    // 조회 헤더
+    const orgName  = orgId ? (_rfSubData?.orgs||[]).find(o=>String(o.id)===String(orgId))?.name||'조직' : '';
+    const userName = userId ? (_rfSubData?.users||[]).find(u=>String(u.id)===String(userId))?.name||'' : '';
+    const scopeLabel = userName ? userName : orgName ? `${orgName} 산하` : '전체';
+    result.innerHTML = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">
+      📋 조회: ${escapeHtml(scopeLabel)} · ${escapeHtml(period)} · ${items.length}명
     </div>`;
+
+    items.forEach(m => {
+      const phaseLabel = {
+        draft:'목표작성중', pending:'승인대기', approved:'목표확정',
+        final_self:'자기평가중', final_mgr_pending:'상사평가대기',
+        final_mgr2_pending:'2차평가대기', final_done:'평가완료'
+      }[m.eval?.phase] || m.eval?.phase || '';
+
+      const rList = (m.reports || []).map(r => {
+        const d = (r.created_at||'').slice(0,10);
+        const gn = r.goal_name ? `<span style="font-size:10px;color:var(--muted)">[${escapeHtml(r.goal_name)}]</span> ` : '';
+        const selfBadge = m.is_self ? '<span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px;margin-left:4px">본인</span>' : '';
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+          📝 ${gn}${escapeHtml(r.content||'')}${selfBadge} <span style="color:var(--muted);font-size:11px">${d}</span>
+        </div>`;
+      }).join('');
+
+      const fbList = (m.feedbacks || []).flatMap(fb => (fb.items||[]).map(it => {
+        const sc = it.score || 0;
+        const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
+        return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+          💬 ${escapeHtml(it.note||'(내용 없음)')} ${stars}(${sc}점)
+          <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
+        </div>`;
+      })).join('');
+
+      result.innerHTML += `<div class="card" style="margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div class="avatar" style="width:28px;height:28px;font-size:10px;background:var(--o100);color:var(--o800);flex-shrink:0">${(m.user.name||'?').slice(0,2)}</div>
+          <div>
+            <span style="font-weight:600">${escapeHtml(m.user.name||'')}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px">${escapeHtml(m.user.dept||'')} · ${escapeHtml(m.user.title||'')}</span>
+          </div>
+          <span class="bd" style="margin-left:auto">${phaseLabel}</span>
+        </div>
+        ${rList || fbList
+          ? `<div>${rList||''}${fbList||''}</div>`
+          : `<div class="alert alert-orange" style="font-size:12px">보고·피드백이 없습니다.</div>`}
+      </div>`;
+    });
   } catch(e) {
     result.innerHTML = `<div class="alert alert-red">${e.message}</div>`;
   }
 }
+
+// RF-VIEW-2 executeRFSearch에서 사용하던 중복 렌더 — 아래는 더 이상 사용 안 함(위에서 통합)
+// 하지만 파일에 남아 있을 경우 실수 방지를 위해 아래 fbList 인라인 구현 참고용으로만 유지

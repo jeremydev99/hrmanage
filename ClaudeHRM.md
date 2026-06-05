@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | RF-VIEW-2B — 보고·피드백 검색 확장: 대상자 미선택+기간→권한범위 전원, 조직(팀/본부 산하포함) 검색 추가, 3필터 UI(조직/대상자/기간), 권한 가드 유지(403). 백로그:전원조회 페이지네이션(BL-PERF) (PROMPT RF-VIEW-2B) | Claude Code |
 | 2026-06-05 | RF-VIEW-2 — 보고·피드백 검색 모드(본부장/관리자/CEO): GET /api/my-subordinates + /api/rf/search(권한 가드 403) + 사람·기간 검색 UI, RF-VIEW-1 렌더 재사용 (PROMPT RF-VIEW-2) | Claude Code |
 | 2026-06-05 | ORGCHART-REVERT — ORGCHART-SAVE-FIX(19f841f) 되돌림. '저장버튼 가림'은 실재하지 않는 문제였음(캔버스 하단 주황 막대=가로 스크롤바를 버튼으로 오인). 차트 저장은 상단 배치저장뿐, 가림 없음 (PROMPT ORGCHART-REVERT) | Claude Code |
 | 2026-06-05 | RF-VIEW-1 — 보고·피드백 역할 판정(self/team_auto/search, getLeaderOrgIds+hasChildOrgs 재사용) + 팀장 자동(본인+하부) + 소유자 라벨, GET /api/rf/auto 신설. 본부장+ 검색은 RF-VIEW-2 (PROMPT RF-VIEW-1) | Claude Code |
