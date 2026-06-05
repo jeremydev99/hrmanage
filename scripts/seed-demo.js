@@ -525,11 +525,42 @@ async function main() {
   console.log(`  최종평가:  ${totalFinals}건 (완료)`);
   console.log(`  등급분포:  ${JSON.stringify(gradeCount)}`);
 
+  // 8. 데모 계정 비번 고정 + 공지 업데이트 (시연용)
+  console.log('\n🔑 데모 계정 비번 고정 (시연 라인: 한개발→정플랫→박기술)...');
+  const DEMO_PW_TARGETS = [
+    { name: '박기술', pw: 'admin1234' },
+    { name: '정플랫', pw: 'user1234'  },
+    { name: '한개발', pw: 'user1234'  },
+  ];
+  let devEmail = 'dev01@synapsoft.com';
+  for (const t of DEMO_PW_TARGETS) {
+    const u = await prisma.user.findFirst({ where: { name: t.name }, select: { id: true, email: true } });
+    if (u) {
+      const hash = bcrypt.hashSync(t.pw, 10);
+      await prisma.user.update({ where: { id: u.id }, data: { passwordHash: hash } });
+      if (t.name === '한개발') devEmail = u.email;
+    }
+  }
+
+  const demoNotice = `📢 데모 테스트 계정
+[마스터관리자] ceo@synapsoft.com / admin1234
+[인사팀장] hr-lead@synapsoft.com / admin1234
+[개발본부장] cto@synapsoft.com / admin1234        (박기술)
+[플랫폼팀장] platform-lead@synapsoft.com / user1234 (정플랫)
+[시니어개발자] ${devEmail} / user1234           (한개발)`;
+  await prisma.appSetting.upsert({
+    where:  { key: 'notice' },
+    update: { value: demoNotice, updatedBy: 1 },
+    create: { key: 'notice', value: demoNotice, updatedBy: 1 },
+  });
+  console.log('  ✅ 공지 업데이트 완료');
+
   console.log('\n🔑 알려진 테스트 로그인 계정:');
-  console.log('  대표이사:  ceo@synapsoft.com / admin1234 (role: master)');
-  console.log('  인사팀장:  hr-lead@synapsoft.com / admin1234 (role: admin)');
-  console.log('  개발팀장:  platform-lead@synapsoft.com / user1234 (role: user)');
-  console.log('  팀원:      dev01@synapsoft.com / user1234 (role: user)');
+  console.log('  대표이사:  ceo@synapsoft.com / admin1234');
+  console.log('  인사팀장:  hr-lead@synapsoft.com / admin1234');
+  console.log('  개발본부장:cto@synapsoft.com / admin1234  (박기술 — 결재 2차)');
+  console.log('  플랫폼팀장:platform-lead@synapsoft.com / user1234 (정플랫 — 결재 1차)');
+  console.log('  시니어개발:' + devEmail + ' / user1234 (한개발 — 평가자)');
 
   console.log('\n✅ seed-demo.js 완료');
   console.log('\n💡 테스트서버 적재:');

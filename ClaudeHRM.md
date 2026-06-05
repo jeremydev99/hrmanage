@@ -472,6 +472,7 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
 
 ### 🔴 외부판매 전 정리 필수 (데모→운영)
 - **로그인 prefill 제거**: `public/js/pages/login.js` email/password 기본값(ceo/admin1234) — 완성 제품에 자격증명 자동입력 금지
+- **공지 데모 계정/비번 제거**: 로그인 공지의 계정·비번 하드코딩 — 외부판매 전 제거
 - **BL-005 시크릿 하드닝**: JWT_SECRET/ENC_SECRET 강화·플러그블 프로바이더
 - **F1 컨벤션 일괄 정리**: created_at/camelCase 혼재 이슈 전체 점검
 
@@ -624,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-05 | DEMO-ACCOUNTS — 박기술/정플랫/한개발 비번 고정(admin1234/user1234), 로그인 공지 데모 계정 노출, seed-demo 반영. 공지 비번 하드코딩은 데모 전용→운영 전 제거(정리목록) (PROMPT DEMO-ACCOUNTS) | Claude Code |
 | 2026-06-05 | F1-FIX — Prisma 인자 camelCase→snake 타깃 스윕(findSignupRequests orderBy createdAt→created_at), schema 무변경, 계정승인·V3 PG 검증. @map 통일은 BL-CONVENTION으로 deferral (PROMPT F1-FIX) | Claude Code |
 | 2026-06-04 | FIX-LOGIN-PREFILL — 로그인 prefill dev3→ceo(admin1234). 단 prefill 자체는 데모 전용→외부판매 전 제거 필요(정리목록) (PROMPT FIX-LOGIN-PREFILL) | Claude Code |
 | 2026-06-04 | FIX-AUDITLOG — 감사로그 WRITE db.prepare→Prisma 전환(PG모드 db=null 오류 해소), created_at 타임스탬프 추가, 무음catch→.catch(console.error) 가시화, 액션→적재→표시 PG 검증 (PROMPT FIX-AUDITLOG) | Claude Code |
