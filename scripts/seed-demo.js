@@ -44,6 +44,10 @@ const PERIODS = [
 ];
 const COMPLETED_COUNT = 9;  // 2024Q1 ~ 2026Q1
 
+// 2차 평가 대기로 만들 대상 (2026Q2) — 박기술이 2차 평가자인 정플랫 팀원 중 일부
+// 한개발(dev01) + 임개발(dev02): 정플랫 직속 → 박기술 2차 대기 시연용
+const CHAIN_2CHA_EMAILS = new Set(['dev01@synapsoft.com', 'dev02@synapsoft.com']);
+
 // ── 큐레이션 로스터 (35명) ───────────────────────────────────────────────
 // 역할: master = 인사시스템 관리자, admin = 관리자, user = 일반
 const ROSTER = [
@@ -449,13 +453,16 @@ async function main() {
 
     // ── 진행 중 (2026Q2) ──────────────────────────────────────────────────
     const currentPeriod = PERIODS[COMPLETED_COUNT];  // 2026Q2
+    const is2Cha = CHAIN_2CHA_EMAILS.has(u.email);  // 2차 대기 대상 여부
+
     const cycle2 = await prisma.evalCycle.create({
       data: {
         userId,
         periodType: 'quarter',
         periodLabel: currentPeriod.label,
         evalYear: currentPeriod.year,
-        phase: 'final_self',
+        // 2차 대기 대상: 1차 완료 후 2차 대기 / 나머지: 자기평가 진행중
+        phase: is2Cha ? 'final_mgr2_pending' : 'final_self',
         locked: 0,
       },
     });
@@ -508,10 +515,47 @@ async function main() {
     });
     totalReports++;
 
-    // final_evaluation 미완료 (self_done=0)
-    await prisma.finalEvaluation.create({
-      data: { evalId: cycle2.id, selfDone: 0, mgrDone: 0, locked: 0 },
-    });
+    if (is2Cha) {
+      // ── 2차 평가 대기: 자기평가 + 1차 최종평가 완료 상태 생성 ──────────
+      // final_eval_scores (1차 mgr_score — 앱 점수 로직 재사용 전제)
+      const mgrScore2 = getScoreForPeriod(u.profile, COMPLETED_COUNT - 1);  // 마지막 완료 기간 점수 재사용
+      const selfScore2 = Math.min(5, Math.max(1, mgrScore2));
+      const fe2 = await prisma.finalEvaluation.create({
+        data: {
+          evalId: cycle2.id,
+          selfDone: 1,
+          self_done_at: '2026-06-01 09:00:00',
+          selfNote: '2026년 2분기 자기평가 완료. 목표 달성을 위해 최선을 다했습니다.',
+          mgrDone: 1,
+          mgr_done_at: '2026-06-03 14:00:00',
+          mgrNote: '1차 평가 완료. 성실하게 임무를 수행하였습니다.',
+          mgrApproverId: mgrId2 || userId,
+          locked: 0,        // 2차 미완료라 잠금 해제
+          secondMgrDone: 0, // 2차 미완료
+        },
+      });
+      // final_eval_scores (1차 점수 삽입)
+      const allGoals2 = await prisma.goal.findMany({ where: { evalId: cycle2.id } });
+      for (const g of allGoals2) {
+        await prisma.finalEvalScore.create({
+          data: { finalId: fe2.id, goalId: g.id, selfScore: selfScore2, mgrScore: mgrScore2 },
+        });
+      }
+      // 앱 calcFinalScore 로직으로 점수·등급 산출 (시드↔런타임 일치)
+      const rawScore2 = await adminRepo.calcFinalScore(cycle2.id, 'mgr_score');
+      const finalScore2 = rawScore2 !== null ? Math.round(rawScore2 * 10) / 10 : null;
+      const grade2 = finalScore2 !== null ? scoreToGrade(finalScore2, criteriaPlain) : null;
+      await prisma.finalEvaluation.update({
+        where: { id: fe2.id },
+        data: { finalScore: finalScore2, finalGrade: grade2, selectedGrade: grade2 },
+      });
+      if (grade2) { gradeCount[grade2] = (gradeCount[grade2] || 0) + 1; }
+    } else {
+      // ── 일반 진행중: 자기평가 미완료 ──────────────────────────────────
+      await prisma.finalEvaluation.create({
+        data: { evalId: cycle2.id, selfDone: 0, mgrDone: 0, locked: 0 },
+      });
+    }
   }
 
   // 7. 통계 출력
@@ -553,7 +597,13 @@ async function main() {
     update: { value: demoNotice, updatedBy: 1 },
     create: { key: 'notice', value: demoNotice, updatedBy: 1 },
   });
-  console.log('  ✅ 공지 업데이트 완료');
+  // 2차 최종평가 허용 on (박기술 2차 시연용)
+  await prisma.appSetting.upsert({
+    where:  { key: 'second_final' },
+    update: { value: '1' },
+    create: { key: 'second_final', value: '1' },
+  });
+  console.log('  ✅ 공지 + 2차 최종평가 허용(on) 업데이트 완료');
 
   console.log('\n🔑 알려진 테스트 로그인 계정:');
   console.log('  대표이사:  ceo@synapsoft.com / admin1234');
