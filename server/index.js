@@ -2503,24 +2503,35 @@ app.get('/api/evals/my-mgr-pending', auth, async (req, res) => {
 // ── RF-VIEW-1: 보고·피드백 역할 판정 + 자동 모드 데이터 ───────────────────────
 // GET /api/rf/auto?period=<period_label>
 // 반환: { mode:'self'|'team_auto'|'search', team:[{user,eval,is_self,reports,feedbacks}] }
+// ── RF-VIEW 판정 헬퍼 (search 범위도 계산) ──────────────────────────────
+async function getRFMode(userId, role) {
+  const isAdmin = ['master','admin'].includes(role);
+  if (isAdmin) return { mode: 'search', leaderOrgIds: [], isAdmin };
+  const leaderOrgIds = await adminRepo.getLeaderOrgIds(userId);
+  if (leaderOrgIds.length === 0) return { mode: 'self', leaderOrgIds: [], isAdmin: false };
+  const hasChildren = await adminRepo.hasChildOrgs(leaderOrgIds);
+  return { mode: hasChildren ? 'search' : 'team_auto', leaderOrgIds, isAdmin: false };
+}
+
+// search 모드에서 조회 가능한 사용자 ID 집합 (권한 가드용)
+async function getSearchableUserIds(userId, role, leaderOrgIds) {
+  const isAdmin = ['master','admin'].includes(role);
+  if (isAdmin) return null; // null = 전사(제한 없음)
+  let ids = new Set([Number(userId)]);
+  for (const orgId of leaderOrgIds) {
+    const members = await adminRepo.getSubtreeUserIds(orgId);
+    members.forEach(id => ids.add(Number(id)));
+  }
+  return ids;
+}
+
 app.get('/api/rf/auto', auth, async (req, res) => {
   try {
     const userId = req.user.sub;
-    const isAdmin = ['master','admin'].includes(req.user.role);
     const { period } = req.query;
 
-    // 1. 역할 판정
-    let mode = 'self';
-    let leaderOrgIds = [];
-    if (isAdmin) {
-      mode = 'search';
-    } else {
-      leaderOrgIds = await adminRepo.getLeaderOrgIds(userId);
-      if (leaderOrgIds.length > 0) {
-        const hasChildren = await adminRepo.hasChildOrgs(leaderOrgIds);
-        mode = hasChildren ? 'search' : 'team_auto';
-      }
-    }
+    // 1. 역할 판정 (헬퍼 재사용)
+    const { mode, leaderOrgIds } = await getRFMode(userId, req.user.role);
 
     // period 없으면 mode만 반환 (탭 렌더 전 모드 판정용)
     if (!period) return res.json({ mode });
@@ -2569,6 +2580,78 @@ app.get('/api/rf/auto', auth, async (req, res) => {
     res.json({ mode, team });
   } catch(err) {
     console.error('[rf/auto]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── RF-VIEW-2: 검색 대상 사람 목록 ────────────────────────────────────────
+// GET /api/my-subordinates → [{id,name,dept,title}]
+// 권한: admin/master=전사, 본부장=본인+하부, self/team_auto=403
+app.get('/api/my-subordinates', auth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const { mode, leaderOrgIds, isAdmin } = await getRFMode(userId, req.user.role);
+    if (mode !== 'search') return res.status(403).json({ error: '검색 모드가 아닙니다.' });
+
+    let users;
+    if (isAdmin) {
+      // 전사 활성 사용자
+      users = (await adminRepo.findAllActiveUserIds()).map(id => ({ id }));
+      const allUsers = await userRepo.findAllActive();
+      users = allUsers.map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title }));
+    } else {
+      // 본인 + 하부 조직 전체
+      const ids = await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
+      const allUsers = await userRepo.findAllActive();
+      users = allUsers.filter(u => ids.has(Number(u.id)))
+        .map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title }));
+    }
+    users.sort((a, b) => (a.dept || '').localeCompare(b.dept || '') || (a.name || '').localeCompare(b.name || ''));
+    res.json(users);
+  } catch(err) {
+    console.error('[my-subordinates]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── RF-VIEW-2: 단일 사용자 보고·피드백 검색 ──────────────────────────────
+// GET /api/rf/search?user_id=X&period=<label>
+// 권한 가드: 요청자가 X를 조회 가능한지 (자신의 하부 or admin)
+app.get('/api/rf/search', auth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    const targetId = Number(req.query.user_id);
+    const period   = req.query.period;
+    if (!targetId || !period) return res.status(400).json({ error: 'user_id와 period 필수' });
+
+    const { mode, leaderOrgIds, isAdmin } = await getRFMode(userId, req.user.role);
+    if (mode !== 'search') return res.status(403).json({ error: '검색 권한 없음' });
+
+    // 권한 가드: 본부장이면 하부 포함 여부 확인
+    if (!isAdmin) {
+      const allowedIds = await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
+      if (!allowedIds.has(targetId)) return res.status(403).json({ error: '해당 사용자 조회 권한 없음' });
+    }
+
+    // 해당 기간 eval 조회
+    const evals = await adminRepo.findEvalsByUsersAndPeriod([targetId], period);
+    if (!evals.length) return res.json({ user: null, eval: null, reports: [], feedbacks: [] });
+
+    const ev = evals[0];
+    const [reports, feedbacks] = await Promise.all([
+      progressReportRepo.findByEvalIdFull(ev.id),
+      feedbackRepo.findByEvalId(ev.id),
+    ]);
+
+    res.json({
+      user:      { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
+      eval:      { id: ev.id, phase: ev.phase, period_label: ev.period_label },
+      is_self:   String(ev.user_id) === String(userId),
+      reports,
+      feedbacks,
+    });
+  } catch(err) {
+    console.error('[rf/search]', err);
     res.status(500).json({ error: err.message });
   }
 });

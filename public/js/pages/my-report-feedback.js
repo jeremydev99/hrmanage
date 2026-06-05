@@ -22,14 +22,10 @@ Pages.myReportFeedback = async function() {
 
     area.innerHTML = '';
 
-    // search 모드: 안내 배너
+    // search 모드: 검색 패널 (RF-VIEW-2)
     if (window._rfMode === 'search') {
-      const banner = document.createElement('div');
-      banner.className = 'alert alert-orange';
-      banner.style.marginBottom = '12px';
-      banner.innerHTML = `<strong>🔍 관리자·본부장 전체 검색 모드</strong><br>
-        <span style="font-size:13px">사람·기간 선택 검색 기능은 다음 업데이트에서 제공됩니다.<br>현재는 본인 보고·피드백만 표시됩니다.</span>`;
-      area.appendChild(banner);
+      await renderRFSearchPanel(area);
+      return;  // search 모드는 검색 패널만 — 본인 탭 표시 없음
     }
 
     if (!myEvs.length) {
@@ -461,4 +457,107 @@ async function submitRFReport(evalId) {
     showAlert(`${res.round}회차 보고가 제출되었습니다.`, 'teal');
     setTimeout(() => Pages.myReportFeedback(), 600);
   } catch(e) { showAlert(e.message, 'red'); }
+}
+
+/* ── RF-VIEW-2: 검색 패널 (search 모드 — 본부장/관리자/CEO) ── */
+async function renderRFSearchPanel(area) {
+  // 사람 목록 + 기간 목록 병렬 로드
+  const panel = document.createElement('div');
+  panel.id = 'rf-search-panel';
+  panel.innerHTML = '<div class="spinner">검색 패널 로딩...</div>';
+  area.appendChild(panel);
+
+  try {
+    const [subordinates, periods] = await Promise.all([
+      API.get('/my-subordinates'),
+      API.get('/eval-periods'),
+    ]);
+    const sortedPeriods = typeof sortPeriodsDesc === 'function' ? sortPeriodsDesc(periods) : periods;
+
+    panel.innerHTML = `
+      <div class="card" style="margin-bottom:12px">
+        <div class="card-header"><div><div class="card-header-t">🔍 보고·피드백 검색</div>
+          <div class="card-header-s">사람과 기간을 선택해 조회하세요</div></div></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-top:10px">
+          <div style="flex:1;min-width:160px">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">대상자</label>
+            <select id="rf-search-user" style="width:100%;height:34px;font-size:13px">
+              <option value="">선택하세요</option>
+              ${subordinates.map(u => `<option value="${u.id}">${u.name} (${u.dept||'-'} · ${u.title||'-'})</option>`).join('')}
+            </select>
+          </div>
+          <div style="flex:1;min-width:140px">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">평가 기간</label>
+            <select id="rf-search-period" style="width:100%;height:34px;font-size:13px">
+              <option value="">선택하세요</option>
+              ${sortedPeriods.map(p => `<option value="${encodeURIComponent(p.period_label)}">${p.period_label}</option>`).join('')}
+            </select>
+          </div>
+          <button class="btn btn-primary" style="height:34px;flex-shrink:0" onclick="executeRFSearch()">조회</button>
+        </div>
+      </div>
+      <div id="rf-search-result"></div>`;
+  } catch(e) {
+    panel.innerHTML = `<div class="alert alert-red">검색 패널 로드 실패: ${e.message}</div>`;
+  }
+}
+
+async function executeRFSearch() {
+  const userId  = document.getElementById('rf-search-user')?.value;
+  const periodE = document.getElementById('rf-search-period')?.value;
+  const result  = document.getElementById('rf-search-result');
+  if (!userId || !periodE) { showAlert('대상자와 기간을 선택하세요.', 'orange'); return; }
+  const period = decodeURIComponent(periodE);
+  result.innerHTML = '<div class="spinner">조회 중...</div>';
+  try {
+    const data = await API.get(`/rf/search?user_id=${userId}&period=${encodeURIComponent(period)}`);
+    if (!data.eval) {
+      result.innerHTML = `<div class="card"><div class="alert alert-orange">해당 기간에 평가 데이터가 없습니다.</div></div>`;
+      return;
+    }
+
+    const phaseLabel = {
+      draft:'목표작성중', pending:'승인대기', approved:'목표확정',
+      final_self:'자기평가중', final_mgr_pending:'상사평가대기',
+      final_mgr2_pending:'2차평가대기', final_done:'평가완료'
+    }[data.eval.phase] || data.eval.phase;
+
+    // RF-VIEW-1 renderRFTeamSection 렌더 패턴 재사용: 카드 + 보고/피드백 목록
+    const m = data;
+    const rList = (m.reports || []).map(r => {
+      const d = (r.created_at||'').slice(0,10);
+      const gn = r.goal_name ? `<span style="font-size:10px;color:var(--muted)">[${escapeHtml(r.goal_name)}]</span> ` : '';
+      const selfBadge = m.is_self ? '<span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px;margin-left:4px">본인</span>' : '';
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+        📝 ${gn}${escapeHtml(r.content||'')}${selfBadge} <span style="color:var(--muted);font-size:11px">${d}</span>
+      </div>`;
+    }).join('');
+
+    const fbList = (m.feedbacks || []).flatMap(fb => (fb.items||[]).map(it => {
+      const sc = it.score || 0;
+      const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
+      return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+        💬 ${escapeHtml(it.note||'(내용 없음)')} ${stars}(${sc}점)
+        <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
+      </div>`;
+    })).join('');
+
+    result.innerHTML = `<div class="card">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div class="avatar" style="width:32px;height:32px;font-size:11px;background:var(--o100);color:var(--o800);flex-shrink:0">${(m.user.name||'?').slice(0,2)}</div>
+        <div>
+          <span style="font-weight:600">${escapeHtml(m.user.name||'')}</span>
+          <span style="font-size:12px;color:var(--muted);margin-left:6px">${escapeHtml(m.user.dept||'')} · ${escapeHtml(m.user.title||'')}</span>
+        </div>
+        <span class="bd" style="margin-left:auto">${phaseLabel}</span>
+        <span style="font-size:12px;color:var(--muted)">${escapeHtml(period)}</span>
+      </div>
+      ${rList || fbList
+        ? `<div>${rList || '<div style="color:var(--muted);font-size:12px;padding:4px 0">보고 없음</div>'}
+               ${fbList || '<div style="color:var(--muted);font-size:12px;padding:4px 0">피드백 없음</div>'}</div>`
+        : '<div class="alert alert-orange" style="font-size:12px">보고·피드백이 없습니다.</div>'}
+    </div>`;
+  } catch(e) {
+    result.innerHTML = `<div class="alert alert-red">${e.message}</div>`;
+  }
 }
