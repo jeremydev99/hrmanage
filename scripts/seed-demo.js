@@ -48,6 +48,10 @@ const COMPLETED_COUNT = 9;  // 2024Q1 ~ 2026Q1
 // 한개발(dev01) + 임개발(dev02): 정플랫 직속 → 박기술 2차 대기 시연용
 const CHAIN_2CHA_EMAILS = new Set(['dev01@synapsoft.com', 'dev02@synapsoft.com']);
 
+// 목표 2차 승인(박기술, level 2) 생성 대상 — IA-2 필터 시연용(1차/2차 섞임)
+// dev01·dev02: 정플랫 1차 → 박기술 2차 / dev03·dev04는 1차만(다양성)
+const APPROVAL_2CHA_EMAILS = new Set(['dev01@synapsoft.com', 'dev02@synapsoft.com']);
+
 // ── 큐레이션 로스터 (35명) ───────────────────────────────────────────────
 // 역할: master = 인사시스템 관리자, admin = 관리자, user = 일반
 const ROSTER = [
@@ -375,6 +379,12 @@ async function main() {
         await prisma.goalApproval.create({
           data: { evalId: cycle.id, approverId: mgrId, level: 1, action: 'approved', note: null },
         });
+        if (APPROVAL_2CHA_EMAILS.has(u.email)) {
+          const ctoId = emailToId['cto@synapsoft.com'];
+          if (ctoId) await prisma.goalApproval.create({
+            data: { evalId: cycle.id, approverId: ctoId, level: 2, action: 'approved', note: null },
+          });
+        }
       }
 
       // 중간보고 (2회)
@@ -502,6 +512,12 @@ async function main() {
       await prisma.goalApproval.create({
         data: { evalId: cycle2.id, approverId: mgrId2, level: 1, action: 'approved' },
       });
+      if (APPROVAL_2CHA_EMAILS.has(u.email)) {
+        const ctoId2 = emailToId['cto@synapsoft.com'];
+        if (ctoId2) await prisma.goalApproval.create({
+          data: { evalId: cycle2.id, approverId: ctoId2, level: 2, action: 'approved' },
+        });
+      }
     }
 
     // 중간보고 1회
