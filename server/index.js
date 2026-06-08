@@ -2616,15 +2616,10 @@ app.get('/api/my-subordinates', auth, async (req, res) => {
       const ids = await getSearchableUserIds(userId, req.user.role, leaderOrgIds);
       users = allUsers.filter(u => ids.has(Number(u.id)))
         .map(u => ({ id: u.id, name: u.name, dept: u.dept, title: u.title, org_id: u.org_id }));
-      // 권한 범위 조직 = leaderOrgIds + 하위 (getSubtreeUserIds는 user IDs지만 조직은 리더 조직 기준)
-      const allowedOrgIds = new Set();
-      for (const orgId of leaderOrgIds) {
-        allowedOrgIds.add(Number(orgId));
-        // 하위 조직도 포함 (users의 org_id로 역추론)
-      }
-      // users가 속한 org_id를 모아 조직 필터
-      const userOrgIds = new Set(users.map(u => Number(u.org_id)).filter(Boolean));
-      orgs = allOrgs.filter(o => userOrgIds.has(Number(o.id)))
+      // 조직 목록은 leaderOrgIds(getLeaderOrgIds 재귀 결과 — 리더십 계층 전체)로 엄격 제한
+      // user.org_id 역추론 방식은 viewer 본인의 org_id가 타 조직을 노출할 수 있어 사용 안 함
+      const allowedOrgIdSet = new Set(leaderOrgIds.map(Number));
+      orgs = allOrgs.filter(o => allowedOrgIdSet.has(Number(o.id)))
         .map(o => ({ id: o.id, name: o.name, parent_id: o.parent_id }));
     }
     users.sort((a, b) => (a.dept || '').localeCompare(b.dept || '') || (a.name || '').localeCompare(b.name || ''));
