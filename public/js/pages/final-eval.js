@@ -266,6 +266,8 @@ async function renderFinalMgr(mgrPending) {
     ]);
     const selfScores = {};
     (fe?.scores||[]).forEach(s => selfScores[s.goal_id] = s.self_score);
+    const mgrScores = {};
+    (fe?.scores||[]).forEach(s => mgrScores[s.goal_id] = s.mgr_score);
     const myFbs    = fbs.filter(f => String(f.author_id) === String(App.user.id));
     const otherFbs = fbs.filter(f => String(f.author_id) !== String(App.user.id));
 
@@ -462,8 +464,23 @@ async function renderFinalMgr(mgrPending) {
         <div class="alert alert-teal" style="font-size:13px">
           ✅ 2차 최종평가가 완료되었습니다.
         </div>
+        ${goals.map(g => {
+          const sc  = (fe.scores||[]).find(s => String(s.goal_id) === String(g.id));
+          const ss  = sc?.self_score        || 0;
+          const ms  = sc?.mgr_score         || 0;
+          const ms2 = sc?.second_mgr_score  || 0;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px;flex-wrap:wrap">
+            <span style="flex:1;font-weight:500">${g.name}</span>
+            ${ss  ? `<span style="color:var(--muted)">자기 ${'★'.repeat(ss)}${'☆'.repeat(5-ss)}</span>` : ''}
+            ${ms  ? `<span style="color:var(--o500)">1차 ${'★'.repeat(ms)}${'☆'.repeat(5-ms)} ${ms}점</span>` : ''}
+            ${ms2 ? `<span style="color:var(--o700)">2차 ${'★'.repeat(ms2)}${'☆'.repeat(5-ms2)} ${ms2}점</span>` : ''}
+          </div>`;
+        }).join('')}
+        ${fe.mgr_note
+          ? `<div style="margin-top:8px;padding:10px;background:var(--o50);border-radius:8px;font-size:13px"><strong style="color:var(--o700)">1차 종합의견:</strong> ${fe.mgr_note}</div>`
+          : ''}
         ${fe.second_mgr_note
-          ? `<div style="margin-top:8px;padding:10px;background:var(--o50);border-radius:8px;font-size:13px">${fe.second_mgr_note}</div>`
+          ? `<div style="margin-top:6px;padding:10px;background:var(--o50);border-radius:8px;font-size:13px"><strong style="color:var(--o700)">2차 종합의견:</strong> ${fe.second_mgr_note}</div>`
           : ''}`;
       body.appendChild(doneDiv2);
       card.appendChild(body);
@@ -525,7 +542,11 @@ async function renderFinalMgr(mgrPending) {
         const selfLbl = selfScores[g.id]
           ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
           : '';
-        row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}</span>`;
+        const ms1 = mgrScores[g.id];
+        const mgrLbl = ev.is_second && ms1
+          ? `<span style="font-size:11px;background:var(--o200);color:var(--o800);padding:1px 7px;border-radius:10px">1차: ${'★'.repeat(ms1)}${'☆'.repeat(5-ms1)} ${ms1}점</span>`
+          : '';
+        row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}${mgrLbl}</span>`;
         const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
         starWrap.dataset.goalId2 = g.id;
         starWrap.dataset.evalId  = ev.id;

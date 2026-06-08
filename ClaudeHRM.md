@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | CTX-1 — 2차 평가자 화면 1차 평가 결과(목표별 mgr_score + 1차 종합의견) 렌더 누락 수정. 입력폼(별점 행 per-goal): ev.is_second일 때 1차 점수 뱃지(★+점) 추가. 완료뷰: 목표별 self/1차/2차 점수 표 + 1차·2차 종합의견 레이블 표시 추가. mgrScores 객체 추가(fe.scores[].mgr_score). 서버 무변경. (PROMPT CTX-1) | Claude Code |
 | 2026-06-08 | IA-2 — 목표 승인 관리: '승인 대기'→'목표 승인 대기' 탭 라벨, 목표 승인 이력에 1차/2차 필터(승인 차수 select, 클라 측 필터, 서버 무변경), 이력 정렬 최근 분기순(periodSortKey 재사용). 초기화 버튼 레벨 필터 연동. (PROMPT IA-2) | Claude Code |
 | 2026-06-08 | SEED-APPROVAL-2CHA — seed-demo에 목표 2차 승인 데이터 보강: 한개발·임개발(dev01·dev02, 정플랫 직속) 전 기간(2024Q1~2026Q2) 목표에 박기술(CTO) level 2 approved 추가. 윤주니어·조주니어는 1차만 유지(다양성). IA-2 필터 시연 전제. seed 재실행 필요(데모 리셋). (PROMPT SEED-APPROVAL-2CHA) | Claude Code |
 | 2026-06-08 | IA-1B — 메뉴/페이지명 '승인 관리' → '목표 승인 관리'로 명확화(app.js 네비 드롭다운·모바일 네비 2곳). 라우팅 키 'approvals' 무변경. '계정 승인 관리' 항목 유지. (PROMPT IA-1B) | Claude Code |
