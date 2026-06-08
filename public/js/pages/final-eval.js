@@ -560,8 +560,8 @@ async function renderFinalMgr(mgrPending) {
         // 점수 행 (CTX-1B 그리드)
         const row = document.createElement('div');
         row.style.cssText = ev.is_second
-          ? 'display:grid;grid-template-columns:1fr auto auto auto;align-items:center;padding:8px 0 4px;gap:8px'
-          : 'display:grid;grid-template-columns:1fr auto auto;align-items:center;padding:8px 0 4px;gap:8px';
+          ? 'display:grid;grid-template-columns:1fr auto auto auto auto;align-items:center;padding:8px 0 4px;gap:8px'
+          : 'display:grid;grid-template-columns:1fr auto auto auto;align-items:center;padding:8px 0 4px;gap:8px';
 
         const nameSpan = document.createElement('span');
         nameSpan.style.cssText = 'font-size:13px;font-weight:500';
@@ -594,7 +594,7 @@ async function renderFinalMgr(mgrPending) {
         const ctxId    = `fe-ctx-${ev.id}-${g.id}`;
         const toggleBtn = document.createElement('button');
         toggleBtn.className = 'btn btn-ghost btn-sm';
-        toggleBtn.style.cssText = 'font-size:11px;padding:1px 8px;margin:0 0 4px';
+        toggleBtn.style.cssText = 'font-size:11px;padding:1px 8px;margin:0';
         toggleBtn.textContent = '중간보고·피드백 ▼';
         const ctxDiv = document.createElement('div');
         ctxDiv.id = ctxId;
@@ -614,7 +614,7 @@ async function renderFinalMgr(mgrPending) {
             toggleBtn.textContent = '중간보고·피드백 ▼';
           }
         };
-        goalWrap.appendChild(toggleBtn);
+        row.appendChild(toggleBtn);
         goalWrap.appendChild(ctxDiv);
         wrap.appendChild(goalWrap);
       });

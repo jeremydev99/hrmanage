@@ -355,8 +355,11 @@ function renderFeedbackItem(item) {
   const d = (item.created_at||'').slice(0,16).replace('T',' ');
   const sc = item.score||0;
   const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
+  const overallBadge = item.isOverall
+    ? `<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:var(--o200);color:var(--o800);margin-left:4px">종합</span>`
+    : '';
   return `<div class="item-block feedback-block">
-    <div class="item-header">💬 피드백 · ${d} · ${stars} (${sc}점) · ${escapeHtml(item.author_name||'상사')}</div>
+    <div class="item-header">💬 피드백 · ${d}${overallBadge} · ${stars} (${sc}점) · ${escapeHtml(item.author_name||'상사')}</div>
     <div class="item-content">${escapeHtml(item.note||'')}</div>
   </div>`;
 }
@@ -393,7 +396,7 @@ function renderSummaryCard(legacySummary, newSummaryReports, feedbacks) {
 
   const summaryFbs = feedbacks
     .filter(f => f.overall_note)
-    .map(f => ({ type:'feedback', content:f.overall_note, created_at:f.created_at, author_name:f.author_name, score:0 }));
+    .map(f => ({ type:'feedback', note:f.overall_note, isOverall:true, created_at:f.created_at, author_name:f.author_name, score:0 }));
 
   const allItems = [
     ...summaryRpts.map(r => ({ ...r, type:'report' })),
@@ -790,6 +793,7 @@ function toggleFbTaSize(taId, btn) {
     ta.style.maxHeight = '400px';
     ta.style.resize = 'vertical';
     ta.style.overflowY = 'auto';
+    ta.style.fontSize = '1rem';
     if (btn) btn.textContent = '작게';
   } else {
     ta.dataset.size = 'small';
@@ -797,6 +801,7 @@ function toggleFbTaSize(taId, btn) {
     ta.style.maxHeight = '200px';
     ta.style.resize = 'none';
     ta.style.overflowY = 'auto';
+    ta.style.fontSize = '12px';
     if (btn) btn.textContent = '크게';
   }
 }

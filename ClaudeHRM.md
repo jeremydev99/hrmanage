@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | CTX-4B — 종합 피드백 복구(renderSummaryCard의 content→note 버그 수정+isOverall 플래그, renderFeedbackItem "종합" 배지 추가) + final-eval 중간보고·피드백 토글 목표명 우측 그리드 칸 1줄 배치(grid-template-columns 1열 추가, goalWrap→row.appendChild) + 피드백 칸 크게 시 font-size 12px→1rem(16px) 추가. (PROMPT CTX-4B) | Claude Code |
 | 2026-06-08 | CTX-4 — hub 상사 인라인 피드백 목표별 배치 + 칸 크기 토글: _buildInlineFbForm 재작성(전체 묶음→목표별 접힘 섹션, 각 목표에 '💬 작성 ▼' 토글+별점+textarea), 종합 피드백 항상 표시. togglePerGoalFb/toggleFbTaSize 추가(크게=160px resize:vertical, 작게=64px 스크롤). 제출·권한·_initInlineFbStars 무변경. (PROMPT CTX-4) | Claude Code |
 | 2026-06-08 | CTX-3 — 본인 중간보고 수정: PUT /api/reports/item/:id 추가(소유검증·phase 제약·AES 암호화 패턴 재사용, 403/400 에러), ProgressReportRepository.updateItem 인터페이스+Prisma 구현, hub renderReportItem에 수정 버튼+인라인 폼(_rfEditableEvals 글로벌 플래그), openEditReport/cancelEditReport/saveEditReport 함수. 본인·허용단계에서만 수정 가능, 팀원 카드 무영향. (PROMPT CTX-3) | Claude Code |
 | 2026-06-08 | CTX-2 — 공통 렌더 renderGoalContextBlock 추출(my-report-feedback.js에, mergeByRound+renderRoundBlock 재사용, 중복 없음) + final-eval.js 목표별 드롭다운 펼침: /reports fetch 추가(기존 4개 병렬), parseLegacyReports+groupFeedbacksByGoal로 reportsByGoal/fbsByGoal 구성, 각 목표 행에 "중간보고·피드백 ▼" 버튼+접힘 블록(클릭 시 lazy 렌더). my-report-feedback hub 무변경. 서버 무변경. (PROMPT CTX-2) | Claude Code |
