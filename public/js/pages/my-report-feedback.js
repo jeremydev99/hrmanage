@@ -145,7 +145,8 @@ async function renderRFTeamSection(el, periodLabel) {
     members.forEach(m => {
       const phaseLabel = {
         draft:'목표작성중', pending:'승인대기', approved:'목표확정',
-        final_self:'자기평가중', final_mgr_pending:'상사평가대기', final_done:'평가완료'
+        final_self:'자기평가중', final_mgr_pending:'상사평가대기',
+        final_mgr2_pending:'2차평가대기', final_done:'평가완료'
       }[m.eval?.phase] || m.eval?.phase || '';
 
       const rList = (m.reports || []).map(r => {

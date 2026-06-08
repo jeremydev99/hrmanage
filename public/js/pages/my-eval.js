@@ -578,6 +578,7 @@ function renderApprovedView(ev) {
     approved:'목표 확정 — 실행 중',
     final_self:'자기 최종평가 진행 중',
     final_mgr_pending:'상사 최종평가 대기',
+    final_mgr2_pending:'2차 최종평가 대기',
     final_done:'평가 완료'
   };
   const card = document.createElement('div');

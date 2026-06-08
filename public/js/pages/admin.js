@@ -1376,7 +1376,8 @@ async function renderEvalDetail(userId, userName) {
 
     const phaseLabels = {
       draft:'목표 작성 중', pending:'승인 대기', approved:'목표 확정',
-      final_self:'자기평가 중', final_mgr_pending:'상사평가 대기', final_done:'평가 완료'
+      final_self:'자기평가 중', final_mgr_pending:'상사평가 대기',
+      final_mgr2_pending:'2차 평가 대기', final_done:'평가 완료'
     };
     const scoreTxt = ['미달성','미흡','보통','우수','탁월'];
 

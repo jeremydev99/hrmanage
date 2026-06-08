@@ -37,6 +37,7 @@ function phaseBadge(phase) {
     approved:           ['목표 확정',     'approved'],
     final_self:         ['자기평가 중',   'fb'],
     final_mgr_pending:  ['상사평가 대기', 'final'],
+    final_mgr2_pending: ['2차 평가 대기', 'purple'],
     final_done:         ['평가 완료',     'locked'],
   };
   const [t,c] = map[phase]||[phase,'draft'];
