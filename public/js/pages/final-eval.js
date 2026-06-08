@@ -614,7 +614,7 @@ async function renderFinalMgr(mgrPending) {
             toggleBtn.textContent = '중간보고·피드백 ▼';
           }
         };
-        row.appendChild(toggleBtn);
+        row.insertBefore(toggleBtn, selfSpan);
         goalWrap.appendChild(ctxDiv);
         wrap.appendChild(goalWrap);
       });

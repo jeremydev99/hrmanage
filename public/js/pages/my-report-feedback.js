@@ -18,11 +18,11 @@ Pages.myReportFeedback = async function() {
     const myEvs = (typeof sortPeriodsDesc === 'function'
       ? sortPeriodsDesc(evs.filter(e =>
           String(e.user_id) === String(App.user.id) &&
-          ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+          ['pending','approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
         ))
       : evs.filter(e =>
           String(e.user_id) === String(App.user.id) &&
-          ['approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+          ['pending','approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
         ));
 
     area.innerHTML = '';
@@ -163,8 +163,11 @@ async function renderRFTeamSection(el, periodLabel) {
         const sc = fb.items?.reduce((a,it)=>a+(it.score||0),0) || 0;
         const cnt = fb.items?.length || 0;
         const avg = cnt ? (sc/cnt).toFixed(1) : '-';
+        const overallHtml = fb.overall_note
+          ? `<div style="font-size:11px;color:var(--o700);margin-top:2px">종합: ${escapeHtml(fb.overall_note)}</div>`
+          : '';
         return `<div style="padding:4px 0;border-bottom:1px solid var(--o50);font-size:12px">
-          💬 피드백 — 평균 ${avg}점 <span style="color:var(--muted)">${(fb.created_at||'').slice(0,10)}</span>
+          💬 피드백 — 평균 ${avg}점 <span style="color:var(--muted)">${(fb.created_at||'').slice(0,10)}</span>${overallHtml}
         </div>`;
       }).join('');
 
@@ -637,14 +640,23 @@ async function executeRFSearch() {
         </div>`;
       }).join('');
 
-      const fbList = (m.feedbacks || []).flatMap(fb => (fb.items||[]).map(it => {
-        const sc = it.score || 0;
-        const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
-        return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
-          💬 ${escapeHtml(it.note||'(내용 없음)')} ${stars}(${sc}점)
-          <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
-        </div>`;
-      })).join('');
+      const fbList = (m.feedbacks || []).flatMap(fb => {
+        const rows = (fb.items||[]).map(it => {
+          const sc = it.score || 0;
+          const stars = '★'.repeat(sc)+'☆'.repeat(5-sc);
+          return `<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+            💬 ${escapeHtml(it.note||'(내용 없음)')} ${stars}(${sc}점)
+            <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
+          </div>`;
+        });
+        if (fb.overall_note) {
+          rows.push(`<div style="padding:6px 0;border-bottom:1px solid var(--o50);font-size:13px">
+            💬 <span style="font-size:10px;padding:1px 5px;border-radius:8px;background:var(--o200);color:var(--o800)">종합</span> ${escapeHtml(fb.overall_note)}
+            <span style="color:var(--muted);font-size:11px">${escapeHtml(fb.author_name||'상사')}</span>
+          </div>`);
+        }
+        return rows;
+      }).join('');
 
       result.innerHTML += `<div class="card" style="margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">

@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | FIX3 — ①종합 피드백 end-to-end 복구: team_auto/search hub fbList가 fb.items만 렌더링, fb.overall_note 누락이 실제 원인. team_auto fbList에 overallHtml(종합: 내용) 추가, search fbList를 flatMap으로 재작성(overall_note → "종합" 배지 행). CTX-4B의 renderSummaryCard 수정은 self-view 경로로 유효하나 hub 경로 미해결이 주원인. ②final-eval 중간보고·피드백 토글 점수칸 왼쪽 배치: row.appendChild→row.insertBefore(toggleBtn,selfSpan). ③보고·피드백 hub myEvs 필터에 'pending' 추가(2026Q2 진행 기간 탭 누락 복구). (PROMPT FIX3) | Claude Code |
 | 2026-06-08 | CTX-4B — 종합 피드백 복구(renderSummaryCard의 content→note 버그 수정+isOverall 플래그, renderFeedbackItem "종합" 배지 추가) + final-eval 중간보고·피드백 토글 목표명 우측 그리드 칸 1줄 배치(grid-template-columns 1열 추가, goalWrap→row.appendChild) + 피드백 칸 크게 시 font-size 12px→1rem(16px) 추가. (PROMPT CTX-4B) | Claude Code |
 | 2026-06-08 | CTX-4 — hub 상사 인라인 피드백 목표별 배치 + 칸 크기 토글: _buildInlineFbForm 재작성(전체 묶음→목표별 접힘 섹션, 각 목표에 '💬 작성 ▼' 토글+별점+textarea), 종합 피드백 항상 표시. togglePerGoalFb/toggleFbTaSize 추가(크게=160px resize:vertical, 작게=64px 스크롤). 제출·권한·_initInlineFbStars 무변경. (PROMPT CTX-4) | Claude Code |
 | 2026-06-08 | CTX-3 — 본인 중간보고 수정: PUT /api/reports/item/:id 추가(소유검증·phase 제약·AES 암호화 패턴 재사용, 403/400 에러), ProgressReportRepository.updateItem 인터페이스+Prisma 구현, hub renderReportItem에 수정 버튼+인라인 폼(_rfEditableEvals 글로벌 플래그), openEditReport/cancelEditReport/saveEditReport 함수. 본인·허용단계에서만 수정 가능, 팀원 카드 무영향. (PROMPT CTX-3) | Claude Code |
