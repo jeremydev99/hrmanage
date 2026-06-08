@@ -91,7 +91,7 @@ const App = {
             </button>
             <div id="dd-myeval" class="nav-dd-menu">
               <div class="dd-item" onclick="closeNavDD();App.navigate('myEval')">📋 내 평가 홈</div>
-              <div class="dd-item" onclick="closeNavDD();App.navigate('approvals')">승인 관리</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('approvals')">목표 승인 관리</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('finalEval')">최종 평가</div>
             </div>
           </div>
@@ -193,7 +193,7 @@ function toggleMobileMenu() {
       navigate: 'my-eval',
       items: [
         { label: '내 평가 홈',  navigate: 'myEval'    },
-        { label: '승인 관리',   navigate: 'approvals' },
+        { label: '목표 승인 관리',   navigate: 'approvals' },
         { label: '최종 평가',   navigate: 'final'     },
       ]
     },
