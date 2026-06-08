@@ -210,6 +210,30 @@ class PrismaProgressReportRepository extends ProgressReportRepository {
     });
   }
 
+  async updateItem(reportId, userId, content) {
+    const rows = await this.prisma.$queryRaw`
+      SELECT pr.author_id, ec.phase
+      FROM progress_reports pr
+      JOIN eval_cycles ec ON ec.id = pr.eval_id
+      WHERE pr.id = ${Number(reportId)}
+    `;
+    if (!rows.length) {
+      const err = new Error('보고를 찾을 수 없습니다.'); err.status = 404; throw err;
+    }
+    const row = rows[0];
+    if (Number(row.author_id) !== Number(userId)) {
+      const err = new Error('본인 보고만 수정 가능합니다.'); err.status = 403; throw err;
+    }
+    if (!['approved', 'final_self', 'final_mgr_pending'].includes(row.phase)) {
+      const err = new Error('이 단계에서는 보고를 수정할 수 없습니다.'); err.status = 400; throw err;
+    }
+    await this.prisma.$queryRaw`
+      UPDATE progress_reports
+      SET content = ${this._encrypt(content)}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${Number(reportId)}
+    `;
+  }
+
   async findFileById(fileId) {
     const f = await this.prisma.reportFile.findUnique({
       where: { id: Number(fileId) }

@@ -1413,6 +1413,20 @@ app.post('/api/reports/:evalId', auth, async (req, res) => {
   }
 });
 
+// [CTX-3] 본인 중간보고 수정 (소유 검증·암호화 어댑터 위임)
+app.put('/api/reports/item/:id', auth, async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ error: '내용을 입력해주세요.' });
+    await progressReportRepo.updateItem(Number(req.params.id), req.user.sub, content.trim());
+    res.json({ ok: true });
+  } catch(err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('[reports PUT item]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // [PROMPT_45] Repository Pattern 전환 — 기존 코드 주석 처리 (롤백 대비)
 // app.get('/api/files/:fileId', auth, (req, res) => {
 //   try {

@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | CTX-3 — 본인 중간보고 수정: PUT /api/reports/item/:id 추가(소유검증·phase 제약·AES 암호화 패턴 재사용, 403/400 에러), ProgressReportRepository.updateItem 인터페이스+Prisma 구현, hub renderReportItem에 수정 버튼+인라인 폼(_rfEditableEvals 글로벌 플래그), openEditReport/cancelEditReport/saveEditReport 함수. 본인·허용단계에서만 수정 가능, 팀원 카드 무영향. (PROMPT CTX-3) | Claude Code |
 | 2026-06-08 | CTX-2 — 공통 렌더 renderGoalContextBlock 추출(my-report-feedback.js에, mergeByRound+renderRoundBlock 재사용, 중복 없음) + final-eval.js 목표별 드롭다운 펼침: /reports fetch 추가(기존 4개 병렬), parseLegacyReports+groupFeedbacksByGoal로 reportsByGoal/fbsByGoal 구성, 각 목표 행에 "중간보고·피드백 ▼" 버튼+접힘 블록(클릭 시 lazy 렌더). my-report-feedback hub 무변경. 서버 무변경. (PROMPT CTX-2) | Claude Code |
 | 2026-06-08 | CTX-1B — 2차 평가 입력뷰 3건 보강: (1) 1차 평가자 종합의견(mgr_note) 표시 추가(2차 화면만, 미완료 시 생략). (2) 직원 자기 의견·1차 의견을 2차 종합의견 입력란 바로 위로 이동(border-radius 카드 블록으로 통합). (3) per-goal 점수 행 flex badge → CSS grid 정렬 표: 2차=[이름|자기|1차|★입력], 1차=[이름|자기|★입력]. (PROMPT CTX-1B) | Claude Code |
 | 2026-06-08 | CTX-1 — 2차 평가자 화면 1차 평가 결과(목표별 mgr_score + 1차 종합의견) 렌더 누락 수정. 입력폼(별점 행 per-goal): ev.is_second일 때 1차 점수 뱃지(★+점) 추가. 완료뷰: 목표별 self/1차/2차 점수 표 + 1차·2차 종합의견 레이블 표시 추가. mgrScores 객체 추가(fe.scores[].mgr_score). 서버 무변경. (PROMPT CTX-1) | Claude Code |

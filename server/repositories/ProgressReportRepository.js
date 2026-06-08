@@ -35,6 +35,17 @@ class ProgressReportRepository {
   async findFileById(fileId) {
     throw new Error('Not implemented');
   }
+
+  /**
+   * 본인 중간보고 단건 수정 (소유 검증, 단계 제약 포함)
+   * @param {number} reportId - progress_reports.id
+   * @param {number} userId   - 요청자 id (authorId 와 일치해야 함)
+   * @param {string} content  - 새 내용 (암호화 후 저장)
+   * @throws {Error} 소유 불일치 → status:403 / 단계 제약 → status:400
+   */
+  async updateItem(reportId, userId, content) {
+    throw new Error('Not implemented');
+  }
 }
 
 module.exports = ProgressReportRepository;

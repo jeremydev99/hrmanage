@@ -103,6 +103,8 @@ async function renderRFPane(ev) {
     const fbsByGoal     = groupFeedbacksByGoal(feedbacks, goals);
 
     const canReport = ['approved','final_self','final_mgr_pending'].includes(ev.phase);
+    window._rfEditableEvals = window._rfEditableEvals || {};
+    window._rfEditableEvals[ev.id] = canReport;
 
     let html = `<div style="font-size:13px;color:var(--muted);margin-bottom:12px">${ev.period_label} · ${ev.eval_mode||'MBO'}`;
     if (window._rfMode === 'team_auto') html += ` <span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px">팀장 자동</span>`;
@@ -332,9 +334,20 @@ function renderRoundBlock(round) {
 function renderReportItem(item, isSelf) {
   const d = (item.created_at||'').slice(0,16).replace('T',' ');
   const selfBadge = isSelf ? '<span class="bd" style="background:var(--teal,#0d7c6b);color:white;font-size:10px;margin-left:4px">본인</span>' : '';
+  const canEdit = !item.is_legacy && Number.isInteger(item.id) && window._rfEditableEvals?.[item.eval_id];
+  const editBtn = canEdit
+    ? `<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 6px;margin-left:6px" onclick="openEditReport(${item.id})">수정</button>`
+    : '';
   return `<div class="item-block report-block">
-    <div class="item-header">📝 보고 · ${d}${item.is_legacy?'<span class="bd-legacy">레거시</span>':''}${selfBadge}</div>
-    <div class="item-content">${escapeHtml(item.content||'')}</div>
+    <div class="item-header">📝 보고 · ${d}${item.is_legacy?'<span class="bd-legacy">레거시</span>':''}${selfBadge}${editBtn}</div>
+    <div class="item-content" id="rpt-content-${item.id||''}">${escapeHtml(item.content||'')}</div>
+    ${canEdit ? `<div id="rpt-edit-${item.id}" style="display:none;margin-top:6px">
+      <textarea id="rpt-edit-ta-${item.id}" style="width:100%;min-height:60px;resize:vertical;font-size:12px">${escapeHtml(item.content||'')}</textarea>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="btn btn-teal btn-sm" style="font-size:11px;padding:3px 10px" onclick="saveEditReport(${item.id})">저장</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="cancelEditReport(${item.id})">취소</button>
+      </div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -463,6 +476,31 @@ function renderWriteForm(ev, goals) {
       </div>
     </div>
   </div>`;
+}
+
+/* ── CTX-3: 본인 중간보고 수정 ── */
+function openEditReport(id) {
+  const editDiv = document.getElementById(`rpt-edit-${id}`);
+  if (!editDiv) return;
+  editDiv.style.display = editDiv.style.display === 'none' ? '' : 'none';
+}
+
+function cancelEditReport(id) {
+  const el = document.getElementById(`rpt-edit-${id}`);
+  if (el) el.style.display = 'none';
+}
+
+async function saveEditReport(id) {
+  const ta = document.getElementById(`rpt-edit-ta-${id}`);
+  const content = ta?.value?.trim();
+  if (!content) { showAlert('내용을 입력해주세요.', 'orange'); return; }
+  try {
+    await API.put(`/reports/item/${id}`, { content });
+    const contentEl = document.getElementById(`rpt-content-${id}`);
+    if (contentEl) contentEl.textContent = content;
+    cancelEditReport(id);
+    showAlert('보고가 수정되었습니다.', 'teal');
+  } catch(e) { showAlert(e.message, 'red'); }
 }
 
 async function submitRFReport(evalId) {
