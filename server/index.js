@@ -919,6 +919,15 @@ app.post('/api/feedback/:evalId', auth, async (req, res) => {
     if (!ev || !['approved','final_self','final_mgr_pending'].includes(ev.phase))
       return res.status(400).json({ error: '승인된 평가에만 피드백 가능' });
 
+    // UNIFY-2: 권한 체크 — 본인 불가, 승인 체인 내 또는 admin만 허용
+    const isAdminFb = ['master','admin'].includes(req.user.role);
+    const isOwnerFb = String(ev.user_id) === String(req.user.sub);
+    if (isOwnerFb) return res.status(403).json({ error: '본인 평가에 피드백을 작성할 수 없습니다.' });
+    if (!isAdminFb) {
+      const isApproverFb = await userRepo.isInApproverChain(req.user.sub, ev.user_id);
+      if (!isApproverFb) return res.status(403).json({ error: '권한 없음' });
+    }
+
     // 64A: 피드백 회차 제한 강제 [INFRA-A3: feedbackRepo.countByAuthor]
     const feedbackLimit = parseInt(await getSetting('feedback_limit', '0'));
     if (feedbackLimit > 0) {
@@ -2558,14 +2567,17 @@ app.get('/api/rf/auto', auth, async (req, res) => {
 
     for (const ev of evals) {
       const isSelf = String(ev.user_id) === String(userId);
-      const [reports, feedbacks] = await Promise.all([
+      const phaseOk = ['approved','final_self','final_mgr_pending'].includes(ev.phase);
+      const [reports, feedbacks, canFeedback] = await Promise.all([
         progressReportRepo.findByEvalIdFull(ev.id),
         feedbackRepo.findByEvalId(ev.id),
+        (!isSelf && phaseOk) ? userRepo.isInApproverChain(userId, ev.user_id) : Promise.resolve(false),
       ]);
       team.push({
         user: { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
         eval: { id: ev.id, phase: ev.phase, period_label: ev.period_label },
         is_self: isSelf,
+        can_feedback: canFeedback,
         reports,
         feedbacks,
       });
@@ -2667,14 +2679,18 @@ app.get('/api/rf/search', auth, async (req, res) => {
     const evals = await adminRepo.findEvalsByUsersAndPeriod(targetIds.map(Number), period);
     const results = [];
     for (const ev of evals) {
-      const [reports, feedbacks] = await Promise.all([
+      const isSelf = String(ev.user_id) === String(userId);
+      const phaseOk = ['approved','final_self','final_mgr_pending'].includes(ev.phase);
+      const [reports, feedbacks, canFeedback] = await Promise.all([
         progressReportRepo.findByEvalIdFull(ev.id),
         feedbackRepo.findByEvalId(ev.id),
+        (!isSelf && phaseOk) ? userRepo.isInApproverChain(userId, ev.user_id) : Promise.resolve(false),
       ]);
       results.push({
         user:     { id: ev.user_id, name: ev.user_name, dept: ev.dept, title: ev.title },
         eval:     { id: ev.id, phase: ev.phase, period_label: ev.period_label },
-        is_self:  String(ev.user_id) === String(userId),
+        is_self:  isSelf,
+        can_feedback: canFeedback,
         reports,
         feedbacks,
       });

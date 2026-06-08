@@ -175,6 +175,11 @@ async function renderRFTeamSection(el, periodLabel) {
           <span class="bd" style="margin-left:auto;font-size:10px">${phaseLabel}</span>
         </div>
         ${rList || fbList ? `<div>${rList}${fbList}</div>` : `<div style="font-size:12px;color:var(--muted)">이 기간에 보고·피드백이 없습니다.</div>`}
+        ${m.can_feedback ? `<div style="margin-top:10px;border-top:1px solid var(--o100);padding-top:8px">
+          <div id="inline-fb-display-${m.eval.id}" style="margin-bottom:4px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="toggleInlineFeedbackForm(${m.eval.id})">💬 피드백 작성</button>
+          <div id="inline-fb-form-${m.eval.id}" style="display:none;margin-top:8px"></div>
+        </div>` : ''}
       </div>`;
     });
 
@@ -602,6 +607,11 @@ async function executeRFSearch() {
         ${rList || fbList
           ? `<div>${rList||''}${fbList||''}</div>`
           : `<div class="alert alert-orange" style="font-size:12px">보고·피드백이 없습니다.</div>`}
+        ${m.can_feedback ? `<div style="margin-top:10px;border-top:1px solid var(--o100);padding-top:8px">
+          <div id="inline-fb-display-${m.eval.id}" style="margin-bottom:4px"></div>
+          <button class="btn btn-ghost btn-sm" onclick="toggleInlineFeedbackForm(${m.eval.id})">💬 피드백 작성</button>
+          <div id="inline-fb-form-${m.eval.id}" style="display:none;margin-top:8px"></div>
+        </div>` : ''}
       </div>`;
     });
   } catch(e) {
@@ -609,5 +619,110 @@ async function executeRFSearch() {
   }
 }
 
-// RF-VIEW-2 executeRFSearch에서 사용하던 중복 렌더 — 아래는 더 이상 사용 안 함(위에서 통합)
-// 하지만 파일에 남아 있을 경우 실수 방지를 위해 아래 fbList 인라인 구현 참고용으로만 유지
+/* ── UNIFY-2: 인라인 피드백 작성 ── */
+let _inlineFbStars = {};
+
+async function toggleInlineFeedbackForm(evalId) {
+  const formDiv = document.getElementById(`inline-fb-form-${evalId}`);
+  if (!formDiv) return;
+  if (formDiv.style.display !== 'none') {
+    formDiv.style.display = 'none';
+    return;
+  }
+  formDiv.innerHTML = '<div style="font-size:12px;color:var(--muted)">로딩...</div>';
+  formDiv.style.display = 'block';
+  try {
+    const goals = await API.get(`/evals/${evalId}/goals`);
+    formDiv.innerHTML = _buildInlineFbForm(evalId, goals);
+    _initInlineFbStars(evalId, goals);
+  } catch(e) {
+    formDiv.innerHTML = `<div style="font-size:12px;color:var(--red)">${e.message}</div>`;
+  }
+}
+
+function _buildInlineFbForm(evalId, goals) {
+  const goalInputs = goals.map(g => `
+    <div style="padding:8px 0;border-bottom:1px solid var(--o50)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
+        <span style="font-size:13px;font-weight:500">${escapeHtml(g.name)}</span>
+        <div id="ifbs-${evalId}-${g.id}"></div>
+      </div>
+      <textarea id="ifbn-${evalId}-${g.id}" placeholder="${escapeHtml(g.name)}에 대한 피드백..."
+        style="width:100%;min-height:48px;resize:vertical"></textarea>
+    </div>`).join('');
+
+  return `<div>
+    ${goalInputs}
+    <div style="margin-top:10px">
+      <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">종합 피드백</label>
+      <textarea id="ifbo-${evalId}" placeholder="전체 방향성, 개선 사항, 격려 메시지..."
+        style="width:100%;min-height:64px;resize:vertical"></textarea>
+    </div>
+    <div class="abar" style="margin-top:10px">
+      <button class="btn btn-teal btn-sm" onclick="submitInlineFeedback(${evalId},'${goals.map(g=>g.id).join(',')}')">피드백 제출</button>
+    </div>
+  </div>`;
+}
+
+function _initInlineFbStars(evalId, goals) {
+  goals.forEach(g => {
+    const container = document.getElementById(`ifbs-${evalId}-${g.id}`);
+    if (!container) return;
+    container.innerHTML = [1,2,3,4,5].map(n =>
+      `<span data-gk="${evalId}-${g.id}" data-val="${n}"
+        onclick="setInlineFbStar(${evalId},${g.id},${n})"
+        style="font-size:20px;cursor:pointer;color:var(--o300)">☆</span>`
+    ).join('');
+  });
+}
+
+function setInlineFbStar(evalId, goalId, value) {
+  const key = `${evalId}-${goalId}`;
+  _inlineFbStars[key] = value;
+  const container = document.getElementById(`ifbs-${evalId}-${goalId}`);
+  if (!container) return;
+  container.querySelectorAll('span').forEach(sp => {
+    const v = Number(sp.dataset.val);
+    sp.style.color = v <= value ? 'var(--o500)' : 'var(--o300)';
+    sp.textContent = v <= value ? '★' : '☆';
+  });
+}
+
+async function submitInlineFeedback(evalId, goalIdsStr) {
+  const goalIds = goalIdsStr.split(',').filter(Boolean);
+  const items = goalIds.map(gid => ({
+    goal_id: gid,
+    score: _inlineFbStars[`${evalId}-${gid}`] || null,
+    note: document.getElementById(`ifbn-${evalId}-${gid}`)?.value || ''
+  })).filter(it => it.score || it.note?.trim());
+  const overall = document.getElementById(`ifbo-${evalId}`)?.value || '';
+
+  if (!items.length && !overall.trim()) {
+    showAlert('피드백 내용을 입력해주세요.', 'orange');
+    return;
+  }
+  try {
+    await API.post(`/feedback/${evalId}`, { overall_note: overall, items });
+    showAlert('피드백이 제출되었습니다!', 'teal');
+    const formDiv = document.getElementById(`inline-fb-form-${evalId}`);
+    if (formDiv) formDiv.style.display = 'none';
+    _refreshInlineFbDisplay(evalId);
+  } catch(e) { showAlert(e.message, 'red'); }
+}
+
+async function _refreshInlineFbDisplay(evalId) {
+  const displayDiv = document.getElementById(`inline-fb-display-${evalId}`);
+  if (!displayDiv) return;
+  try {
+    const feedbacks = await API.get(`/feedback/${evalId}`);
+    const myFbs = feedbacks.filter(f => String(f.author_id) === String(App.user.id));
+    if (!myFbs.length) return;
+    displayDiv.innerHTML = myFbs.map(fb => {
+      const scores = (fb.items||[]).map(it=>it.score||0).filter(s=>s>0);
+      const avg = scores.length ? (scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1) : '-';
+      return `<div style="padding:3px 0;font-size:12px;color:var(--teal)">
+        ✓ 내 피드백 — 평균 ${avg}점 · ${(fb.created_at||'').slice(0,10)}
+      </div>`;
+    }).join('');
+  } catch(e) {}
+}
