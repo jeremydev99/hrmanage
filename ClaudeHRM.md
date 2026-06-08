@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | EVALMODE-BADGE — 평가방식(MBO/OKR/KPI) 변경 시 상단 제목행 배지가 새로고침해야 갱신되던 UX 버그 수정. 헤더 span에 id 부여 후 setPeriodEvalMode 성공 콜백에서 즉시 갱신 (PROMPT EVALMODE-BADGE) | Claude Code |
 | 2026-06-08 | UNIFY-2 — 보고·피드백 화면에 평가자 인라인 피드백 작성 폼(부하 카드 하단, 별점+코멘트) 추가. POST /api/feedback/:evalId 재사용. /api/rf/auto·/api/rf/search 응답에 can_feedback 플래그 추가. POST /api/feedback/:evalId에 isInApproverChain 권한 게이트 추가(본인→403, 체인밖→403). 옛 feedback.js 공존(UNIFY-3에서 흡수) (PROMPT UNIFY-2) | Claude Code |
 | 2026-06-05 | DECRYPT-FIX — 승인 대기 '직원 의견' 복호화 누락(암호문 노출) 수정: PrismaEvalCycleRepository.findPendingWithUser에 self_reason/reject_reason decrypt 추가. findPendingEvals 형제도 예방 수정 (PROMPT DECRYPT-FIX) | Claude Code |
 | 2026-06-05 | UNIFY-1 — 내 평가 홈 중간보고/중간피드백 → myReportFeedback 직접 연결 + window._rfInitialEvalId로 선택 기간(evalId) 전달·해당 탭 활성화. 옛 progress/feedback은 UNIFY-3까지 유지 (PROMPT UNIFY-1) | Claude Code |

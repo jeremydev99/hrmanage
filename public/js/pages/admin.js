@@ -2277,7 +2277,7 @@ async function renderAdmPeriods(yearFrom, yearTo, includeInactive) {
         + '<span class="bd ' + (period.period_type==='q'?'bd-q':'bd-h') + '" style="font-size:11px">' + (period.period_type==='q'?'분기':'반기') + '</span>'
         + '<span class="bd ' + (period.is_active?'bd-approved':'bd-rejected') + '" style="font-size:11px">' + (period.is_active?'활성':'비활성') + '</span>'
         + (period.locked ? '<span class="bd bd-locked" style="font-size:11px">🔒 잠김</span>' : '')
-        + '<span style="color:var(--muted);font-size:12px">' + (period.eval_mode || 'MBO') + '</span>';
+        + '<span id="period-evalmode-badge-' + period.id + '" style="color:var(--muted);font-size:12px">' + (period.eval_mode || 'MBO') + '</span>';
       pCard.appendChild(hdr);
 
       const body = document.createElement('div');
@@ -2459,6 +2459,8 @@ async function setPeriodEvalMode(periodId, mode, btn) {
     const siblings = btn.parentElement.querySelectorAll('button');
     siblings.forEach(b => { b.className = b.className.replace('btn-primary','btn-ghost'); });
     btn.className = btn.className.replace('btn-ghost','btn-primary');
+    const badge = document.getElementById('period-evalmode-badge-' + periodId);
+    if (badge) badge.textContent = mode;
   } catch(e) { showAlert(e.message, 'red'); }
 }
 
