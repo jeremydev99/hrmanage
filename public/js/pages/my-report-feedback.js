@@ -689,22 +689,36 @@ async function toggleInlineFeedbackForm(evalId) {
 }
 
 function _buildInlineFbForm(evalId, goals) {
-  const goalInputs = goals.map(g => `
-    <div style="padding:8px 0;border-bottom:1px solid var(--o50)">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
-        <span style="font-size:13px;font-weight:500">${escapeHtml(g.name)}</span>
-        <div id="ifbs-${evalId}-${g.id}"></div>
+  const goalSections = goals.map(g => `
+    <div style="border-bottom:1px solid var(--o50);padding:6px 0">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+        <span style="font-size:13px;font-weight:500;flex:1;min-width:0">${escapeHtml(g.name)}</span>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 8px;white-space:nowrap"
+          onclick="togglePerGoalFb('pgfb-${evalId}-${g.id}',this)">💬 작성 ▼</button>
       </div>
-      <textarea id="ifbn-${evalId}-${g.id}" placeholder="${escapeHtml(g.name)}에 대한 피드백..."
-        style="width:100%;min-height:48px;resize:vertical"></textarea>
+      <div id="pgfb-${evalId}-${g.id}" style="display:none;margin-top:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div id="ifbs-${evalId}-${g.id}"></div>
+          <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 6px"
+            onclick="toggleFbTaSize('ifbn-${evalId}-${g.id}',this)">크게</button>
+        </div>
+        <textarea id="ifbn-${evalId}-${g.id}" placeholder="${escapeHtml(g.name)}에 대한 피드백..."
+          data-size="small"
+          style="width:100%;min-height:64px;max-height:200px;overflow-y:auto;resize:none;font-size:12px"></textarea>
+      </div>
     </div>`).join('');
 
   return `<div>
-    ${goalInputs}
+    ${goalSections}
     <div style="margin-top:10px">
-      <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">종합 피드백</label>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <label style="font-size:12px;color:var(--o600);font-weight:500;margin:0">종합 피드백</label>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:1px 6px"
+          onclick="toggleFbTaSize('ifbo-${evalId}',this)">크게</button>
+      </div>
       <textarea id="ifbo-${evalId}" placeholder="전체 방향성, 개선 사항, 격려 메시지..."
-        style="width:100%;min-height:64px;resize:vertical"></textarea>
+        data-size="small"
+        style="width:100%;min-height:64px;max-height:200px;overflow-y:auto;resize:none;font-size:12px"></textarea>
     </div>
     <div class="abar" style="margin-top:10px">
       <button class="btn btn-teal btn-sm" onclick="submitInlineFeedback(${evalId},'${goals.map(g=>g.id).join(',')}')">피드백 제출</button>
@@ -756,6 +770,35 @@ async function submitInlineFeedback(evalId, goalIdsStr) {
     if (formDiv) formDiv.style.display = 'none';
     _refreshInlineFbDisplay(evalId);
   } catch(e) { showAlert(e.message, 'red'); }
+}
+
+/* ── CTX-4: 목표별 피드백 토글 + 칸 크기 토글 ── */
+function togglePerGoalFb(divId, btn) {
+  const div = document.getElementById(divId);
+  if (!div) return;
+  const isOpen = div.style.display !== 'none';
+  div.style.display = isOpen ? 'none' : '';
+  if (btn) btn.textContent = isOpen ? '💬 작성 ▼' : '💬 작성 ▲';
+}
+
+function toggleFbTaSize(taId, btn) {
+  const ta = document.getElementById(taId);
+  if (!ta) return;
+  if (ta.dataset.size === 'small') {
+    ta.dataset.size = 'large';
+    ta.style.minHeight = '160px';
+    ta.style.maxHeight = '400px';
+    ta.style.resize = 'vertical';
+    ta.style.overflowY = 'auto';
+    if (btn) btn.textContent = '작게';
+  } else {
+    ta.dataset.size = 'small';
+    ta.style.minHeight = '64px';
+    ta.style.maxHeight = '200px';
+    ta.style.resize = 'none';
+    ta.style.overflowY = 'auto';
+    if (btn) btn.textContent = '크게';
+  }
 }
 
 async function _refreshInlineFbDisplay(evalId) {
