@@ -258,16 +258,27 @@ async function renderFinalMgr(mgrPending) {
   }
 
   for (const ev of mgrPending) {
-    const [goals, fe, fbs, grades] = await Promise.all([
+    const [goals, fe, fbs, grades, rawReports] = await Promise.all([
       API.get(`/evals/${ev.id}/goals`),
       API.get(`/final/${ev.id}`),
       API.get(`/feedback/${ev.id}`),
       API.get('/grade-criteria').catch(() => []),
+      API.get(`/reports/${ev.id}`).catch(() => []),
     ]);
     const selfScores = {};
     (fe?.scores||[]).forEach(s => selfScores[s.goal_id] = s.self_score);
     const mgrScores = {};
     (fe?.scores||[]).forEach(s => mgrScores[s.goal_id] = s.mgr_score);
+    // 목표별 보고·피드백 그룹화 (renderGoalContextBlock에 전달)
+    const legacyRpts = rawReports.filter(r => r.goal_id === null || r.goal_id === undefined);
+    const newRpts    = rawReports.filter(r => r.goal_id !== null && r.goal_id !== undefined);
+    const parsedRpts = (typeof parseLegacyReports === 'function') ? parseLegacyReports(legacyRpts, goals) : { byGoal: [] };
+    const reportsByGoal = {};
+    [...newRpts, ...(parsedRpts.byGoal || [])].forEach(r => {
+      if (!reportsByGoal[r.goal_id]) reportsByGoal[r.goal_id] = [];
+      reportsByGoal[r.goal_id].push(r);
+    });
+    const fbsByGoal = (typeof groupFeedbacksByGoal === 'function') ? groupFeedbacksByGoal(fbs, goals) : {};
     const myFbs    = fbs.filter(f => String(f.author_id) === String(App.user.id));
     const otherFbs = fbs.filter(f => String(f.author_id) !== String(App.user.id));
 
@@ -542,10 +553,15 @@ async function renderFinalMgr(mgrPending) {
     App.categories.forEach(cat => {
       const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
       goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
+        // 목표 래퍼 (점수 행 + 맥락 펼침 블록)
+        const goalWrap = document.createElement('div');
+        goalWrap.style.cssText = 'border-bottom:1px solid var(--o50);padding-bottom:2px';
+
+        // 점수 행 (CTX-1B 그리드)
         const row = document.createElement('div');
         row.style.cssText = ev.is_second
-          ? 'display:grid;grid-template-columns:1fr auto auto auto;align-items:center;padding:8px 0;border-bottom:1px solid var(--o50);gap:8px'
-          : 'display:grid;grid-template-columns:1fr auto auto;align-items:center;padding:8px 0;border-bottom:1px solid var(--o50);gap:8px';
+          ? 'display:grid;grid-template-columns:1fr auto auto auto;align-items:center;padding:8px 0 4px;gap:8px'
+          : 'display:grid;grid-template-columns:1fr auto auto;align-items:center;padding:8px 0 4px;gap:8px';
 
         const nameSpan = document.createElement('span');
         nameSpan.style.cssText = 'font-size:13px;font-weight:500';
@@ -570,7 +586,37 @@ async function renderFinalMgr(mgrPending) {
         starWrap.dataset.goalId2 = g.id;
         starWrap.dataset.evalId  = ev.id;
         row.appendChild(starWrap);
-        wrap.appendChild(row);
+        goalWrap.appendChild(row);
+
+        // 맥락 펼침 버튼 + 블록
+        const goalRpts = reportsByGoal[g.id] || [];
+        const goalFbs  = fbsByGoal[g.id]     || [];
+        const ctxId    = `fe-ctx-${ev.id}-${g.id}`;
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'btn btn-ghost btn-sm';
+        toggleBtn.style.cssText = 'font-size:11px;padding:1px 8px;margin:0 0 4px';
+        toggleBtn.textContent = '중간보고·피드백 ▼';
+        const ctxDiv = document.createElement('div');
+        ctxDiv.id = ctxId;
+        ctxDiv.style.cssText = 'display:none;margin-top:4px;padding:8px;background:var(--o50);border-radius:6px';
+        toggleBtn.onclick = function() {
+          if (ctxDiv.style.display === 'none') {
+            if (!ctxDiv.dataset.loaded) {
+              ctxDiv.innerHTML = (typeof renderGoalContextBlock === 'function')
+                ? renderGoalContextBlock(goalRpts, goalFbs)
+                : '<div style="font-size:12px;color:var(--muted)">미지원</div>';
+              ctxDiv.dataset.loaded = '1';
+            }
+            ctxDiv.style.display = '';
+            toggleBtn.textContent = '중간보고·피드백 ▲';
+          } else {
+            ctxDiv.style.display = 'none';
+            toggleBtn.textContent = '중간보고·피드백 ▼';
+          }
+        };
+        goalWrap.appendChild(toggleBtn);
+        goalWrap.appendChild(ctxDiv);
+        wrap.appendChild(goalWrap);
       });
     });
   }

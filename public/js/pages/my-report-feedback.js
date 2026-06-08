@@ -310,6 +310,15 @@ function renderGoalCard(goal, reports, feedbackItems, isSelf) {
   </div>`;
 }
 
+/* ── 공통: 목표별 중간보고·피드백 콘텐츠 블록 (final-eval에서 재사용) ── */
+function renderGoalContextBlock(goalReports, goalFeedbackItems) {
+  const rounds = mergeByRound(goalReports, goalFeedbackItems);
+  if (rounds.length === 0) {
+    return '<div style="padding:8px;text-align:center;color:var(--muted);font-size:12px">이 목표에 대한 중간보고·피드백이 없습니다.</div>';
+  }
+  return rounds.map(r => renderRoundBlock(r)).join('');
+}
+
 function renderRoundBlock(round) {
   const items = [...round.items].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   return `<div class="round-block" data-round="${round.round}">
