@@ -53,8 +53,8 @@ const CHAIN_2CHA_EMAILS = new Set(['dev01@synapsoft.com', 'dev02@synapsoft.com']
 const ROSTER = [
   // ── 경영진 ──
   { email:'ceo@synapsoft.com',        pw:'admin1234', role:'master', name:'이대표',  dept:'경영진',   title:'대표이사',     mgr:null,  profile:'top',     org:'root' },
-  { email:'cfo@synapsoft.com',        pw:'admin1234', role:'admin',  name:'김재무',  dept:'경영지원', title:'CFO/경영지원본부장', mgr:'ceo', profile:'top',     org:'mgmt' },
-  { email:'cto@synapsoft.com',        pw:'admin1234', role:'admin',  name:'박기술',  dept:'개발본부', title:'CTO/개발본부장',     mgr:'ceo', profile:'top',     org:'devhq' },
+  { email:'cfo@synapsoft.com',        pw:'admin1234', role:'user',   name:'김재무',  dept:'경영지원', title:'CFO/경영지원본부장', mgr:'ceo', profile:'top',     org:'mgmt' },
+  { email:'cto@synapsoft.com',        pw:'admin1234', role:'user',   name:'박기술',  dept:'개발본부', title:'CTO/개발본부장',     mgr:'ceo', profile:'top',     org:'devhq' },
   { email:'cso@synapsoft.com',        pw:'user1234',  role:'user',   name:'최영업',  dept:'영업본부', title:'CSO/영업본부장',     mgr:'ceo', profile:'good',    org:'saleshq' },
   // ── 개발본부 ──
   { email:'platform-lead@synapsoft.com', pw:'user1234', role:'user', name:'정플랫',  dept:'개발본부', title:'플랫폼팀장',  mgr:'cto', profile:'top',    org:'platform' },
@@ -80,9 +80,9 @@ const ROSTER = [
   { email:'partner01@synapsoft.com',  pw:'user1234',  role:'user',   name:'전파트너',dept:'영업본부', title:'파트너매니저',mgr:'partner-lead', profile:'average',org:'partner' },
   { email:'partner02@synapsoft.com',  pw:'user1234',  role:'user',   name:'추파트너',dept:'영업본부', title:'파트너매니저',mgr:'partner-lead', profile:'improving',org:'partner' },
   // ── 경영지원본부 ──
-  { email:'hr-lead@synapsoft.com',    pw:'admin1234', role:'admin',  name:'홍인사',  dept:'경영지원', title:'인사팀장',  mgr:'cfo', profile:'good',   org:'hr' },
-  { email:'hr01@synapsoft.com',       pw:'user1234',  role:'user',   name:'고인사',  dept:'경영지원', title:'인사담당',  mgr:'hr-lead', profile:'average',org:'hr' },
-  { email:'hr02@synapsoft.com',       pw:'user1234',  role:'user',   name:'차인사',  dept:'경영지원', title:'인사담당',  mgr:'hr-lead', profile:'good',   org:'hr' },
+  { email:'hr-lead@synapsoft.com',    pw:'admin1234', role:'master', name:'홍인사',  dept:'경영지원', title:'인사팀장',  mgr:'cfo', profile:'good',   org:'hr' },
+  { email:'hr01@synapsoft.com',       pw:'user1234',  role:'admin',  name:'고인사',  dept:'경영지원', title:'인사담당',  mgr:'hr-lead', profile:'average',org:'hr' },
+  { email:'hr02@synapsoft.com',       pw:'user1234',  role:'admin',  name:'차인사',  dept:'경영지원', title:'인사담당',  mgr:'hr-lead', profile:'good',   org:'hr' },
   { email:'finance-lead@synapsoft.com', pw:'user1234', role:'user',  name:'유재무장',dept:'경영지원', title:'재무팀장',  mgr:'cfo', profile:'average',org:'finance' },
   { email:'finance01@synapsoft.com',  pw:'user1234',  role:'user',   name:'도재무',  dept:'경영지원', title:'재무담당',  mgr:'finance-lead', profile:'average',org:'finance' },
   { email:'finance02@synapsoft.com',  pw:'user1234',  role:'user',   name:'석재무',  dept:'경영지원', title:'재무담당',  mgr:'finance-lead', profile:'poor',   org:'finance' },
@@ -587,11 +587,12 @@ async function main() {
   }
 
   const demoNotice = `📢 데모 테스트 계정
-[마스터관리자] ceo@synapsoft.com / admin1234
-[인사팀장] hr-lead@synapsoft.com / admin1234
-[개발본부장] cto@synapsoft.com / admin1234        (박기술)
-[플랫폼팀장] platform-lead@synapsoft.com / user1234 (정플랫)
-[시니어개발자] ${devEmail} / user1234           (한개발)`;
+[마스터관리자] ceo@synapsoft.com / admin1234       (이대표 — 전사)
+[마스터관리자] hr-lead@synapsoft.com / admin1234   (홍인사 인사팀장 — 전사)
+[일반관리자]   hr01@synapsoft.com / user1234       (고인사 인사담당 — 전사)
+[개발본부장]   cto@synapsoft.com / admin1234       (박기술 — 개발본부 하부)
+[플랫폼팀장]   platform-lead@synapsoft.com / user1234 (정플랫 — 팀 하부)
+[시니어개발자] ${devEmail} / user1234              (한개발)`;
   await prisma.appSetting.upsert({
     where:  { key: 'notice' },
     update: { value: demoNotice, updatedBy: 1 },

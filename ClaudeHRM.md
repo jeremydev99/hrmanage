@@ -625,6 +625,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | PERM-FIX — 권한 부여 오류 정정: 본부장급(CTO/CFO)을 일반관리자→일반사용자로, 인사팀장을 일반관리자→마스터관리자로, 인사담당(hr01/hr02)을 일반사용자→일반관리자로 seed-demo 수정. 전사 권한=마스터관리자(CEO·인사팀장)+일반관리자(인사담당)만, 일반사용자=하부(org chain). RF 전사 누출 근본 수정. 로직은 기존 master+admin=전사 이미 정확, 데이터 정정만. (PROMPT PERM-FIX) | Claude Code |
 | 2026-06-08 | RF-SEARCH-PERM-FIX — 보고·피드백 검색 조직 드롭다운에 타 조직 노출되던 권한 누출 수정. /api/my-subordinates 조직 목록을 user.org_id 역추론 방식(viewer 본인 org_id 포함 누출)에서 leaderOrgIds(재귀 리더십 계층 전체) 직접 사용으로 교체. "전체" 검색 경로(allowedIds ? [...allowedIds])는 이미 정상 확인 (PROMPT RF-SEARCH-PERM-FIX) | Claude Code |
 | 2026-06-08 | EVALMODE-BADGE — 평가방식(MBO/OKR/KPI) 변경 시 상단 제목행 배지가 새로고침해야 갱신되던 UX 버그 수정. 헤더 span에 id 부여 후 setPeriodEvalMode 성공 콜백에서 즉시 갱신 (PROMPT EVALMODE-BADGE) | Claude Code |
 | 2026-06-08 | UNIFY-2 — 보고·피드백 화면에 평가자 인라인 피드백 작성 폼(부하 카드 하단, 별점+코멘트) 추가. POST /api/feedback/:evalId 재사용. /api/rf/auto·/api/rf/search 응답에 can_feedback 플래그 추가. POST /api/feedback/:evalId에 isInApproverChain 권한 게이트 추가(본인→403, 체인밖→403). 옛 feedback.js 공존(UNIFY-3에서 흡수) (PROMPT UNIFY-2) | Claude Code |
