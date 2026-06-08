@@ -12,7 +12,7 @@ Pages.approvals = async function() {
       <button class="stb active" id="stb-appr-pending" onclick="switchApprTab('appr-pending')">
         승인 대기 ${pending.length ? `<span class="cnt">${pending.length}</span>` : ''}
       </button>
-      <button class="stb" id="stb-appr-hist" onclick="switchApprTab('appr-hist')">내 승인 이력</button>`;
+      <button class="stb" id="stb-appr-hist" onclick="switchApprTab('appr-hist')">목표 승인 이력</button>`;
     area.appendChild(tabsEl);
 
     const pendingEl = document.createElement('div');
@@ -150,10 +150,6 @@ async function renderMyApprovalHistory() {
     const actionCls    = { approved:'bd-approved', rejected:'bd-rejected' };
 
     history.forEach(h => {
-      // 자기평가 완료 판정: self_done 플래그 OR self_score 실제 입력
-      const selfDone = h.final_eval
-        ? (h.final_eval.self_done || (h.final_eval.scores||[]).some(s => s.self_score != null && s.self_score > 0))
-        : false;
       const card = document.createElement('div');
       card.className = 'card';
       card.style.marginBottom = '10px';
@@ -184,9 +180,7 @@ async function renderMyApprovalHistory() {
         <!-- 승인한 목표 (final_eval 유무와 무관하게 항상 표시) -->
         ${(h.goals||[]).length ? `
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--o100)">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">
-            승인한 목표${(h.final_eval?.scores||[]).length ? ' 및 평가' : ''}
-          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">승인한 목표</div>
           ${(h.goals||[]).map(g => {
             const sc  = (h.final_eval?.scores||[]).find(s=>String(s.goal_id)===String(g.id));
             const ss  = sc?.self_score        || 0;
@@ -204,43 +198,9 @@ async function renderMyApprovalHistory() {
           }).join('')}
         </div>` : ''}
 
-        <!-- 최종평가 결과 (final_eval 있을 때만) -->
-        ${h.final_eval ? `
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--o100)">
-          <div style="font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500">최종평가 결과</div>
-
-          <!-- 상태 뱃지 -->
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-            <span class="bd ${selfDone?'bd-approved':'bd-draft'}" style="font-size:11px">
-              자기평가 ${selfDone?'완료':'미완료'}
-            </span>
-            <span class="bd ${h.final_eval.mgr_done?'bd-locked':'bd-pending'}" style="font-size:11px">
-              1차(${h.final_eval.mgr_approver_name||'상사'}) ${h.final_eval.mgr_done?'완료':'대기'}
-            </span>
-            ${h.final_eval.second_mgr_done ? `
-            <span class="bd bd-locked" style="font-size:11px">
-              2차(${h.final_eval.second_mgr_name||''}) 완료
-            </span>` : ''}
-            ${h.final_eval.final_score != null
-              ? `<span style="font-size:18px;font-weight:700;color:var(--o500)">${h.final_eval.final_score}점</span>
-                 <span class="bd bd-locked" style="font-size:13px">${h.final_eval.selected_grade||h.final_eval.final_grade||''}</span>`
-              : ''}
-          </div>
-
-          <!-- 1차 평가자 종합의견 -->
-          ${h.final_eval.mgr_note ? `
-          <div style="margin-bottom:8px">
-            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">1차(${h.final_eval.mgr_approver_name||'상사'}) 종합의견</div>
-            <div style="font-size:12px;padding:8px;background:var(--o50);border-radius:6px;line-height:1.6">${h.final_eval.mgr_note}</div>
-          </div>` : ''}
-
-          <!-- 2차 평가자 종합의견 -->
-          ${h.final_eval.second_mgr_note ? `
-          <div>
-            <div style="font-size:11px;color:var(--muted);margin-bottom:3px">2차(${h.final_eval.second_mgr_name||''}) 종합의견</div>
-            <div style="font-size:12px;padding:8px;background:var(--o50);border-radius:6px;line-height:1.6">${h.final_eval.second_mgr_note}</div>
-          </div>` : ''}
-        </div>` : ''}`;
+        <div style="margin-top:10px;padding-top:8px;border-top:1px solid var(--o100);font-size:12px;color:var(--muted)">
+          💡 최종평가 결과는 <strong>내 평가 → 상사 최종평가</strong>에서 확인하세요.
+        </div>`;
       el.appendChild(card);
     });
   } catch(e) {

@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | IA-1 — 승인 관리 '내 승인 이력' 카드에서 최종평가 결과 블록(자기/1차/2차 뱃지·점수·등급·종합의견) 제거 + 탭 라벨 '목표 승인 이력'으로 명확화. 목표 승인 정보(뱃지·의견·목표 목록·별점) 유지. 최종평가는 상사 최종평가 화면 유도 안내 추가. (PROMPT IA-1) | Claude Code |
 | 2026-06-08 | BL-FINAL-GOAL-COMMENT-PRE — 최종평가 목표별 코멘트 옵션 백로그 등록(보류) + 데이터 모델 확인: FinalEvalScore에 nullable 컬럼 3개 추가로 retrofit 쉬움, app_settings 토글 패턴 재사용 가능, 암호화 기존 패턴 적용 가능. 스키마/코드 무변경. (PROMPT BL-FINAL-GOAL-COMMENT-PRE) | Claude Code |
 | 2026-06-08 | PHASE-LABEL-FIX — 평가 단계 final_mgr2_pending(2차 평가 대기) 한글 라벨 누락 4곳 보강: components.js phaseBadge, admin.js phaseLabels(이력), my-eval.js renderApprovedView, my-report-feedback.js 팀원 현황. 전체 phase sweep 완료. (PROMPT PHASE-LABEL-FIX) | Claude Code |
 | 2026-06-08 | PERM-FIX — 권한 부여 오류 정정: 본부장급(CTO/CFO)을 일반관리자→일반사용자로, 인사팀장을 일반관리자→마스터관리자로, 인사담당(hr01/hr02)을 일반사용자→일반관리자로 seed-demo 수정. 전사 권한=마스터관리자(CEO·인사팀장)+일반관리자(인사담당)만, 일반사용자=하부(org chain). RF 전사 누출 근본 수정. 로직은 기존 master+admin=전사 이미 정확, 데이터 정정만. (PROMPT PERM-FIX) | Claude Code |
