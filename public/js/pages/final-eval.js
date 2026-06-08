@@ -488,8 +488,8 @@ async function renderFinalMgr(mgrPending) {
       continue;
     }
 
-    // ── 직원 자기 의견 ────────────────────────────────────
-    if (fe?.self_note) {
+    // ── 직원 자기 의견 (1차 평가자용 — 2차는 종합의견 입력란 위로 이동) ──
+    if (fe?.self_note && !ev.is_second) {
       const selfNote = document.createElement('div');
       selfNote.className = 'alert alert-orange';
       selfNote.style.cssText = 'font-size:12px;margin-bottom:10px';
@@ -516,7 +516,12 @@ async function renderFinalMgr(mgrPending) {
       <div style="margin-top:12px;padding:10px 14px;background:var(--o50);border:1px solid var(--o100);border-radius:6px;font-size:13px;color:var(--o700)">
         📊 최종 등급은 항목별 점수의 가중 평균에서 자동 산출됩니다. 제출 후 화면에서 확인할 수 있습니다.
       </div>` : ''}
-      <div style="margin-top:4px">
+      ${ev.is_second && (fe?.self_note || fe?.mgr_note) ? `
+      <div style="margin-top:12px;border:1px solid var(--o100);border-radius:8px;overflow:hidden">
+        ${fe.self_note ? `<div style="padding:8px 12px;background:var(--o50);border-bottom:1px solid var(--o100);font-size:12px;line-height:1.6"><strong style="color:var(--o700)">직원 자기 의견:</strong> ${fe.self_note}</div>` : ''}
+        ${fe.mgr_note  ? `<div style="padding:8px 12px;background:var(--o50);font-size:12px;line-height:1.6"><strong style="color:var(--o700)">1차 평가자 의견:</strong> ${fe.mgr_note}</div>`  : ''}
+      </div>` : ''}
+      <div style="margin-top:8px">
         <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:5px">
           ${ev.is_second ? '2차 평가자 종합의견' : '상사 종합 의견'}
         </label>
@@ -538,15 +543,29 @@ async function renderFinalMgr(mgrPending) {
       const wrap = document.getElementById(`fin-mgr-cat-${ev.id}-${cat.id}`); if(!wrap) return;
       goals.filter(g => String(g.category_id) === String(cat.id)).forEach(g => {
         const row = document.createElement('div');
-        row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--o50);flex-wrap:wrap;gap:6px';
-        const selfLbl = selfScores[g.id]
-          ? `<span style="font-size:11px;background:var(--o100);color:var(--o800);padding:1px 7px;border-radius:10px">자기: ${scoreLabel(selfScores[g.id])}</span>`
-          : '';
-        const ms1 = mgrScores[g.id];
-        const mgrLbl = ev.is_second && ms1
-          ? `<span style="font-size:11px;background:var(--o200);color:var(--o800);padding:1px 7px;border-radius:10px">1차: ${'★'.repeat(ms1)}${'☆'.repeat(5-ms1)} ${ms1}점</span>`
-          : '';
-        row.innerHTML = `<span style="font-size:13px;font-weight:500">${g.name} <span style="font-size:11px;color:var(--muted)">${g.weight}%</span> ${selfLbl}${mgrLbl}</span>`;
+        row.style.cssText = ev.is_second
+          ? 'display:grid;grid-template-columns:1fr auto auto auto;align-items:center;padding:8px 0;border-bottom:1px solid var(--o50);gap:8px'
+          : 'display:grid;grid-template-columns:1fr auto auto;align-items:center;padding:8px 0;border-bottom:1px solid var(--o50);gap:8px';
+
+        const nameSpan = document.createElement('span');
+        nameSpan.style.cssText = 'font-size:13px;font-weight:500';
+        nameSpan.innerHTML = `${g.name} <span style="font-size:11px;color:var(--muted);font-weight:400">${g.weight}%</span>`;
+        row.appendChild(nameSpan);
+
+        const ss = selfScores[g.id];
+        const selfSpan = document.createElement('span');
+        selfSpan.style.cssText = 'font-size:11px;padding:2px 7px;border-radius:10px;background:var(--o100);color:var(--o800);white-space:nowrap';
+        selfSpan.textContent = ss ? `자기 ${ss}점` : '';
+        row.appendChild(selfSpan);
+
+        if (ev.is_second) {
+          const ms1 = mgrScores[g.id];
+          const mgrSpan = document.createElement('span');
+          mgrSpan.style.cssText = 'font-size:11px;padding:2px 7px;border-radius:10px;background:var(--o200);color:var(--o800);white-space:nowrap';
+          mgrSpan.textContent = ms1 ? `1차 ${ms1}점` : '';
+          row.appendChild(mgrSpan);
+        }
+
         const starWrap = Stars(`fin-mgr-${ev.id}-${g.id}`, 'final-mgr');
         starWrap.dataset.goalId2 = g.id;
         starWrap.dataset.evalId  = ev.id;
