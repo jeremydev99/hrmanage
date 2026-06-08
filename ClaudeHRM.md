@@ -621,10 +621,33 @@ docker compose --profile postgres up -d postgres
 
 ---
 
+### BL-FINAL-GOAL-COMMENT: 최종평가 목표별 코멘트 옵션
+
+**우선순위**: 보류 — 운영 게이트 이후 또는 첫 고객 요구 시 착수
+**설계 의도**: 현재 최종평가 = 목표별 별점 + 종합의견 1개(목표별 코멘트 없음). 정성 피드백은 중간 피드백으로 충분하나 엔터프라이즈 고객 요구 대응용 옵션 추가.
+**기능 개요**: 관리자 설정에서 켜면(디폴트 OFF) 최종평가(자기/1차/2차) 목표별 코멘트 입력 가능.
+
+**데이터 모델 확인 결론** (2026-06-08 BL-FINAL-GOAL-COMMENT-PRE):
+- **retrofit 쉬움** — `final_eval_scores` 테이블에 nullable String 컬럼 3개 추가로 충분
+  - `self_comment String?`, `mgr_comment String?`, `second_mgr_comment String?`
+- 구조 변경(정규화/테이블 추가) 불필요
+- 마이그레이션 안전: Prisma nullable 추가 → 기존 row null, 무영향
+- 옵션 토글: `app_settings` key-value 패턴 재사용(`goal_comment_enabled`)
+- 암호화: 기존 `encrypt()`/`decrypt()` 패턴 그대로 적용, BL-005 GCM 전환 시 함께 처리
+
+**향후 구현 범위 (난이도: 중)**:
+1. 스키마: `FinalEvalScore`에 컬럼 3개 추가 (난이도 하)
+2. 서버 API: read/write 시 컬럼 처리 + 암호화 적용 (난이도 중)
+3. 클라이언트: 옵션 OFF 시 UI 숨김, ON 시 코멘트 입력폼 표시 (난이도 중)
+4. 관리자 설정 화면에 옵션 토글 추가 (난이도 하)
+
+---
+
 ## 최근 개발 이력 (최근 30건)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-08 | BL-FINAL-GOAL-COMMENT-PRE — 최종평가 목표별 코멘트 옵션 백로그 등록(보류) + 데이터 모델 확인: FinalEvalScore에 nullable 컬럼 3개 추가로 retrofit 쉬움, app_settings 토글 패턴 재사용 가능, 암호화 기존 패턴 적용 가능. 스키마/코드 무변경. (PROMPT BL-FINAL-GOAL-COMMENT-PRE) | Claude Code |
 | 2026-06-08 | PHASE-LABEL-FIX — 평가 단계 final_mgr2_pending(2차 평가 대기) 한글 라벨 누락 4곳 보강: components.js phaseBadge, admin.js phaseLabels(이력), my-eval.js renderApprovedView, my-report-feedback.js 팀원 현황. 전체 phase sweep 완료. (PROMPT PHASE-LABEL-FIX) | Claude Code |
 | 2026-06-08 | PERM-FIX — 권한 부여 오류 정정: 본부장급(CTO/CFO)을 일반관리자→일반사용자로, 인사팀장을 일반관리자→마스터관리자로, 인사담당(hr01/hr02)을 일반사용자→일반관리자로 seed-demo 수정. 전사 권한=마스터관리자(CEO·인사팀장)+일반관리자(인사담당)만, 일반사용자=하부(org chain). RF 전사 누출 근본 수정. 로직은 기존 master+admin=전사 이미 정확, 데이터 정정만. (PROMPT PERM-FIX) | Claude Code |
 | 2026-06-08 | RF-SEARCH-PERM-FIX — 보고·피드백 검색 조직 드롭다운에 타 조직 노출되던 권한 누출 수정. /api/my-subordinates 조직 목록을 user.org_id 역추론 방식(viewer 본인 org_id 포함 누출)에서 leaderOrgIds(재귀 리더십 계층 전체) 직접 사용으로 교체. "전체" 검색 경로(allowedIds ? [...allowedIds])는 이미 정상 확인 (PROMPT RF-SEARCH-PERM-FIX) | Claude Code |
