@@ -10,7 +10,7 @@ Pages.approvals = async function() {
     tabsEl.className = 'stabs';
     tabsEl.innerHTML = `
       <button class="stb active" id="stb-appr-pending" onclick="switchApprTab('appr-pending')">
-        승인 대기 ${pending.length ? `<span class="cnt">${pending.length}</span>` : ''}
+        목표 승인 대기 ${pending.length ? `<span class="cnt">${pending.length}</span>` : ''}
       </button>
       <button class="stb" id="stb-appr-hist" onclick="switchApprTab('appr-hist')">목표 승인 이력</button>`;
     area.appendChild(tabsEl);
@@ -90,6 +90,7 @@ async function renderPendingApprovals(pending, el) {
 
 /* ── 내 승인 이력 ── */
 let _apprHistFilter = { label: '', year: '' };
+let _apprHistLevelFilter = 'all'; // 'all' | '1' | '2'
 
 async function renderMyApprovalHistory() {
   const el = document.getElementById('appr-hist');
@@ -129,19 +130,34 @@ async function renderMyApprovalHistory() {
             ).join('') : ''}
           </select>
         </div>
+        <div style="min-width:120px">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">승인 차수</label>
+          <select id="aphr-level" style="height:34px;font-size:13px;width:100%">
+            <option value="all" ${_apprHistLevelFilter==='all'?'selected':''}>전체</option>
+            <option value="1"   ${_apprHistLevelFilter==='1'  ?'selected':''}>1차 승인</option>
+            <option value="2"   ${_apprHistLevelFilter==='2'  ?'selected':''}>2차 승인</option>
+          </select>
+        </div>
         <button class="btn btn-primary" style="height:34px" onclick="applyApprHistFilter()">조회</button>
-        ${_apprHistFilter.label ? `<button class="btn btn-ghost" style="height:34px"
-          onclick="_apprHistFilter={label:'',year:''};renderMyApprovalHistory()">초기화</button>` : ''}
+        ${(_apprHistFilter.label || _apprHistLevelFilter !== 'all') ? `<button class="btn btn-ghost" style="height:34px"
+          onclick="_apprHistFilter={label:'',year:''};_apprHistLevelFilter='all';renderMyApprovalHistory()">초기화</button>` : ''}
       </div>
       ${!canEdit ? `<div class="alert alert-orange" style="font-size:12px;margin-top:10px">
         현재 승인 수정/취소가 비활성화 상태입니다. <strong>평가 정책</strong> 탭에서 활성화할 수 있습니다.
       </div>` : ''}`;
     el.appendChild(filterDiv);
 
-    if (!history.length) {
+    // 클라 필터 (레벨) + 최근순 정렬
+    let filtered = _apprHistLevelFilter === 'all' ? history
+      : history.filter(h => String(h.level) === _apprHistLevelFilter);
+    filtered = filtered.slice().sort((a, b) =>
+      periodSortKey({ period_label: b.period_label }) - periodSortKey({ period_label: a.period_label })
+    );
+
+    if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'alert alert-orange';
-      empty.textContent = '해당 기간에 승인 이력이 없습니다.';
+      empty.textContent = '해당 조건에 승인 이력이 없습니다.';
       el.appendChild(empty);
       return;
     }
@@ -149,7 +165,7 @@ async function renderMyApprovalHistory() {
     const actionLabels = { approved:'승인', rejected:'반려' };
     const actionCls    = { approved:'bd-approved', rejected:'bd-rejected' };
 
-    history.forEach(h => {
+    filtered.forEach(h => {
       const card = document.createElement('div');
       card.className = 'card';
       card.style.marginBottom = '10px';
@@ -212,6 +228,7 @@ function applyApprHistFilter() {
   const val = document.getElementById('aphr-period')?.value || '';
   if (val) { const [l,y] = val.split('|'); _apprHistFilter = { label:l, year:y||'' }; }
   else _apprHistFilter = { label:'', year:'' };
+  _apprHistLevelFilter = document.getElementById('aphr-level')?.value || 'all';
   renderMyApprovalHistory();
 }
 
