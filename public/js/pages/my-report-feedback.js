@@ -175,6 +175,7 @@ async function renderRFPane(ev) {
 
 /* ── RF-VIEW-1: 팀원 섹션 렌더 (team_auto 모드) ── */
 async function renderRFTeamSection(el, periodLabel) {
+  el.innerHTML = '';
   const teamDiv = document.createElement('div');
   teamDiv.id = 'rf-team-section';
   teamDiv.innerHTML = '<div class="spinner" style="font-size:12px">팀원 현황 로딩...</div>';
@@ -576,6 +577,7 @@ async function submitRFReport(evalId) {
 let _rfSubData = null;  // 캐시: { users, orgs }
 
 async function renderRFSearchPanel(area) {
+  area.innerHTML = '';
   const panel = document.createElement('div');
   panel.id = 'rf-search-panel';
   panel.innerHTML = '<div class="spinner">검색 패널 로딩...</div>';
