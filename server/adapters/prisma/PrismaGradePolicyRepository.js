@@ -26,6 +26,7 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
       min_score:   c.minScore,
       sort_order:  c.sortOrder,
       description: c.description,
+      detail_desc: c.detailDesc,
       note:        c.note,
     };
   }
@@ -105,8 +106,9 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
             gradeName:   c.grade_name.trim(),
             minScore:    c.min_score,
             sortOrder:   c.sort_order,
-            description: c.description || null,
-            note:        c.note        || null,
+            description: c.description  || null,
+            detailDesc:  c.detail_desc  || null,
+            note:        c.note         || null,
           },
         });
       }
@@ -134,8 +136,9 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
               gradeName:   c.grade_name.trim(),
               minScore:    c.min_score,
               sortOrder:   c.sort_order,
-              description: c.description || null,
-              note:        c.note        || null,
+              description: c.description  || null,
+              detailDesc:  c.detail_desc  || null,
+              note:        c.note         || null,
             },
           });
         }
@@ -218,6 +221,19 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
         min_score:  c.minScore,
       })),
     };
+  }
+
+  // 설명류 전용 업데이트 (잠금 무관 — cutoff 미변경)
+  async updateCriteriaDesc(updates) {
+    for (const u of updates) {
+      await this.prisma.gradePolicyCriteria.update({
+        where: { id: Number(u.id) },
+        data: {
+          description: u.description !== undefined ? (u.description || null) : undefined,
+          detailDesc:  u.detail_desc  !== undefined ? (u.detail_desc  || null) : undefined,
+        },
+      });
+    }
   }
 
   // TX3: 바인딩된 eval_periods 초기화 + 정책 삭제 (반환값: 영향받은 기간 목록)

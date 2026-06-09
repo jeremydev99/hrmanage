@@ -1939,7 +1939,7 @@ function renderPolicyCard(p) {
             <th style="width:90px">등급코드</th>
             <th style="width:160px">등급명</th>
             <th style="width:90px">min_score</th>
-            <th>설명</th>
+            <th>등급 정의</th>
           </tr></thead>
           <tbody>
             ${criteria.map(c => `
@@ -2014,7 +2014,7 @@ function _openPolicyModal(policy, criteria) {
           <div class="alert alert-orange" style="margin-bottom:15px">
             🔒 이 정책은 <strong>${policy.applied_periods.length}개 평가 기간</strong>에 적용 중이므로
             <strong>cutoff(등급 기준)</strong>를 수정할 수 없습니다.
-            이름·설명은 자유롭게 수정 가능합니다. cutoff 변경이 필요하면
+            이름·설명·등급 정의·등급 상세 설명은 자유롭게 수정 가능합니다. cutoff 변경이 필요하면
             <button class="btn btn-ghost btn-sm" style="display:inline;padding:2px 8px" onclick="cloneAsNewPolicy(${policy.id})">새 정책으로 복제</button>하세요.
           </div>` : ''}
         <div style="margin-bottom:12px">
@@ -2037,18 +2037,25 @@ function _openPolicyModal(policy, criteria) {
                 <th style="width:80px">등급코드</th>
                 <th style="width:120px">등급명</th>
                 <th style="width:90px">min_score</th>
-                <th>설명</th>
+                <th>등급 정의</th>
                 ${isLocked ? '' : '<th style="width:40px"></th>'}
               </tr></thead>
               <tbody>
                 ${criteria.map(c => `
-                  <tr>
+                  <tr data-criteria-id="${c.id || ''}">
                     <td><input type="number" value="${c.sort_order}" min="1" ${isLocked ? 'readonly' : ''} class="criteria-sort" style="width:50px;height:28px;font-size:12px;text-align:center"></td>
                     <td><input type="text" value="${escapeHtml(c.grade_code)}" ${isLocked ? 'readonly' : ''} class="criteria-code" style="width:70px;height:28px;font-size:12px"></td>
                     <td><input type="text" value="${escapeHtml(c.grade_name)}" ${isLocked ? 'readonly' : ''} class="criteria-name" style="width:110px;height:28px;font-size:12px"></td>
                     <td><input type="number" value="${c.min_score}" min="0" max="100" step="0.01" ${isLocked ? 'readonly' : ''} class="criteria-min" style="width:80px;height:28px;font-size:12px"></td>
-                    <td><input type="text" value="${escapeHtml(c.description || '')}" ${isLocked ? 'readonly' : ''} class="criteria-desc" style="width:100%;height:28px;font-size:12px"></td>
+                    <td><input type="text" value="${escapeHtml(c.description || '')}" class="criteria-desc" style="width:100%;height:28px;font-size:12px" placeholder="짧은 정의"></td>
                     ${isLocked ? '' : '<td><button class="btn btn-sm" style="background:none;border:none;color:#A32D2D;padding:2px 4px;font-size:14px;cursor:pointer" onclick="removeCriteriaRow(this)" title="삭제">×</button></td>'}
+                  </tr>
+                  <tr>
+                    <td colspan="${isLocked ? 5 : 6}" style="padding-top:0;padding-bottom:10px">
+                      <textarea class="criteria-detail-desc" rows="2"
+                        style="width:100%;font-size:12px;resize:vertical;border:1px solid var(--border);border-radius:4px;padding:4px 6px"
+                        placeholder="등급 상세 설명 (정의·행동특성·판단기준 등 상세 루브릭)">${escapeHtml(c.detail_desc || '')}</textarea>
+                    </td>
                   </tr>`).join('')}
               </tbody>
             </table>
@@ -2067,21 +2074,33 @@ function _openPolicyModal(policy, criteria) {
 function addCriteriaRow() {
   const tbody = document.querySelector('#editCriteriaTable tbody');
   if (!tbody) return;
-  const rows = tbody.querySelectorAll('tr');
-  const nextOrder = rows.length + 1;
+  const dataRows = tbody.querySelectorAll('tr[data-criteria-id]');
+  const nextOrder = dataRows.length + 1;
   const tr = document.createElement('tr');
+  tr.setAttribute('data-criteria-id', '');
   tr.innerHTML = `
     <td><input type="number" value="${nextOrder}" min="1" class="criteria-sort" style="width:50px;height:28px;font-size:12px;text-align:center"></td>
     <td><input type="text" value="" class="criteria-code" style="width:70px;height:28px;font-size:12px"></td>
     <td><input type="text" value="" class="criteria-name" style="width:110px;height:28px;font-size:12px"></td>
     <td><input type="number" value="0" min="0" max="100" step="0.01" class="criteria-min" style="width:80px;height:28px;font-size:12px"></td>
-    <td><input type="text" value="" class="criteria-desc" style="width:100%;height:28px;font-size:12px"></td>
+    <td><input type="text" value="" class="criteria-desc" style="width:100%;height:28px;font-size:12px" placeholder="짧은 정의"></td>
     <td><button class="btn btn-sm" style="background:none;border:none;color:#A32D2D;padding:2px 4px;font-size:14px;cursor:pointer" onclick="removeCriteriaRow(this)" title="삭제">×</button></td>`;
   tbody.appendChild(tr);
+  const tr2 = document.createElement('tr');
+  tr2.innerHTML = `
+    <td colspan="6" style="padding-top:0;padding-bottom:10px">
+      <textarea class="criteria-detail-desc" rows="2"
+        style="width:100%;font-size:12px;resize:vertical;border:1px solid var(--border);border-radius:4px;padding:4px 6px"
+        placeholder="등급 상세 설명 (정의·행동특성·판단기준 등 상세 루브릭)"></textarea>
+    </td>`;
+  tbody.appendChild(tr2);
 }
 
 function removeCriteriaRow(btn) {
-  btn.closest('tr').remove();
+  const tr = btn.closest('tr');
+  const next = tr.nextElementSibling;
+  if (next && !next.hasAttribute('data-criteria-id')) next.remove();
+  tr.remove();
 }
 
 async function savePolicyEdit(policyId, isLocked) {
@@ -2093,18 +2112,20 @@ async function savePolicyEdit(policyId, isLocked) {
   const body = { name, description };
 
   if (!isLocked) {
-    const rows = document.querySelectorAll('#editCriteriaTable tbody tr');
+    const rows = document.querySelectorAll('#editCriteriaTable tbody tr[data-criteria-id]');
     const criteria = [];
     for (const row of rows) {
       const code = row.querySelector('.criteria-code')?.value.trim();
       const gname = row.querySelector('.criteria-name')?.value.trim();
       if (!code || !gname) { showAlert('등급코드와 등급명은 필수입니다.', 'orange'); return; }
+      const detailRow = row.nextElementSibling;
       criteria.push({
-        sort_order: parseInt(row.querySelector('.criteria-sort')?.value) || 1,
-        grade_code: code,
-        grade_name: gname,
-        min_score: parseFloat(row.querySelector('.criteria-min')?.value) || 0,
+        sort_order:  parseInt(row.querySelector('.criteria-sort')?.value) || 1,
+        grade_code:  code,
+        grade_name:  gname,
+        min_score:   parseFloat(row.querySelector('.criteria-min')?.value) || 0,
         description: row.querySelector('.criteria-desc')?.value.trim() || '',
+        detail_desc: detailRow?.querySelector('.criteria-detail-desc')?.value.trim() || '',
       });
     }
     if (criteria.length < 2) { showAlert('등급은 최소 2개 이상 필요합니다.', 'orange'); return; }
@@ -2117,6 +2138,22 @@ async function savePolicyEdit(policyId, isLocked) {
       showAlert('등급 정책이 등록되었습니다.', 'green');
     } else {
       await API.put('/grade-policies/' + policyId, body);
+      // 잠금 상태에서도 등급 정의·상세 설명 업데이트
+      if (isLocked) {
+        const rows = document.querySelectorAll('#editCriteriaTable tbody tr[data-criteria-id]');
+        const updates = [];
+        for (const row of rows) {
+          const cid = row.getAttribute('data-criteria-id');
+          if (!cid) continue;
+          const detailRow = row.nextElementSibling;
+          updates.push({
+            id:          parseInt(cid),
+            description: row.querySelector('.criteria-desc')?.value.trim() || '',
+            detail_desc: detailRow?.querySelector('.criteria-detail-desc')?.value.trim() || '',
+          });
+        }
+        if (updates.length) await API.patch('/grade-policies/' + policyId + '/criteria-desc', { updates });
+      }
       showAlert('저장되었습니다.', 'green');
     }
     document.getElementById('policyModal')?.remove();

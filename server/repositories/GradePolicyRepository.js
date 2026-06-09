@@ -7,6 +7,7 @@ class GradePolicyRepository {
   async getAppliedPeriods(policyId) { throw new Error('Not implemented'); }
   async createWithCriteria(policyData, criteria) { throw new Error('Not implemented'); }
   async updateWithCriteria(policyId, metaUpdates, criteria) { throw new Error('Not implemented'); }
+  async updateCriteriaDesc(updates) { throw new Error('Not implemented'); }
   async deletePolicy(policyId) { throw new Error('Not implemented'); }
   // 헬퍼 지원 메서드 (A8-1)
   async getFirstPolicyId() { throw new Error('Not implemented'); }

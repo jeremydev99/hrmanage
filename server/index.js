@@ -2778,7 +2778,7 @@ app.put('/api/grade-policies/:id', auth, adminOnly, async (req, res) => {
       if (appliedCount > 0) {
         const appliedPeriods = await gradePolicyRepo.getAppliedPeriods(policyId);
         return res.status(409).json({
-          error: `이 정책은 ${appliedCount}개 평가 기간에 적용 중이므로 cutoff(등급 기준)를 수정할 수 없습니다. 신규 정책을 만들고 새 기간에 바인딩하세요.`,
+          error: `이 정책은 ${appliedCount}개 평가 기간에 적용 중이므로 cutoff(등급 기준)를 수정할 수 없습니다. 등급 정의·상세 설명은 수정 가능합니다. 신규 정책을 만들고 새 기간에 바인딩하세요.`,
           applied_periods: appliedPeriods,
           hint: '정책 이름·description은 수정 가능합니다.'
         });
@@ -2811,6 +2811,18 @@ app.put('/api/grade-policies/:id', auth, adminOnly, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: '정책 수정 실패: ' + e.message });
   }
+});
+
+// PATCH /api/grade-policies/:id/criteria-desc — 등급 설명류만 업데이트 (잠금 무관)
+app.patch('/api/grade-policies/:id/criteria-desc', auth, adminOnly, async (req, res) => {
+  const policyId = parseInt(req.params.id);
+  if (!Number.isInteger(policyId)) return res.status(400).json({ error: '유효하지 않은 정책 ID' });
+  const { updates } = req.body;
+  if (!Array.isArray(updates) || !updates.length) return res.status(400).json({ error: '업데이트 항목이 없습니다.' });
+  try {
+    await gradePolicyRepo.updateCriteriaDesc(updates);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: '설명 저장 실패: ' + e.message }); }
 });
 
 // DELETE /api/grade-policies/:id — 정책 삭제 (applied_periods 강제 초기화 + 비활성화)

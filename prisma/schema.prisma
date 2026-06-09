@@ -308,6 +308,7 @@ model GradePolicyCriteria {
   sortOrder   Int         @map("sort_order")
   description String?
   note        String?
+  detailDesc  String? @map("detail_desc")
   created_at  String?
 
   @@unique([policyId, gradeCode])
