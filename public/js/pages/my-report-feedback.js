@@ -37,50 +37,87 @@ Pages.myReportFeedback = async function() {
 
     area.innerHTML = '';
 
-    // search 모드: 검색 패널 (RF-VIEW-2)
-    if (window._rfMode === 'search') {
-      await renderRFSearchPanel(area);
-      return;  // search 모드는 검색 패널만 — 본인 탭 표시 없음
+    // UFIN-1: 2탭 골격 — [본인 보고] 전 역할 공통 / [조회 및 피드백] team_auto·search만
+    const showViewTab = (window._rfMode === 'team_auto' || window._rfMode === 'search');
+
+    const mainTabsEl = document.createElement('div');
+    mainTabsEl.className = 'stabs';
+    mainTabsEl.innerHTML =
+      `<button class="stb active" id="stb-rfmain-my" onclick="switchRFMainTab('my')">본인 보고</button>` +
+      (showViewTab ? `<button class="stb" id="stb-rfmain-view" onclick="switchRFMainTab('view')">조회 및 피드백</button>` : '');
+    area.appendChild(mainTabsEl);
+
+    const myPane = document.createElement('div');
+    myPane.id = 'rf-main-my';
+    area.appendChild(myPane);
+
+    if (showViewTab) {
+      const viewPane = document.createElement('div');
+      viewPane.id = 'rf-main-view';
+      viewPane.className = 'rf-hidden';
+      viewPane.innerHTML = '<div class="spinner">로딩 중...</div>';
+      area.appendChild(viewPane);
     }
 
+    // ── [본인 보고] 탭 내용 렌더 ──
     if (!allEvs.length) {
-      const empty = document.createElement('div');
-      empty.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
-      area.appendChild(empty);
-      return;
+      myPane.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
+    } else {
+      const initialEv = initialEvalId
+        ? (allEvs.find(e => String(e.id) === String(initialEvalId)) || allEvs[0])
+        : allEvs[0];
+
+      window._rfEvs = allEvs;
+      if (allEvs.length > 1) {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'stabs';
+        tabEl.innerHTML = allEvs.map(ev =>
+          `<button class="stb${ev.id === initialEv.id ? ' active' : ''}" id="stb-rf-${ev.id}" onclick="switchRFTab('${ev.id}')">${ev.period_label}</button>`
+        ).join('');
+        myPane.appendChild(tabEl);
+      }
+
+      for (let i = 0; i < allEvs.length; i++) {
+        const ev = allEvs[i];
+        const sp = document.createElement('div');
+        sp.id = 'rf-pane-' + ev.id;
+        sp.className = ev.id === initialEv.id ? '' : 'rf-hidden';
+        sp.innerHTML = ev._noEval
+          ? `<div class="card"><div class="alert alert-orange" style="font-size:13px">이 기간에 아직 평가가 시작되지 않았습니다.</div></div>`
+          : '<div class="spinner">로딩 중...</div>';
+        myPane.appendChild(sp);
+      }
+      if (!initialEv._noEval) renderRFPane(initialEv);
     }
 
-    // UNIFY-1: 전달된 evalId로 초기 활성 기간 결정 (없으면 최신 기간)
-    const initialEv = initialEvalId
-      ? (allEvs.find(e => String(e.id) === String(initialEvalId)) || allEvs[0])
-      : allEvs[0];
-
-    window._rfEvs = allEvs;  // lazy 렌더링용 캐시
-    if (allEvs.length > 1) {
-      const tabEl = document.createElement('div');
-      tabEl.className = 'stabs';
-      tabEl.innerHTML = allEvs.map(ev =>
-        `<button class="stb${ev.id === initialEv.id ? ' active' : ''}" id="stb-rf-${ev.id}" onclick="switchRFTab('${ev.id}')">${ev.period_label}</button>`
-      ).join('');
-      area.appendChild(tabEl);
-    }
-
-    for (let i = 0; i < allEvs.length; i++) {
-      const ev = allEvs[i];
-      const sp = document.createElement('div');
-      sp.id = 'rf-pane-' + ev.id;
-      sp.className = ev.id === initialEv.id ? '' : 'rf-hidden';
-      sp.innerHTML = ev._noEval
-        ? `<div class="card"><div class="alert alert-orange" style="font-size:13px">이 기간에 아직 평가가 시작되지 않았습니다.</div></div>`
-        : '<div class="spinner">로딩 중...</div>';
-      area.appendChild(sp);
-    }
-    // 초기 활성 pane만 즉시 렌더, 나머지는 탭 클릭 시 lazy
-    if (!initialEv._noEval) renderRFPane(initialEv);
   } catch(e) {
     area.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
 };
+
+/* ── UFIN-1: 메인 2탭 전환 ([본인 보고] / [조회 및 피드백]) ── */
+function switchRFMainTab(tab) {
+  ['my', 'view'].forEach(t => {
+    document.getElementById('stb-rfmain-' + t)?.classList.toggle('active', t === tab);
+    const p = document.getElementById('rf-main-' + t);
+    if (p) p.classList.toggle('rf-hidden', t !== tab);
+  });
+  // [조회 및 피드백] 탭 — lazy 렌더
+  if (tab === 'view') {
+    const viewPane = document.getElementById('rf-main-view');
+    if (viewPane && viewPane.querySelector('.spinner')) {
+      if (window._rfMode === 'team_auto') {
+        const activePeriodBtn = document.querySelector('[id^="stb-rf-"].active');
+        const evalId = activePeriodBtn?.id.replace('stb-rf-', '');
+        const ev = (window._rfEvs || []).find(e => String(e.id) === String(evalId));
+        const periodLabel = ev?.period_label || (window._rfEvs?.[0]?.period_label) || '';
+        renderRFTeamSection(viewPane, periodLabel);
+      } else if (window._rfMode === 'search') {
+        renderRFSearchPanel(viewPane);
+      }
+    }
+  }
+}
 
 function switchRFTab(evalId) {
   document.querySelectorAll('.stb[id^="stb-rf-"]').forEach(b => b.classList.remove('active'));
@@ -131,11 +168,6 @@ async function renderRFPane(ev) {
     if (canReport) html += renderWriteForm(ev, goals);
 
     el.innerHTML = html;
-
-    // RF-VIEW-1: team_auto 모드 — 팀원 섹션 추가
-    if (window._rfMode === 'team_auto') {
-      renderRFTeamSection(el, ev.period_label);
-    }
   } catch(e) {
     el.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
