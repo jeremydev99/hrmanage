@@ -643,10 +643,36 @@ docker compose --profile postgres up -d postgres
 
 ---
 
+### BL-GOVERNANCE — 평가 거버넌스 (프리세팅 + 내부승인절차 + 설정 Lock) [Phase 2, 운영 게이트 후 PRE]
+
+**목적**: 관리자 설정이 너무 유연/복잡(인사팀장 부담·오설정 리스크) → 프리셋 + 승인 워크플로 + Lock으로 통제된 거버넌스화. 엔터프라이즈(은행·공공·대기업) 판매 핵심.
+
+**구성**:
+
+1. **평가기간 오픈** (최초 1회, 통상 매분기 1일) + 내부 품의-승인 프로세스
+   - 승인 체인: 일반관리자 → 중간관리자(일반관리자/인사책임자, 필요시 중간승인) → 마스터관리자(CEO/인사책임자)
+   - 승인 시 관리자 설정 자동 세팅:
+     - ① 중간보고·중간피드백 기간 확정 (해당 평가기간 3개월, 통상 매분기 1일~말일) — 그 기간에만 보고/평가 가능
+     - ② 최종평가 기간 설정
+
+2. **설정 변경 Lock** (비활성)
+   - 해제: 대표이사 승인 → Lock 해제 → 변경 조건 재품의(일반관리자 → 마스터관리자 → CEO) → 적용 → 재Lock
+   - Lock 대상: 특정 평가기간, 목표 카테고리 항목·비중, 등급정책, 중간피드백 횟수제한, 승인자 승인 수정/취소 허용, 2차 최종평가 허용
+
+**흡수**: BL-등급정책무결성(무결성 동결·정책-기간 바인딩·IR 수정)을 본 항목 하위로 통합 — Lock/무결성은 같은 거버넌스 레이어.
+
+**재사용**: 기존 승인 인프라(목표/최종평가 승인 체인 `getApproverChainAsync`) 위에 품의-승인 얹기 — 신규 워크플로 엔진 최소화.
+
+**규모/시점**: Phase 2급(워크플로+프리셋+Lock). 운영 게이트(A1~A3) 마무리 후 전용 PRE로 설계. MVP 다음 첫 엔터프라이즈 기능 후보.
+
+---
+
 ## 최근 개발 이력 (최근 30건)
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-09 | BL-GOVERNANCE 등록 — 평가 거버넌스(프리세팅+내부승인절차+Lock) 백로그 등록. BL-등급정책무결성 흡수 표기. 재사용: 기존 getApproverChainAsync 승인 인프라. Phase 2, 운영 게이트(A1~A3) 후 전용 PRE. (PROMPT BL-GOVERNANCE) | Claude Code |
+| 2026-06-08 | 정책 확정 — 중간 피드백 권한 = 최종평가 권한과 동일 기준 연동(승인 체인, A↔B). 2차 평가 단계 피드백 프리즈(무결성, 개표 중 투표 금지) 유지. FB-2CHA-TOGGLE 폐기(불필요). | Claude.ai 합의 |
 | 2026-06-09 | UFIN-1-FIX — [조회 및 피드백] 탭 로딩 멈춤 수정: renderRFTeamSection/renderRFSearchPanel 진입 시 el.innerHTML='' 추가로 viewPane 초기 "로딩 중..." 스피너 제거. 피드백 작성 버튼 갈림 조사: phaseOk=['approved','final_self','final_mgr_pending'] — final_mgr2_pending 제외는 의도된 phase 게이트(무수정). (PROMPT UFIN-1-FIX) | Claude Code |
 | 2026-06-09 | UFIN-1 — 보고·피드백 2탭 통합([본인 보고]/[조회 및 피드백]): search 모드 즉시 return 제거 → 본부장·CEO·admin도 [본인 보고] 탭 작성 가능. 2탭 골격(mainTabsEl stb-rfmain-my/view), myPane에 기간 탭+renderRFPane, viewPane에 team_auto→renderRFTeamSection/search→renderRFSearchPanel lazy 렌더. switchRFMainTab 추가. canReport 현행 유지(2차 대기 조회만). 팀원(self)은 [조회 및 피드백] 탭 미노출. (PROMPT UFIN-1) | Claude Code |
 | 2026-06-09 | FIX3-3-RETRY — 중간보고 활성 기간(2026Q2) 탭 재수정: FIX3에서 'pending' 추가했으나 dev01의 2026Q2 eval phase=final_mgr2_pending(2차 평가 대기)이 실제 원인. 'final_mgr2_pending' 추가 + 활성 기간 API(/eval-periods/active)에서 eval 없는 기간도 _noEval 탭 추가(클릭 시 "아직 평가 시작 안 됨" 안전 표시). seed-demo.js: is2Cha(dev01/dev02) 2026Q2 목표별 중간보고 1회차 추가(allGoals2 활용, goal_id 포함, 5개 텍스트 풀). (PROMPT FIX3-3-RETRY) | Claude Code |
