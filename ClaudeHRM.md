@@ -647,6 +647,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-09 | FIX3-3-RETRY — 중간보고 활성 기간(2026Q2) 탭 재수정: FIX3에서 'pending' 추가했으나 dev01의 2026Q2 eval phase=final_mgr2_pending(2차 평가 대기)이 실제 원인. 'final_mgr2_pending' 추가 + 활성 기간 API(/eval-periods/active)에서 eval 없는 기간도 _noEval 탭 추가(클릭 시 "아직 평가 시작 안 됨" 안전 표시). seed-demo.js: is2Cha(dev01/dev02) 2026Q2 목표별 중간보고 1회차 추가(allGoals2 활용, goal_id 포함, 5개 텍스트 풀). (PROMPT FIX3-3-RETRY) | Claude Code |
 | 2026-06-08 | FIX3 — ①종합 피드백 end-to-end 복구: team_auto/search hub fbList가 fb.items만 렌더링, fb.overall_note 누락이 실제 원인. team_auto fbList에 overallHtml(종합: 내용) 추가, search fbList를 flatMap으로 재작성(overall_note → "종합" 배지 행). CTX-4B의 renderSummaryCard 수정은 self-view 경로로 유효하나 hub 경로 미해결이 주원인. ②final-eval 중간보고·피드백 토글 점수칸 왼쪽 배치: row.appendChild→row.insertBefore(toggleBtn,selfSpan). ③보고·피드백 hub myEvs 필터에 'pending' 추가(2026Q2 진행 기간 탭 누락 복구). (PROMPT FIX3) | Claude Code |
 | 2026-06-08 | CTX-4B — 종합 피드백 복구(renderSummaryCard의 content→note 버그 수정+isOverall 플래그, renderFeedbackItem "종합" 배지 추가) + final-eval 중간보고·피드백 토글 목표명 우측 그리드 칸 1줄 배치(grid-template-columns 1열 추가, goalWrap→row.appendChild) + 피드백 칸 크게 시 font-size 12px→1rem(16px) 추가. (PROMPT CTX-4B) | Claude Code |
 | 2026-06-08 | CTX-4 — hub 상사 인라인 피드백 목표별 배치 + 칸 크기 토글: _buildInlineFbForm 재작성(전체 묶음→목표별 접힘 섹션, 각 목표에 '💬 작성 ▼' 토글+별점+textarea), 종합 피드백 항상 표시. togglePerGoalFb/toggleFbTaSize 추가(크게=160px resize:vertical, 작게=64px 스크롤). 제출·권한·_initInlineFbStars 무변경. (PROMPT CTX-4) | Claude Code |

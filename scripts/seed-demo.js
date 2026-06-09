@@ -566,6 +566,27 @@ async function main() {
         data: { finalScore: finalScore2, finalGrade: grade2, selectedGrade: grade2 },
       });
       if (grade2) { gradeCount[grade2] = (gradeCount[grade2] || 0) + 1; }
+
+      // ── 목표별 중간보고 1회차 (dev01/dev02 데모 — CTX-2 펼침용) ──────────
+      const goalRptBank = [
+        '목표 달성을 위한 핵심 과제 분석 및 실행 계획 수립 완료. 1분기 대비 15% 향상된 성과 기록 중.',
+        '현재 KPI 지표가 기준치를 상회하고 있습니다. 팀원과 협력하여 목표 달성에 집중하고 있습니다.',
+        '마일스톤의 65% 달성. 외부 요인으로 일부 조정이 있었으나 전체 일정에는 영향 없음.',
+        '핵심 기능 구현 완료 후 품질 검토 단계 진행 중입니다. 다음 단계 준비도 병행하고 있습니다.',
+        '계획 대비 순항 중. 잔여 과제에 대한 구체적 해결 방안을 마련하여 진행하고 있습니다.',
+      ];
+      for (let gi = 0; gi < allGoals2.length; gi++) {
+        await prisma.progressReport.create({
+          data: {
+            evalId: cycle2.id,
+            authorId: userId,
+            content: goalRptBank[gi % goalRptBank.length],
+            goalId: allGoals2[gi].id,
+            round: 1,
+          },
+        });
+        totalReports++;
+      }
     } else {
       // ── 일반 진행중: 자기평가 미완료 ──────────────────────────────────
       await prisma.finalEvaluation.create({

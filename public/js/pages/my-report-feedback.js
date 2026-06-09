@@ -18,12 +18,22 @@ Pages.myReportFeedback = async function() {
     const myEvs = (typeof sortPeriodsDesc === 'function'
       ? sortPeriodsDesc(evs.filter(e =>
           String(e.user_id) === String(App.user.id) &&
-          ['pending','approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+          ['pending','approved','final_self','final_mgr_pending','final_mgr2_pending','final_done'].includes(e.phase)
         ))
       : evs.filter(e =>
           String(e.user_id) === String(App.user.id) &&
-          ['pending','approved','final_self','final_mgr_pending','final_done'].includes(e.phase)
+          ['pending','approved','final_self','final_mgr_pending','final_mgr2_pending','final_done'].includes(e.phase)
         ));
+
+    // 활성 기간 항상 탭 노출 — 본인 eval 없어도 활성 기간 탭 추가
+    const activePds = await API.get('/eval-periods/active').catch(() => []);
+    const knownLabels = new Set(myEvs.map(e => e.period_label));
+    const extraEvs = activePds
+      .filter(p => !knownLabels.has(p.period_label))
+      .map(p => ({ id: `_p${p.id}`, period_label: p.period_label, _noEval: true }));
+    const allEvs = (typeof sortPeriodsDesc === 'function')
+      ? sortPeriodsDesc([...myEvs, ...extraEvs])
+      : [...myEvs, ...extraEvs];
 
     area.innerHTML = '';
 
@@ -33,7 +43,7 @@ Pages.myReportFeedback = async function() {
       return;  // search 모드는 검색 패널만 — 본인 탭 표시 없음
     }
 
-    if (!myEvs.length) {
+    if (!allEvs.length) {
       const empty = document.createElement('div');
       empty.innerHTML = `<div class="card"><div class="alert alert-orange">목표가 확정된 후 보고·피드백을 확인할 수 있습니다.</div></div>`;
       area.appendChild(empty);
@@ -42,29 +52,31 @@ Pages.myReportFeedback = async function() {
 
     // UNIFY-1: 전달된 evalId로 초기 활성 기간 결정 (없으면 최신 기간)
     const initialEv = initialEvalId
-      ? (myEvs.find(e => String(e.id) === String(initialEvalId)) || myEvs[0])
-      : myEvs[0];
+      ? (allEvs.find(e => String(e.id) === String(initialEvalId)) || allEvs[0])
+      : allEvs[0];
 
-    window._rfEvs = myEvs;  // lazy 렌더링용 캐시
-    if (myEvs.length > 1) {
+    window._rfEvs = allEvs;  // lazy 렌더링용 캐시
+    if (allEvs.length > 1) {
       const tabEl = document.createElement('div');
       tabEl.className = 'stabs';
-      tabEl.innerHTML = myEvs.map(ev =>
-        `<button class="stb${ev.id === initialEv.id ? ' active' : ''}" id="stb-rf-${ev.id}" onclick="switchRFTab(${ev.id})">${ev.period_label}</button>`
+      tabEl.innerHTML = allEvs.map(ev =>
+        `<button class="stb${ev.id === initialEv.id ? ' active' : ''}" id="stb-rf-${ev.id}" onclick="switchRFTab('${ev.id}')">${ev.period_label}</button>`
       ).join('');
       area.appendChild(tabEl);
     }
 
-    for (let i = 0; i < myEvs.length; i++) {
-      const ev = myEvs[i];
+    for (let i = 0; i < allEvs.length; i++) {
+      const ev = allEvs[i];
       const sp = document.createElement('div');
       sp.id = 'rf-pane-' + ev.id;
       sp.className = ev.id === initialEv.id ? '' : 'rf-hidden';
-      sp.innerHTML = '<div class="spinner">로딩 중...</div>';
+      sp.innerHTML = ev._noEval
+        ? `<div class="card"><div class="alert alert-orange" style="font-size:13px">이 기간에 아직 평가가 시작되지 않았습니다.</div></div>`
+        : '<div class="spinner">로딩 중...</div>';
       area.appendChild(sp);
     }
     // 초기 활성 pane만 즉시 렌더, 나머지는 탭 클릭 시 lazy
-    renderRFPane(initialEv);
+    if (!initialEv._noEval) renderRFPane(initialEv);
   } catch(e) {
     area.innerHTML = `<div class="alert alert-red">오류: ${e.message}</div>`;
   }
