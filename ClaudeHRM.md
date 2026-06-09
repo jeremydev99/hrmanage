@@ -671,6 +671,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-09 | UFIN-2 — progress-report.js dead page 제거 + 라우팅('progress'/'progressReport') 정리. navigate 호출 전무 확인. index.html script 태그 제거, app.js 라우트 2줄 제거, 파일 git rm. 보고·피드백 myReportFeedback 2탭 일원화 완료. (PROMPT UFIN-2) | Claude Code |
 | 2026-06-09 | BL-GOVERNANCE 등록 — 평가 거버넌스(프리세팅+내부승인절차+Lock) 백로그 등록. BL-등급정책무결성 흡수 표기. 재사용: 기존 getApproverChainAsync 승인 인프라. Phase 2, 운영 게이트(A1~A3) 후 전용 PRE. (PROMPT BL-GOVERNANCE) | Claude Code |
 | 2026-06-08 | 정책 확정 — 중간 피드백 권한 = 최종평가 권한과 동일 기준 연동(승인 체인, A↔B). 2차 평가 단계 피드백 프리즈(무결성, 개표 중 투표 금지) 유지. FB-2CHA-TOGGLE 폐기(불필요). | Claude.ai 합의 |
 | 2026-06-09 | UFIN-1-FIX — [조회 및 피드백] 탭 로딩 멈춤 수정: renderRFTeamSection/renderRFSearchPanel 진입 시 el.innerHTML='' 추가로 viewPane 초기 "로딩 중..." 스피너 제거. 피드백 작성 버튼 갈림 조사: phaseOk=['approved','final_self','final_mgr_pending'] — final_mgr2_pending 제외는 의도된 phase 게이트(무수정). (PROMPT UFIN-1-FIX) | Claude Code |

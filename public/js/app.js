@@ -160,8 +160,6 @@ const App = {
       'my-eval':        Pages.myEval,
       'myEval':         Pages.myEval,
       'approvals':      Pages.approvals,
-      'progress':            Pages.progressReport,
-      'progressReport':      Pages.progressReport,
       'feedback':            Pages.feedback,
       'myReportFeedback':    Pages.myReportFeedback,
       'final':          Pages.finalEval,
