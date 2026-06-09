@@ -119,13 +119,25 @@ async function renderFinalSelf(ev) {
     const finalScore = Math.round(sc*10)/10;
     const autoGrade = finalScore>=90?'S':finalScore>=80?'A':finalScore>=70?'B':finalScore>=60?'C':'D';
     const displayGrade = fe?.selected_grade || fe?.final_grade || autoGrade;
+
+    const gradePolicy = await API.get(`/grade-policy/for-eval/${ev.id}`).catch(() => null);
+    const matchCrit = gradePolicy?.criteria?.find(c => c.grade_code === displayGrade);
+    const _esc = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const gradeDescHtml = matchCrit?.detail_desc
+      ? `<div style="margin-top:10px;padding:10px 14px;background:var(--o50);border:1px solid var(--o100);border-radius:8px">
+           <div style="font-size:11px;font-weight:600;color:var(--o600);margin-bottom:4px">등급 상세 설명 — ${_esc(matchCrit.grade_name||displayGrade)}</div>
+           <div style="font-size:13px;color:var(--o800);white-space:pre-line">${_esc(matchCrit.detail_desc)}</div>
+         </div>`
+      : '';
+
     el.innerHTML = `<div class="card">
       <div class="card-header"><div><div class="card-header-t">최종 평가 완료</div><div class="card-header-s">${ev.period_label}</div></div>${gradeEl(displayGrade)}</div>
       <div style="text-align:center;margin:16px 0">
         <div style="font-size:36px;font-weight:700;color:var(--o500)">${finalScore}점</div>
         <div style="font-size:14px;color:var(--muted);margin-top:4px">최종 등급: ${gradeEl(displayGrade)}</div>
       </div>
-      <div class="alert" style="background:#F1EFE8;color:#2C2C2A;border-color:#B4B2A9;font-size:12px;margin-bottom:14px">최종 평가는 잠금 처리되어 인사팀만 수정 가능합니다.</div>
+      ${gradeDescHtml}
+      <div class="alert" style="background:#F1EFE8;color:#2C2C2A;border-color:#B4B2A9;font-size:12px;margin-bottom:14px;margin-top:${gradeDescHtml?'10px':'0'}">최종 평가는 잠금 처리되어 인사팀만 수정 가능합니다.</div>
       ${goals.map(g=>{
         const ms=(scores[g.id]?.mgr_score||0)/5*100;
         const ss=(scores[g.id]?.self_score||0)/5*100;

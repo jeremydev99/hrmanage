@@ -179,7 +179,7 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
         gradePolicy: {
           include: {
             criteria: {
-              select: { gradeCode: true, gradeName: true, minScore: true, sortOrder: true },
+              select: { gradeCode: true, gradeName: true, minScore: true, sortOrder: true, description: true, detailDesc: true },
               orderBy: { minScore: 'desc' },
             },
           },
@@ -192,10 +192,12 @@ class PrismaGradePolicyRepository extends GradePolicyRepository {
       id:       gp.id,
       name:     gp.name,
       criteria: gp.criteria.map(c => ({
-        grade_code: c.gradeCode,
-        grade_name: c.gradeName,
-        min_score:  c.minScore,
-        sort_order: c.sortOrder,
+        grade_code:  c.gradeCode,
+        grade_name:  c.gradeName,
+        min_score:   c.minScore,
+        sort_order:  c.sortOrder,
+        description: c.description,
+        detail_desc: c.detailDesc,
       })),
     };
   }

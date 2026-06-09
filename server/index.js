@@ -2720,6 +2720,19 @@ app.all('/api/grade-criteria/:id', (req, res) => {
   res.status(410).json({ error: 'grade_criteria API는 폐기되었습니다.' });
 });
 
+// GET /api/grade-policy/for-eval/:evalId — 직원용 등급 정책 조회 (criteria+detail_desc, 본인 eval만)
+app.get('/api/grade-policy/for-eval/:evalId', auth, async (req, res) => {
+  try {
+    const ev = await evalCycleRepo.findById(req.params.evalId);
+    if (!ev) return res.status(404).json({ error: '없음' });
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const isOwner = String(ev.user_id) === String(req.user.sub);
+    if (!isAdmin && !isOwner) return res.status(403).json({ error: '권한 없음' });
+    const policy = await gradePolicyRepo.getPolicyForEvalCycle(req.params.evalId);
+    res.json(policy || null);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/grade-policies — 등급 정책 목록 + criteria + applied_periods
 app.get('/api/grade-policies', auth, adminOnly, async (req, res) => {
   try {

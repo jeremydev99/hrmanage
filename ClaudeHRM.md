@@ -706,6 +706,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-09 | GRADE-DESC Phase3 — 직원 최종평가 완료 화면에 등급 상세 설명 표시: GET /api/grade-policy/for-eval/:evalId 신규(auth, 본인 소유 확인), getPolicyForEvalCycle에 description·detailDesc 반환 추가, renderFinalSelf에서 matchCrit.detail_desc 있을 때 등급 상세 설명 블록 표시(o50 배경, pre-line). (PROMPT GRADE-DESC Phase3) | Claude Code |
 | 2026-06-09 | GRADE-DESC — 등급 정책 criteria에 detail_desc nullable 컬럼 추가(prisma db push). 편집 UI: 설명→등급 정의 라벨, 각 행 아래 등급 상세 설명 textarea(2행, resize). 잠금 시에도 등급 정의·상세 설명 편집 가능(PATCH /grade-policies/:id/criteria-desc). PrismaGradePolicyRepository: _flattenCriteria·create·update·updateCriteriaDesc 추가. removeCriteriaRow detail_desc 행 연동. (PROMPT GRADE-DESC) | Claude Code |
 | 2026-06-09 | BL-001 설계 방향 확정 — OKR B안(철학 구현+MBO 구조 재사용), 보상 분리·상대평가 금지 2원칙, 점수 경영자 통계 only, 전사 공개 대시보드(선언문 대문) 마지막, 개발 4단계. Phase 2 PRE 출발점. (PROMPT BL-001-OKR-DESIGN) | Claude Code |
 | 2026-06-09 | UFIN-2 — progress-report.js dead page 제거 + 라우팅('progress'/'progressReport') 정리. navigate 호출 전무 확인. index.html script 태그 제거, app.js 라우트 2줄 제거, 파일 git rm. 보고·피드백 myReportFeedback 2탭 일원화 완료. (PROMPT UFIN-2) | Claude Code |
