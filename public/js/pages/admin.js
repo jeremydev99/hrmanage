@@ -1948,7 +1948,10 @@ function renderPolicyCard(p) {
                 <td><strong>${escapeHtml(c.grade_code)}</strong></td>
                 <td>${escapeHtml(c.grade_name)}</td>
                 <td><strong style="color:var(--o500)">${c.min_score}</strong></td>
-                <td style="font-size:12px;color:var(--muted)">${escapeHtml(c.description || '')}</td>
+                <td style="font-size:12px">
+                  <div style="color:var(--muted)">${escapeHtml(c.description || '')}</div>
+                  ${c.detail_desc ? `<div style="max-height:60px;overflow-y:auto;white-space:pre-line;font-size:11px;color:var(--o700);margin-top:3px;padding:3px 5px;background:var(--o50);border-radius:4px"><span style="font-size:10px;color:var(--o400);font-weight:600;display:block;margin-bottom:2px">상세</span>${escapeHtml(c.detail_desc)}</div>` : ''}
+                </td>
               </tr>`).join('')}
           </tbody>
         </table>
