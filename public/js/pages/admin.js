@@ -1913,7 +1913,10 @@ async function renderGradePolicies() {
         <div id="policy-list" style="margin-top:8px">
           ${policies.length === 0
             ? '<div class="alert alert-orange">등록된 등급 정책이 없습니다. 신규 정책을 등록해 주세요.</div>'
-            : policies.map(p => renderPolicyCard(p)).join('')}
+            : (() => {
+                const activeIds = new Set(policies.filter(p => p.applied_periods?.some(ep => ep.is_active)).map(p => p.id));
+                return policies.map(p => renderPolicyCard(p, activeIds.has(p.id))).join('');
+              })()}
         </div>
       </div>`;
   } catch(e) {
@@ -1921,7 +1924,7 @@ async function renderGradePolicies() {
   }
 }
 
-function renderPolicyCard(p) {
+function renderPolicyCard(p, autoOpen = false) {
   const isLocked = p.applied_periods && p.applied_periods.length > 0;
   const appliedLabel = isLocked
     ? `<span class="bd bd-locked" style="font-size:11px">${p.applied_periods.length}개 기간 적용 중 🔒</span>`
@@ -1931,7 +1934,7 @@ function renderPolicyCard(p) {
   return `
     <div class="period-card" data-policy-id="${p.id}" style="margin-bottom:8px">
       <div class="period-card-header" onclick="togglePolicyCard(${p.id})">
-        <span class="toggle-icon" id="policyToggle_${p.id}">▶</span>
+        <span class="toggle-icon" id="policyToggle_${p.id}">${autoOpen ? '▼' : '▶'}</span>
         <strong style="font-size:14px">${escapeHtml(p.name)}</strong>
         ${appliedLabel}
         <span style="color:var(--muted);font-size:12px">${criteria.length}개 등급</span>
@@ -1942,7 +1945,7 @@ function renderPolicyCard(p) {
           <button class="btn btn-sm" style="background:none;border:1px solid #F09595;color:#A32D2D;padding:3px 8px;font-size:11px" onclick="event.stopPropagation(); confirmDeletePolicy(${p.id})">삭제</button>
         </div>
       </div>
-      <div class="period-card-body" id="policyBody_${p.id}" style="display:none">
+      <div class="period-card-body" id="policyBody_${p.id}" style="display:${autoOpen ? 'block' : 'none'}">
         ${p.description ? `<div style="font-size:13px;color:var(--muted);margin-bottom:10px">${escapeHtml(p.description)}</div>` : ''}
         <table class="tbl" style="margin-bottom:12px">
           <thead><tr>

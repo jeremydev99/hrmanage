@@ -714,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | GRADE-AUTO-OPEN — 등급정책 탭 진입 시 활성 기간 바인딩 정책 자동 펼침: renderPolicyCard(p, autoOpen) 파라미터 추가, activeIds Set으로 is_active 기간 보유 정책 판정, 초기 display/아이콘(▼/▶) 조건 렌더. 서버·DB 무변경. (PROMPT GRADE-AUTO-OPEN) | Claude Code |
 | 2026-06-10 | TZ-FIX — 감사로그 UTC→KST 변환 버그 수정: created_at raw slice → fmtDT(utcStr, tz) 헬퍼 적용. renderAdmAudit에서 /settings/timezone 병렬 fetch 추가. 저장은 UTC 유지, 표시 레이어에서만 변환. (PROMPT TZ-FIX) | Claude Code |
 | 2026-06-10 | OKR-2 — OKR 등급 부여(모델 B 완성): okr_cycles에 grade/grade_comment/evaluated_by/evaluated_at nullable 추가(prisma db push). PrismaAdminRepository: findOkrEvalTargets(직속 하부·전사 admin), setOkrCycleGrade, getOkrCycleOwner, getOkrGradeStats, findAllOkrCycles grade 필드 포함. 서버: GET /api/okr/eval-targets, POST /api/okr/:cycleId/grade(권한검증·auditLog), GET /api/okr/grade-criteria(첫 정책 등급목록), GET /api/okr/grade-stats(admin). 클라: Pages.okrGrade(평가대상 목록·O/KR 진도율·등급 드롭다운·의견·저장), saveOkrGrade, 경영자 통계 테이블(admin). OKR 메뉴 'OKR 평가' 추가(데스크탑·모바일·라우터). okr-eval.js: 본인 등급+의견 표시. 전사 공개(/api/okr/all) 등급 미노출 유지. % 자동산식 없음. (PROMPT OKR-2) | Claude Code |
 | 2026-06-10 | SCORE-BAR — 성과관리 홈 기간 카드 최종 점수 BAR width 수정: score/5*100(0-5 별점 가정) → score(0-100 포인트 직접). renderMyPerfView·renderTeamPerfView 2곳 수정. 점수 없는 기간 BAR 미표시 유지. (PROMPT SCORE-BAR) | Claude Code |
