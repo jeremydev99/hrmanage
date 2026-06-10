@@ -56,6 +56,7 @@ async function renderAdmAccounts() {
       API.get('/organizations').catch(() => []),
     ]);
     const orgList = Array.isArray(orgs) ? orgs : [];
+    const orgMap  = Object.fromEntries(orgList.map(o => [o.id, o.name]));
     const reqs    = Array.isArray(signupReqs) ? signupReqs : [];
     const users   = Array.isArray(allUsers)   ? allUsers   : [];
     const pending  = reqs.filter(r => r.account_status === 'pending');
@@ -164,7 +165,7 @@ async function renderAdmAccounts() {
             ${active.map(u => `<tr>
               <td style="font-weight:500">${u.name}</td>
               <td style="font-size:12px;color:var(--muted)">${u.email}</td>
-              <td style="font-size:12px;color:var(--muted)">${u.dept||'-'} · ${u.title||'-'}</td>
+              <td style="font-size:12px;color:var(--muted)">${orgLabelOf(u,orgMap)||'-'} · ${u.title||'-'}</td>
               <td>${roleBadge(u.role)}</td>
               <td><span class="bd ${u.is_active ? 'bd-approved' : 'bd-rejected'}">${u.is_active ? '활성' : '비활성'}</span></td>
               <td>${String(u.id) !== String(App.user.id)
@@ -609,7 +610,8 @@ let _orgChartCtrl = null; // AbortController for chart event listeners
 async function renderAdmOrg() {
   const el = document.getElementById('adm-org'); if(!el) return;
   if (_orgChartCtrl) { _orgChartCtrl.abort(); _orgChartCtrl = null; }
-  const users = await API.get('/users');
+  const [users, orgs] = await Promise.all([API.get('/users'), API.get('/organizations').catch(() => [])]);
+  const orgMap = Object.fromEntries((Array.isArray(orgs)?orgs:[]).map(o => [o.id, o.name]));
   el.innerHTML = `
     <div style="display:flex;gap:8px;margin-bottom:12px">
       <button class="btn btn-sm ${_orgViewMode==='list'?'btn-purple':'btn-ghost'}" onclick="_setOrgView('list')">📋 목록 방식</button>
@@ -617,8 +619,8 @@ async function renderAdmOrg() {
     </div>
     <div id="org-view-area"></div>`;
   const area = document.getElementById('org-view-area');
-  if (_orgViewMode === 'chart') _renderOrgChart(users, area);
-  else _renderOrgList(users, area);
+  if (_orgViewMode === 'chart') _renderOrgChart(users, area, orgMap);
+  else _renderOrgList(users, area, orgMap);
 }
 
 function _setOrgView(mode) {
@@ -628,7 +630,7 @@ function _setOrgView(mode) {
 }
 
 /* ── 목록 방식 ── */
-function _renderOrgList(users, el) {
+function _renderOrgList(users, el, orgMap) {
   const roots = users.filter(u=>!u.manager_id);
   function nodeHtml(u, depth) {
     const children = users.filter(x=>String(x.manager_id)===String(u.id));
@@ -641,7 +643,7 @@ function _renderOrgList(users, el) {
         <div class="avatar" style="background:var(--o100);color:var(--o800)">${u.name.slice(0,2)}</div>
         <div style="flex:1">
           <div style="font-weight:500">${u.name} ${roleBadge(u.role)}</div>
-          <div style="font-size:12px;color:var(--muted)">${u.dept||''} · ${u.title||''}
+          <div style="font-size:12px;color:var(--muted)">${orgLabelOf(u,orgMap)||''} · ${u.title||''}
             ${approvers.length?`<span style="color:var(--teal);margin-left:6px">승인자: ${approvers.join(', ')}</span>`:''}
           </div>
         </div>
@@ -662,7 +664,7 @@ function _renderOrgList(users, el) {
 }
 
 /* ── 차트 방식 ── */
-function _renderOrgChart(users, el) {
+function _renderOrgChart(users, el, orgMap) {
   const NODE_W = 164;
   let positions = JSON.parse(localStorage.getItem('orgChartLayout')||'{}');
   // 저장된 위치가 없는 사용자가 있으면 자동 레이아웃 실행
@@ -716,7 +718,7 @@ function _renderOrgChart(users, el) {
             ${u.name||''}${u.is_active===0?' <span style="font-size:9px;color:var(--muted)">(비활성)</span>':''}
           </div>
           <div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-            ${[u.dept,u.grade,u.title].filter(Boolean).join(' · ')||'—'}
+            ${[orgLabelOf(u,orgMap),u.grade,u.title].filter(Boolean).join(' · ')||'—'}
           </div>
         </div>
       </div>
@@ -1072,6 +1074,10 @@ const ACTION_LABELS = {
 };
 
 let _auditFilter = '';
+
+function orgLabelOf(u, orgMap) {
+  return (u.org_id && orgMap[u.org_id]) ? orgMap[u.org_id] : (u.dept || '');
+}
 
 function fmtDT(utcStr, tz) {
   if (!utcStr) return '';
