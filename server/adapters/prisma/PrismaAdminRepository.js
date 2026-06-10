@@ -375,7 +375,9 @@ class PrismaAdminRepository {
   // OKR 전체 사이클 조회 (objectives + key_results 포함)
   async findAllOkrCycles(userId) {
     const cycles = this._toNum(await this.prisma.$queryRaw`
-      SELECT * FROM okr_cycles WHERE user_id=${Number(userId)} ORDER BY created_at DESC
+      SELECT id, user_id, period_label, eval_year, phase,
+             grade, grade_comment, evaluated_by, evaluated_at, created_at, updated_at
+      FROM okr_cycles WHERE user_id=${Number(userId)} ORDER BY created_at DESC
     `);
     for (const c of cycles) {
       const objs = this._toNum(await this.prisma.$queryRaw`
@@ -472,6 +474,82 @@ class PrismaAdminRepository {
       ORDER BY u.name
     `;
     return this._toNum(rows);
+  }
+
+  // OKR-2: 평가 대상 OKR 목록 (직속 하부 or 전사 for admin)
+  async findOkrEvalTargets(evaluatorId, isAdmin) {
+    const users = isAdmin
+      ? this._toNum(await this.prisma.$queryRaw`
+          SELECT id, name, dept, title, manager_id FROM users
+          WHERE is_active=1 AND (account_status='approved' OR account_status IS NULL)
+            AND id != ${Number(evaluatorId)}
+          ORDER BY dept, name
+        `)
+      : this._toNum(await this.prisma.$queryRaw`
+          SELECT id, name, dept, title, manager_id FROM users
+          WHERE is_active=1 AND (account_status='approved' OR account_status IS NULL)
+            AND manager_id = ${Number(evaluatorId)}
+          ORDER BY dept, name
+        `);
+    const result = [];
+    for (const u of users) {
+      const cycles = this._toNum(await this.prisma.$queryRaw`
+        SELECT id, period_label, eval_year, phase, grade, grade_comment, evaluated_by, evaluated_at
+        FROM okr_cycles WHERE user_id=${Number(u.id)} ORDER BY eval_year DESC, created_at DESC
+      `);
+      if (!cycles.length) continue;
+      for (const c of cycles) {
+        const objs = this._toNum(await this.prisma.$queryRaw`
+          SELECT id, title, description, sort_order FROM okr_objectives
+          WHERE cycle_id=${Number(c.id)} ORDER BY sort_order
+        `);
+        for (const obj of objs) {
+          obj.key_results = this._toNum(await this.prisma.$queryRaw`
+            SELECT id, title, target_value, current_value, unit, sort_order
+            FROM okr_key_results WHERE objective_id=${Number(obj.id)} ORDER BY sort_order
+          `);
+        }
+        c.objectives = objs;
+      }
+      result.push({ ...u, cycles });
+    }
+    return result;
+  }
+
+  // OKR-2: cycle의 소유자 확인 (권한 검증용)
+  async getOkrCycleOwner(cycleId) {
+    const rows = this._toNum(await this.prisma.$queryRaw`
+      SELECT id, user_id FROM okr_cycles WHERE id=${Number(cycleId)} LIMIT 1
+    `);
+    return rows[0] || null;
+  }
+
+  // OKR-2: 등급 부여/갱신
+  async setOkrCycleGrade(cycleId, grade, gradeComment, evaluatedBy) {
+    await this.prisma.okrCycle.update({
+      where: { id: Number(cycleId) },
+      data: {
+        grade:        grade || null,
+        gradeComment: gradeComment || null,
+        evaluatedBy:  evaluatedBy ? Number(evaluatedBy) : null,
+        evaluatedAt:  new Date().toISOString().slice(0, 19).replace('T', ' '),
+      },
+    });
+  }
+
+  // OKR-2: 경영자 통계 — 기간별 OKR 등급 분포
+  async getOkrGradeStats() {
+    const rows = this._toNum(await this.prisma.$queryRaw`
+      SELECT oc.period_label, oc.eval_year, oc.grade,
+             COUNT(*) as cnt,
+             u.name AS user_name, u.dept
+      FROM okr_cycles oc
+      JOIN users u ON u.id = oc.user_id
+      WHERE oc.grade IS NOT NULL
+      GROUP BY oc.period_label, oc.eval_year, oc.grade
+      ORDER BY oc.eval_year DESC, oc.period_label, oc.grade
+    `);
+    return rows;
   }
 
   // grade-distribution count by grade

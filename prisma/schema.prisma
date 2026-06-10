@@ -317,13 +317,17 @@ model GradePolicyCriteria {
 }
 
 model OkrCycle {
-  id          Int     @id @default(autoincrement())
-  userId      Int     @map("user_id")
-  periodLabel String  @map("period_label")
-  evalYear    String  @map("eval_year")
-  phase       String? @default("draft")
-  created_at  String?
-  updated_at  String?
+  id           Int     @id @default(autoincrement())
+  userId       Int     @map("user_id")
+  periodLabel  String  @map("period_label")
+  evalYear     String  @map("eval_year")
+  phase        String? @default("draft")
+  grade        String?
+  gradeComment String? @map("grade_comment")
+  evaluatedBy  Int?    @map("evaluated_by")
+  evaluatedAt  String? @map("evaluated_at")
+  created_at   String?
+  updated_at   String?
 
   @@map("okr_cycles")
 }

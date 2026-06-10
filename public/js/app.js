@@ -117,6 +117,7 @@ const App = {
             <div id="dd-okr" class="nav-dd-menu">
               <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('okrEval')">✏️ 내 OKR 작성·수정</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('okrGrade')">📝 OKR 평가</div>
             </div>
           </div>
 
@@ -178,6 +179,7 @@ const App = {
       'admin':          Pages.admin,
       'okrDashboard':   Pages.okrDashboard,
       'okrEval':        Pages.okrEval,
+      'okrGrade':       Pages.okrGrade,
       'perfHome':       Pages.perfHome,
     };
     if (P[page]) P[page]();
@@ -223,6 +225,7 @@ function toggleMobileMenu() {
       items: [
         { label: 'OKR 현황',        navigate: 'okrDashboard' },
         { label: '내 OKR 작성·수정', navigate: 'okrEval'     },
+        { label: 'OKR 평가',        navigate: 'okrGrade'     },
       ]
     },
   ];
@@ -536,6 +539,193 @@ Pages.okrDashboard = async function() {
     area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
   }
 };
+
+// OKR-2: OKR 평가 화면 (직속 하부·master/admin용)
+Pages.okrGrade = async function() {
+  const area = document.getElementById('main-area');
+  area.innerHTML = '<div class="spinner">로딩 중...</div>';
+  try {
+    const user = App.user;
+    const isAdmin = ['master','admin'].includes(user?.role);
+    const [targets, gradeMeta] = await Promise.all([
+      API.get('/okr/eval-targets').catch(() => []),
+      API.get('/okr/grade-criteria').catch(() => ({ criteria: [] })),
+    ]);
+    area.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.style.marginBottom = '16px';
+    header.innerHTML = `
+      <div style="font-size:18px;font-weight:700;color:var(--o800)">📝 OKR 평가</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">
+        진도율은 참고 지표입니다 — 등급은 평가자의 종합 판단으로 결정됩니다.
+      </div>`;
+    area.appendChild(header);
+
+    if (!targets.length) {
+      const empty = document.createElement('div');
+      empty.className = 'card';
+      empty.innerHTML = `<div class="alert alert-orange">평가 대상자가 없습니다. OKR이 작성된 직속 구성원만 표시됩니다.</div>`;
+      area.appendChild(empty);
+    }
+
+    const gradeOpts = (gradeMeta.criteria || []).map(c =>
+      `<option value="${c.grade_code}">${c.grade_code} — ${c.grade_name}</option>`
+    ).join('');
+
+    targets.forEach(target => {
+      const section = document.createElement('div');
+      section.className = 'card';
+      section.style.marginBottom = '12px';
+      section.innerHTML = `
+        <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:12px">
+          👤 ${target.name}
+          <span style="font-size:12px;font-weight:400;color:var(--muted)">${target.dept||''} ${target.title||''}</span>
+        </div>`;
+
+      target.cycles.forEach(cycle => {
+        let totalKRs = 0, totalPct = 0;
+        (cycle.objectives || []).forEach(obj =>
+          (obj.key_results || []).forEach(kr => {
+            totalKRs++;
+            totalPct += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
+          })
+        );
+        const avg = totalKRs > 0 ? Math.round(totalPct / totalKRs) : 0;
+        const col = avg >= 70 ? 'var(--green)' : avg >= 40 ? 'var(--o500)' : '#E53935';
+
+        const cycleDiv = document.createElement('div');
+        cycleDiv.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px';
+        const savedGrade = cycle.grade || '';
+        const savedComment = cycle.grade_comment || '';
+        cycleDiv.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+            <div>
+              <span style="font-size:14px;font-weight:600">${cycle.period_label}</span>
+              <span style="font-size:12px;color:var(--muted);margin-left:6px">${cycle.eval_year}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span style="font-size:20px;font-weight:800;color:${col}">${avg}%</span>
+              ${savedGrade ? `<span class="bd bd-locked" style="font-size:13px">${savedGrade}</span>` : ''}
+            </div>
+          </div>
+          <div style="background:var(--o100);border-radius:20px;height:6px;margin-bottom:10px">
+            <div style="background:${col};border-radius:20px;height:100%;width:${Math.min(avg,100)}%;transition:width .4s"></div>
+          </div>
+          ${(cycle.objectives || []).map((obj, oi) => {
+            const op = obj.key_results.length
+              ? Math.round(obj.key_results.reduce((a,kr) =>
+                  a + (kr.target_value>0?(kr.current_value/kr.target_value)*100:0),0)
+                  / obj.key_results.length) : 0;
+            const oc = op>=70?'var(--green)':op>=40?'var(--o500)':'#E53935';
+            return `<div style="border-left:3px solid var(--o200);padding:6px 8px;margin-bottom:6px;font-size:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+                <span style="font-weight:600;color:var(--o800)">🎯 O${oi+1}. ${obj.title}</span>
+                <span style="font-weight:700;color:${oc}">${op}%</span>
+              </div>
+              ${obj.key_results.map((kr,ki) => {
+                const kp = kr.target_value>0?Math.round((kr.current_value/kr.target_value)*100):0;
+                const kc = kp>=70?'var(--green)':kp>=40?'var(--o500)':'#E53935';
+                return `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;border-top:1px solid var(--o50);color:var(--o700)">
+                  <span style="color:var(--muted)">KR${ki+1}</span>
+                  <span style="flex:1">${kr.title}</span>
+                  <span style="color:var(--muted)">${kr.current_value}/${kr.target_value}${kr.unit}</span>
+                  <span style="font-weight:700;color:${kc};width:32px;text-align:right">${kp}%</span>
+                </div>`;
+              }).join('')}
+            </div>`;
+          }).join('')}
+          <div style="margin-top:10px">
+            <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+              <div style="flex:1;min-width:180px">
+                <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:4px">종합 등급 <span style="color:#E53935">*</span></label>
+                <select id="okr-grade-sel-${cycle.id}"
+                  style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+                  <option value="">— 선택 —</option>
+                  ${gradeOpts}
+                </select>
+              </div>
+              <div style="flex:2;min-width:200px">
+                <label style="font-size:12px;color:var(--o600);font-weight:500;display:block;margin-bottom:4px">종합 의견</label>
+                <textarea id="okr-grade-cmt-${cycle.id}"
+                  placeholder="종합 의견을 작성하세요..."
+                  style="width:100%;min-height:60px;resize:vertical;font-size:13px"></textarea>
+              </div>
+            </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+              <button class="btn btn-purple btn-sm"
+                onclick="saveOkrGrade(${cycle.id})">등급 저장</button>
+              ${savedGrade
+                ? `<span style="font-size:12px;color:var(--muted)">현재: <strong>${savedGrade}</strong>${savedComment ? ' — ' + savedComment : ''}</span>`
+                : ''}
+            </div>
+          </div>`;
+
+        // 저장된 값 초기값 세팅
+        setTimeout(() => {
+          const sel = document.getElementById(`okr-grade-sel-${cycle.id}`);
+          const cmt = document.getElementById(`okr-grade-cmt-${cycle.id}`);
+          if (sel && savedGrade) sel.value = savedGrade;
+          if (cmt && savedComment) cmt.value = savedComment;
+        }, 0);
+
+        section.appendChild(cycleDiv);
+      });
+      area.appendChild(section);
+    });
+
+    // 경영자 통계 (master/admin)
+    if (isAdmin) {
+      try {
+        const stats = await API.get('/okr/grade-stats').catch(() => []);
+        if (stats.length) {
+          const statDiv = document.createElement('div');
+          statDiv.className = 'card';
+          statDiv.style.marginTop = '16px';
+          const byPeriod = {};
+          stats.forEach(r => {
+            const key = `${r.eval_year} ${r.period_label}`;
+            if (!byPeriod[key]) byPeriod[key] = { period: key, grades: {} };
+            byPeriod[key].grades[r.grade] = Number(r.cnt);
+          });
+          const gradeCodes = [...new Set(stats.map(r => r.grade))].sort();
+          statDiv.innerHTML = `
+            <div style="font-size:14px;font-weight:600;color:var(--o800);margin-bottom:12px">📊 경영자 통계 — OKR 등급 분포</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead>
+                <tr style="background:var(--o50)">
+                  <th style="padding:6px 10px;text-align:left;border-bottom:1px solid var(--o100)">기간</th>
+                  ${gradeCodes.map(g => `<th style="padding:6px 10px;text-align:center;border-bottom:1px solid var(--o100)">${g}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${Object.values(byPeriod).map(p => `
+                  <tr style="border-bottom:1px solid var(--o50)">
+                    <td style="padding:6px 10px;font-weight:500">${p.period}</td>
+                    ${gradeCodes.map(g => `<td style="padding:6px 10px;text-align:center;color:var(--o700)">${p.grades[g] || 0}</td>`).join('')}
+                  </tr>`).join('')}
+              </tbody>
+            </table>`;
+          area.appendChild(statDiv);
+        }
+      } catch(e) { /* 통계 실패는 무시 */ }
+    }
+  } catch(err) {
+    area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
+  }
+};
+
+async function saveOkrGrade(cycleId) {
+  const sel = document.getElementById(`okr-grade-sel-${cycleId}`);
+  const cmt = document.getElementById(`okr-grade-cmt-${cycleId}`);
+  const grade = sel?.value;
+  if (!grade) { showAlert('등급을 선택해주세요.', 'orange'); return; }
+  try {
+    await API.post(`/okr/${cycleId}/grade`, { grade, grade_comment: cmt?.value || '' });
+    showAlert('OKR 등급이 저장되었습니다.', 'green');
+    setTimeout(() => Pages.okrGrade(), 800);
+  } catch(e) { showAlert(e.message, 'red'); }
+}
 
 Pages.perfHome = async function() {
   const area = document.getElementById('main-area');

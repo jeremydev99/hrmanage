@@ -80,6 +80,11 @@ Pages.okrEval = async function(periodLabel, evalYear, mode) {
             <div style="font-size:12px;color:var(--muted)">${cycle.eval_year} · OKR</div>
           </div>
           <div style="display:flex;align-items:center;gap:14px">
+            ${cycle.grade ? `
+            <div style="text-align:center">
+              <span class="bd bd-locked" style="font-size:14px">${cycle.grade}</span>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">OKR 등급</div>
+            </div>` : ''}
             <div style="text-align:center">
               <div style="font-size:28px;font-weight:800;color:${col}">${avg}%</div>
               <div style="font-size:11px;color:var(--muted)">전체 달성률</div>
@@ -88,6 +93,10 @@ Pages.okrEval = async function(periodLabel, evalYear, mode) {
               onclick="updateOKRProgress(${cycle.id})">진행률 업데이트</button>
           </div>
         </div>
+        ${cycle.grade && cycle.grade_comment ? `
+        <div style="margin-bottom:10px;padding:8px 12px;background:var(--o50);border-radius:6px;font-size:12px;color:var(--o700)">
+          <strong>평가 의견:</strong> ${cycle.grade_comment}
+        </div>` : ''}
         <div style="background:var(--o100);border-radius:20px;height:10px;margin-bottom:16px">
           <div style="background:${col};border-radius:20px;height:100%;
                       width:${Math.min(avg,100)}%;transition:width .4s"></div>

@@ -1681,6 +1681,59 @@ app.post('/api/okr/:id/progress', auth, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// OKR-2: 평가 대상 OKR 조회 (직속 하부 or 전사 for admin)
+app.get('/api/okr/eval-targets', auth, async (req, res) => {
+  try {
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    const targets = await adminRepo.findOkrEvalTargets(req.user.sub, isAdmin);
+    res.json(targets);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// OKR-2: 등급 부여/갱신 (직속 상사·master/admin 권한)
+app.post('/api/okr/:cycleId/grade', auth, async (req, res) => {
+  try {
+    const cycleId = Number(req.params.cycleId);
+    const { grade, grade_comment } = req.body;
+    if (!grade) return res.status(400).json({ error: '등급을 선택해주세요.' });
+    const cycle = await adminRepo.getOkrCycleOwner(cycleId);
+    if (!cycle) return res.status(404).json({ error: 'OKR 사이클을 찾을 수 없습니다.' });
+    const isAdmin = ['master','admin'].includes(req.user.role);
+    if (!isAdmin) {
+      const targetUser = await userRepo.findById(cycle.user_id);
+      if (!targetUser || String(targetUser.manager_id) !== String(req.user.sub))
+        return res.status(403).json({ error: '평가 권한이 없습니다.' });
+    }
+    await adminRepo.setOkrCycleGrade(cycleId, grade, grade_comment, req.user.sub);
+    auditLog(req.user.sub, 'OKR_GRADE_ASSIGNED', cycleId, null, `grade=${grade}`, req.ip);
+    res.json({ ok: true });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// OKR-2: 등급 기준 목록 (첫 번째 GradePolicy 기준)
+app.get('/api/okr/grade-criteria', auth, async (req, res) => {
+  try {
+    const policyId = await gradePolicyRepo.getFirstPolicyId();
+    if (!policyId) return res.json({ policy_name: '', criteria: [] });
+    const policy = await gradePolicyRepo.getPolicyWithCriteria(policyId);
+    res.json({
+      policy_name: policy?.name || '',
+      criteria: (policy?.criteria || []).map(c => ({
+        grade_code: c.grade_code,
+        grade_name: c.grade_name,
+      })),
+    });
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
+// OKR-2: 경영자 통계 (master/admin)
+app.get('/api/okr/grade-stats', auth, adminOnly, async (req, res) => {
+  try {
+    const stats = await adminRepo.getOkrGradeStats();
+    res.json(stats);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // 전직원 평가 현황 요약 [INFRA-A6: adminRepo async 전환]
 app.get('/api/admin/eval-status', auth, adminOnly, async (req, res) => {
   try {

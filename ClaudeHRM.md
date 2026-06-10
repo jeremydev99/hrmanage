@@ -706,6 +706,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | OKR-2 — OKR 등급 부여(모델 B 완성): okr_cycles에 grade/grade_comment/evaluated_by/evaluated_at nullable 추가(prisma db push). PrismaAdminRepository: findOkrEvalTargets(직속 하부·전사 admin), setOkrCycleGrade, getOkrCycleOwner, getOkrGradeStats, findAllOkrCycles grade 필드 포함. 서버: GET /api/okr/eval-targets, POST /api/okr/:cycleId/grade(권한검증·auditLog), GET /api/okr/grade-criteria(첫 정책 등급목록), GET /api/okr/grade-stats(admin). 클라: Pages.okrGrade(평가대상 목록·O/KR 진도율·등급 드롭다운·의견·저장), saveOkrGrade, 경영자 통계 테이블(admin). OKR 메뉴 'OKR 평가' 추가(데스크탑·모바일·라우터). okr-eval.js: 본인 등급+의견 표시. 전사 공개(/api/okr/all) 등급 미노출 유지. % 자동산식 없음. (PROMPT OKR-2) | Claude Code |
 | 2026-06-10 | SCORE-BAR — 성과관리 홈 기간 카드 최종 점수 BAR width 수정: score/5*100(0-5 별점 가정) → score(0-100 포인트 직접). renderMyPerfView·renderTeamPerfView 2곳 수정. 점수 없는 기간 BAR 미표시 유지. (PROMPT SCORE-BAR) | Claude Code |
 | 2026-06-10 | OKR-NAV — OKR top-level 메뉴 승격: 성과관리 드롭다운에서 '🎯 OKR 현황' 제거(성과관리=MBO 전용), 새 top-level 'OKR' 드롭다운 신설(OKR 현황·내 OKR 작성·수정), 모바일 nav에도 OKR 그룹 추가. 라우트 P map에 okrEval 등록. 전 역할 노출(권한 게이트 없음). (PROMPT OKR-NAV) | Claude Code |
 | 2026-06-10 | OKR-1 — OKR 현황 전사 공개 전환: GET /api/okr/all(auth만, 내용·진도율, 점수/등급 제외) 신규. PrismaAdminRepository.findAllOkrCyclesPublic(users JOIN okr_cycles, KR weight 제외). okrDashboard 전면 재작성: 선언문 배너(5원칙+말미), 전사 사용자별 카드(아바타·달성률), 사이클별 O/KR 진도율 % 진행바. 본인 OKR 작성 버튼 유지. (PROMPT OKR-1) | Claude Code |
