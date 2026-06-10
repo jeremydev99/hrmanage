@@ -431,6 +431,14 @@ POST   /api/admin/final/:id/unlock      최종 평가 잠금 해제 (master)
     - lazy 로딩: 첫 pane만 즉시 렌더, 탭 클릭 시 해당 pane lazy 렌더
     - CSS: .goal-report-card, .round-block, .item-block, .report-block, .feedback-block, .bd-legacy, .summary-card
 
+31. **시간 처리 원칙** (2026-06-10, TZ-FIX):
+    - **저장**: 모든 `*_at` 컬럼은 UTC로 저장 (`new Date().toISOString()` 또는 Prisma 기본값). DB를 KST로 바꾸지 않음.
+    - **표시**: 프론트엔드에서 `fmtDT(utcStr, tz)` 헬퍼 사용 — UTC 문자열 + `app_settings.timezone` 기반 변환.
+    - `fmtDT` 위치: `public/js/pages/admin.js` (감사로그 탭 근방). 다른 화면으로 확대 시 공용 헬퍼 이동 검토.
+    - `fmtDT` 구현: `new Date(utcStr.replace(' ','T')+'Z').toLocaleString('ko-KR', { timeZone, ... })`
+    - 시간대 설정은 `GET /api/settings/timezone` → `tzData.timezone`. 미설정 fallback: `'Asia/Seoul'`.
+    - 날짜만 표시하는 필드(`.slice(0,10)`)는 UTC/KST 1일 차이 위험 있으나 허용(허용 범위 내). 시·분 포함 표시는 반드시 `fmtDT` 적용.
+
 29. **목표별 보고/피드백 연동** (2026-06-01, PROMPT 64A):
     - `progress_reports`에 `goal_id INTEGER NULL` + `round INTEGER DEFAULT 1` 컬럼 추가
     - `goal_id=NULL` = 종합 의견 또는 레거시(기존 1,510행) 보존, `goal_id IS NOT NULL` = 목표별 보고
@@ -706,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | TZ-FIX — 감사로그 UTC→KST 변환 버그 수정: created_at raw slice → fmtDT(utcStr, tz) 헬퍼 적용. renderAdmAudit에서 /settings/timezone 병렬 fetch 추가. 저장은 UTC 유지, 표시 레이어에서만 변환. (PROMPT TZ-FIX) | Claude Code |
 | 2026-06-10 | OKR-2 — OKR 등급 부여(모델 B 완성): okr_cycles에 grade/grade_comment/evaluated_by/evaluated_at nullable 추가(prisma db push). PrismaAdminRepository: findOkrEvalTargets(직속 하부·전사 admin), setOkrCycleGrade, getOkrCycleOwner, getOkrGradeStats, findAllOkrCycles grade 필드 포함. 서버: GET /api/okr/eval-targets, POST /api/okr/:cycleId/grade(권한검증·auditLog), GET /api/okr/grade-criteria(첫 정책 등급목록), GET /api/okr/grade-stats(admin). 클라: Pages.okrGrade(평가대상 목록·O/KR 진도율·등급 드롭다운·의견·저장), saveOkrGrade, 경영자 통계 테이블(admin). OKR 메뉴 'OKR 평가' 추가(데스크탑·모바일·라우터). okr-eval.js: 본인 등급+의견 표시. 전사 공개(/api/okr/all) 등급 미노출 유지. % 자동산식 없음. (PROMPT OKR-2) | Claude Code |
 | 2026-06-10 | SCORE-BAR — 성과관리 홈 기간 카드 최종 점수 BAR width 수정: score/5*100(0-5 별점 가정) → score(0-100 포인트 직접). renderMyPerfView·renderTeamPerfView 2곳 수정. 점수 없는 기간 BAR 미표시 유지. (PROMPT SCORE-BAR) | Claude Code |
 | 2026-06-10 | OKR-NAV — OKR top-level 메뉴 승격: 성과관리 드롭다운에서 '🎯 OKR 현황' 제거(성과관리=MBO 전용), 새 top-level 'OKR' 드롭다운 신설(OKR 현황·내 OKR 작성·수정), 모바일 nav에도 OKR 그룹 추가. 라우트 P map에 okrEval 등록. 전 역할 노출(권한 게이트 없음). (PROMPT OKR-NAV) | Claude Code |

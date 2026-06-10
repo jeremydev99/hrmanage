@@ -1062,12 +1062,23 @@ const ACTION_LABELS = {
 
 let _auditFilter = '';
 
+function fmtDT(utcStr, tz) {
+  if (!utcStr) return '';
+  const d = new Date(utcStr.replace(' ', 'T') + 'Z');
+  return d.toLocaleString('ko-KR', {
+    timeZone: tz || 'Asia/Seoul',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
 async function renderAdmAudit() {
   const el = document.getElementById('adm-audit'); if(!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
     const url = _auditFilter ? `/admin/audit?action=${_auditFilter}` : '/admin/audit';
-    const logs = await API.get(url);
+    const [logs, tzData] = await Promise.all([API.get(url), API.get('/settings/timezone')]);
+    const tz = tzData?.timezone || 'Asia/Seoul';
 
     // 액션 종류 목록 (필터용)
     const actionTypes = [...new Set(logs.map(l => l.action))].sort();
@@ -1115,7 +1126,7 @@ async function renderAdmAudit() {
                 const isImportant = ['GOAL_REJECTED','FINAL_EVAL_LOCKED','ACCOUNT_DISABLED','FINAL_UNLOCK'].includes(l.action);
                 return `<tr style="${isImportant ? 'background:var(--o50)' : ''}">
                   <td style="font-size:11px;color:var(--muted);white-space:nowrap">
-                    ${(l.created_at||'').slice(0,16).replace('T',' ')}
+                    ${fmtDT(l.created_at, tz)}
                   </td>
                   <td style="font-size:13px;font-weight:500;white-space:nowrap">
                     ${l.actor_name||'(시스템)'}

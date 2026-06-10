@@ -72,6 +72,7 @@ prisma/schema.prisma     Prisma 스키마 (DB 종류 추상화)
 - **AES-256-CBC 암호화**: 목표명, KPI, 피드백, 의견 전체
 - **감사 로그**: 주요 변경 시 자동 기록
 - **관리자 dirty 추적**: `_adminDirty`, `markDirty()`, `clearDirty()` — 미저장 경고
+- **시간 처리**: 저장은 UTC(`new Date().toISOString()`), 표시는 `fmtDT(utcStr, tz)` 헬퍼로 `app_settings.timezone` 변환. DB를 KST로 바꾸지 말 것.
 
 → **상세 내용**: ClaudeHRM.md 참조
 
