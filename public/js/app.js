@@ -646,7 +646,7 @@ function renderMyPerfView(summary, user) {
       ${score !== null ? `
       <div style="background:var(--o100);border-radius:20px;height:8px">
         <div style="background:${scoreColor};border-radius:20px;height:100%;
-                    width:${Math.min(s.eval_mode==='OKR'?score:score/5*100,100)}%;transition:width .4s"></div>
+                    width:${Math.min(score,100)}%;transition:width .4s"></div>
       </div>` : ''}
     </div>`;
   }).join('');
@@ -679,7 +679,7 @@ function renderTeamPerfView(teamData) {
       <div style="display:flex;flex-direction:column;gap:6px">
         ${t.members.map(m => {
           const score = t.eval_mode==='OKR' ? m.okr_avg : m.final_score;
-          const pct = score !== null ? (t.eval_mode==='OKR' ? score : score/5*100) : 0;
+          const pct = score !== null ? score : 0;
           const col = pct>=70?'var(--green)':pct>=50?'var(--o500)':'#E53935';
           return `
           <div style="display:flex;align-items:center;gap:10px">
