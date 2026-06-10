@@ -1644,6 +1644,14 @@ app.patch('/api/users/:id/eval-mode', auth, adminOnly, async (req, res) => {
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
 
+// GET /api/okr/all — 전사 공개 OKR (auth만, 내용·진도율, 점수/등급 제외)
+app.get('/api/okr/all', auth, async (req, res) => {
+  try {
+    const cycles = await adminRepo.findAllOkrCyclesPublic();
+    res.json(cycles);
+  } catch(err) { res.status(500).json({ error: err.message }); }
+});
+
 // OKR CRUD
 app.get('/api/okr', auth, async (req, res) => {
   try {

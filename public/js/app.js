@@ -380,94 +380,138 @@ function updateNavForRole() {
   });
 }
 
-// OKR 현황 대시보드 (조회 전용)
+// OKR 현황 대시보드 — 전사 공개 (모델 B)
 Pages.okrDashboard = async function() {
   const area = document.getElementById('main-area');
   area.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const cycles = await API.get('/okr').catch(() => []);
+    const allCycles = await API.get('/okr/all').catch(() => []);
     area.innerHTML = '';
 
+    // ── 선언문 배너 ──
+    const banner = document.createElement('div');
+    banner.style.cssText = 'margin-bottom:20px;padding:16px 20px;background:linear-gradient(135deg,#fff7ed,#fff3e0);border:1px solid var(--o200);border-radius:10px';
+    banner.innerHTML = `
+      <div style="font-size:15px;font-weight:700;color:var(--o800);margin-bottom:10px">🎯 OKR 선언</div>
+      <ol style="margin:0;padding-left:18px;font-size:13px;color:var(--o700);line-height:1.9">
+        <li>OKR은 도전을 위한 것입니다. 높은 목표에 도전한 것 자체가 평가받습니다.</li>
+        <li>달성률이 곧 등급은 아닙니다. 점수로 보상을 기계적으로 산정하지 않습니다.</li>
+        <li>우리는 서열을 매기지 않습니다.</li>
+        <li>OKR은 모두에게 열려 있습니다. 누구나 어떤 조직의 OKR이든 볼 수 있습니다.</li>
+        <li>점수는 방향을 보기 위한 신호입니다. 평가가 아닙니다.</li>
+      </ol>
+      <div style="font-size:12px;color:var(--o500);margin-top:10px;font-style:italic">— 도전은 안전합니다. 실패는 배움입니다. 우리는 함께 더 높은 곳을 봅니다.</div>`;
+    area.appendChild(banner);
+
+    // ── 헤더 + 내 OKR 작성 버튼 ──
     const header = document.createElement('div');
-    header.style.marginBottom = '16px';
+    header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px';
     header.innerHTML = `
-      <div style="font-size:18px;font-weight:700;color:var(--o800)">🎯 OKR 현황</div>
-      <div style="font-size:12px;color:var(--muted)">전체 기간 OKR 달성률 (편집은 내 평가 탭에서)</div>`;
+      <div>
+        <div style="font-size:18px;font-weight:700;color:var(--o800)">전사 OKR 현황</div>
+        <div style="font-size:12px;color:var(--muted)">전 직원 OKR 공개 · 내용·진도율만 표시 (등급·평가 제외)</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="App.navigate('myEval')">✏️ 내 OKR 작성·수정</button>`;
     area.appendChild(header);
 
-    if (!cycles.length) {
-      area.innerHTML += `<div class="card"><div class="alert alert-orange">
-        작성된 OKR이 없습니다.
-        <button class="btn btn-ghost btn-sm" style="margin-left:8px"
-          onclick="App.navigate('myEval')">내 평가로 이동 →</button>
-      </div></div>`;
+    if (!allCycles.length) {
+      const empty = document.createElement('div');
+      empty.className = 'card';
+      empty.innerHTML = `<div class="alert alert-orange">아직 작성된 OKR이 없습니다.</div>`;
+      area.appendChild(empty);
       return;
     }
 
-    cycles.forEach(cycle => {
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.style.marginBottom = '12px';
+    // ── 사용자별 그룹핑 ──
+    const byUser = {};
+    for (const c of allCycles) {
+      const key = c.user_id;
+      if (!byUser[key]) byUser[key] = { name: c.user_name, dept: c.dept, title: c.title, cycles: [] };
+      byUser[key].cycles.push(c);
+    }
 
-      let totalKRs = 0, totalPct = 0;
-      cycle.objectives.forEach(obj =>
-        obj.key_results.forEach(kr => {
+    for (const uid of Object.keys(byUser)) {
+      const u = byUser[uid];
+      const userWrap = document.createElement('div');
+      userWrap.className = 'card';
+      userWrap.style.marginBottom = '12px';
+
+      // 사용자 헤더
+      let userAvgNum = 0, userTotal = 0;
+      u.cycles.forEach(c => c.objectives.forEach(o => o.key_results.forEach(kr => {
+        userTotal++;
+        userAvgNum += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
+      })));
+      const userAvg = userTotal > 0 ? Math.round(userAvgNum / userTotal) : 0;
+      const uCol = userAvg >= 70 ? 'var(--green)' : userAvg >= 40 ? 'var(--o500)' : '#E53935';
+
+      let html = `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--o100)">
+          <div class="avatar" style="width:32px;height:32px;font-size:11px;background:var(--o100);color:var(--o800);flex-shrink:0">${(u.name||'?').slice(0,2)}</div>
+          <div style="flex:1">
+            <span style="font-weight:600;font-size:14px">${u.name||''}</span>
+            <span style="font-size:11px;color:var(--muted);margin-left:6px">${u.dept||''} · ${u.title||''}</span>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:20px;font-weight:800;color:${uCol}">${userAvg}%</div>
+            <div style="font-size:10px;color:var(--muted)">전체 달성률</div>
+          </div>
+        </div>`;
+
+      // 사이클별
+      for (const cycle of u.cycles) {
+        let totalKRs = 0, totalPct = 0;
+        cycle.objectives.forEach(obj => obj.key_results.forEach(kr => {
           totalKRs++;
           totalPct += kr.target_value > 0 ? (kr.current_value / kr.target_value) * 100 : 0;
-        })
-      );
-      const avg = totalKRs > 0 ? Math.round(totalPct / totalKRs) : 0;
-      const col = avg >= 70 ? 'var(--green)' : avg >= 40 ? 'var(--o500)' : '#E53935';
+        }));
+        const avg = totalKRs > 0 ? Math.round(totalPct / totalKRs) : 0;
+        const col = avg >= 70 ? 'var(--green)' : avg >= 40 ? 'var(--o500)' : '#E53935';
 
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div>
-            <div style="font-size:15px;font-weight:600">${cycle.period_label}</div>
-            <div style="font-size:12px;color:var(--muted)">${cycle.eval_year} · OKR</div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-size:28px;font-weight:800;color:${col}">${avg}%</div>
-            <div style="font-size:11px;color:var(--muted)">전체 달성률</div>
-          </div>
-        </div>
-        <div style="background:var(--o100);border-radius:20px;height:10px;margin-bottom:16px">
-          <div style="background:${col};border-radius:20px;height:100%;
-                      width:${Math.min(avg,100)}%;transition:width .4s"></div>
-        </div>
-        ${cycle.objectives.map((obj, oi) => {
-          const op = obj.key_results.length
-            ? Math.round(obj.key_results.reduce((a,kr) =>
-                a + (kr.target_value>0?(kr.current_value/kr.target_value)*100:0),0)
-                / obj.key_results.length) : 0;
-          const oc = op>=70?'var(--green)':op>=40?'var(--o500)':'#E53935';
-          return `
-          <div style="border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-              <div style="font-size:13px;font-weight:600;color:var(--o800)">🎯 O${oi+1}. ${obj.title}</div>
-              <span style="font-size:14px;font-weight:700;color:${oc}">${op}%</span>
+        html += `
+          <div style="margin-bottom:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:13px;font-weight:600;color:var(--o700)">${cycle.period_label} · ${cycle.eval_year}</span>
+              <span style="font-size:13px;font-weight:700;color:${col}">${avg}%</span>
             </div>
-            ${obj.description?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">${obj.description}</div>`:''}
-            ${obj.key_results.map((kr,ki) => {
-              const kp = kr.target_value>0?Math.round((kr.current_value/kr.target_value)*100):0;
-              const kc = kp>=70?'var(--green)':kp>=40?'var(--o500)':'#E53935';
+            <div style="background:var(--o100);border-radius:10px;height:6px;margin-bottom:10px">
+              <div style="background:${col};border-radius:10px;height:100%;width:${Math.min(avg,100)}%;transition:width .4s"></div>
+            </div>
+            ${cycle.objectives.map((obj, oi) => {
+              const op = obj.key_results.length
+                ? Math.round(obj.key_results.reduce((a,kr) =>
+                    a + (kr.target_value>0?(kr.current_value/kr.target_value)*100:0),0)
+                    / obj.key_results.length) : 0;
+              const oc = op>=70?'var(--green)':op>=40?'var(--o500)':'#E53935';
               return `
-              <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
-                          font-size:12px;border-top:1px solid var(--o50)">
-                <span style="color:var(--muted);white-space:nowrap">KR${ki+1}</span>
-                <span style="flex:1;color:var(--o700)">${kr.title}</span>
-                <span style="color:var(--muted);white-space:nowrap">
-                  ${kr.current_value}/${kr.target_value}${kr.unit}</span>
-                <div style="width:80px;background:var(--o100);border-radius:10px;height:6px;flex-shrink:0">
-                  <div style="background:${kc};border-radius:10px;height:100%;width:${Math.min(kp,100)}%"></div>
+              <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:6px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                  <div style="font-size:12px;font-weight:600;color:var(--o800)">🎯 O${oi+1}. ${obj.title}</div>
+                  <span style="font-size:13px;font-weight:700;color:${oc}">${op}%</span>
                 </div>
-                <span style="font-weight:700;color:${kc};width:36px;text-align:right">${kp}%</span>
+                ${obj.description?`<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${obj.description}</div>`:''}
+                ${obj.key_results.map((kr,ki) => {
+                  const kp = kr.target_value>0?Math.round((kr.current_value/kr.target_value)*100):0;
+                  const kc = kp>=70?'var(--green)':kp>=40?'var(--o500)':'#E53935';
+                  return `
+                  <div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;border-top:1px solid var(--o50)">
+                    <span style="color:var(--muted);white-space:nowrap;min-width:28px">KR${ki+1}</span>
+                    <span style="flex:1;color:var(--o700)">${kr.title}</span>
+                    <span style="color:var(--muted);white-space:nowrap;font-size:11px">${kr.current_value}/${kr.target_value}${kr.unit}</span>
+                    <div style="width:70px;background:var(--o100);border-radius:10px;height:5px;flex-shrink:0">
+                      <div style="background:${kc};border-radius:10px;height:100%;width:${Math.min(kp,100)}%"></div>
+                    </div>
+                    <span style="font-weight:700;color:${kc};width:32px;text-align:right">${kp}%</span>
+                  </div>`;
+                }).join('')}
               </div>`;
             }).join('')}
           </div>`;
-        }).join('')}`;
-      area.appendChild(card);
-    });
+      }
+
+      userWrap.innerHTML = html;
+      area.appendChild(userWrap);
+    }
   } catch(err) {
     area.innerHTML = `<div class="alert alert-red">오류: ${err.message}</div>`;
   }

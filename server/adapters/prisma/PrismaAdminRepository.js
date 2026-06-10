@@ -391,6 +391,30 @@ class PrismaAdminRepository {
     return cycles;
   }
 
+  // OKR 전사 공개 조회 — 전 직원, 내용·진도율만, 점수/등급 제외
+  async findAllOkrCyclesPublic() {
+    const cycles = this._toNum(await this.prisma.$queryRaw`
+      SELECT oc.id, oc.user_id, oc.period_label, oc.eval_year, oc.phase, oc.created_at,
+             u.name AS user_name, u.dept, u.title
+      FROM okr_cycles oc
+      JOIN users u ON u.id = oc.user_id
+      ORDER BY u.name, oc.eval_year DESC, oc.created_at DESC
+    `);
+    for (const c of cycles) {
+      const objs = this._toNum(await this.prisma.$queryRaw`
+        SELECT * FROM okr_objectives WHERE cycle_id=${Number(c.id)} ORDER BY sort_order
+      `);
+      for (const obj of objs) {
+        obj.key_results = this._toNum(await this.prisma.$queryRaw`
+          SELECT id, objective_id, title, target_value, current_value, unit, sort_order
+          FROM okr_key_results WHERE objective_id=${Number(obj.id)} ORDER BY sort_order
+        `);
+      }
+      c.objectives = objs;
+    }
+    return cycles;
+  }
+
   // OKR 사이클 생성 (objectives + key_results 포함, 원자 처리)
   async createOkrCycleWithDetails(userId, periodLabel, evalYear, objectives) {
     return await this.prisma.$transaction(async (tx) => {

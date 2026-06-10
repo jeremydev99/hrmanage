@@ -706,6 +706,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | OKR-1 — OKR 현황 전사 공개 전환: GET /api/okr/all(auth만, 내용·진도율, 점수/등급 제외) 신규. PrismaAdminRepository.findAllOkrCyclesPublic(users JOIN okr_cycles, KR weight 제외). okrDashboard 전면 재작성: 선언문 배너(5원칙+말미), 전사 사용자별 카드(아바타·달성률), 사이클별 O/KR 진도율 % 진행바. 본인 OKR 작성 버튼 유지. (PROMPT OKR-1) | Claude Code |
 | 2026-06-09 | GRADE-DESC-LIST — 등급 정책 관리 목록 '등급 정의' 칸 내에 등급 정의(상단) + 상세 설명(고정높이60px+스크롤, o50 배경, "상세" 라벨) 분할 표시. 칸 추가/넓힘 없음, 상세 없는 등급 안전. (PROMPT GRADE-DESC-LIST) | Claude Code |
 | 2026-06-09 | GRADE-DESC Phase3 — 직원 최종평가 완료 화면에 등급 상세 설명 표시: GET /api/grade-policy/for-eval/:evalId 신규(auth, 본인 소유 확인), getPolicyForEvalCycle에 description·detailDesc 반환 추가, renderFinalSelf에서 matchCrit.detail_desc 있을 때 등급 상세 설명 블록 표시(o50 배경, pre-line). (PROMPT GRADE-DESC Phase3) | Claude Code |
 | 2026-06-09 | GRADE-DESC — 등급 정책 criteria에 detail_desc nullable 컬럼 추가(prisma db push). 편집 UI: 설명→등급 정의 라벨, 각 행 아래 등급 상세 설명 textarea(2행, resize). 잠금 시에도 등급 정의·상세 설명 편집 가능(PATCH /grade-policies/:id/criteria-desc). PrismaGradePolicyRepository: _flattenCriteria·create·update·updateCriteriaDesc 추가. removeCriteriaRow detail_desc 행 연동. (PROMPT GRADE-DESC) | Claude Code |
