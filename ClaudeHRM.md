@@ -714,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | APPROVAL-PREV-NOTE — 2차 승인 화면 이전 승인 이력에 1차 승인자 의견(note, 복호화) 표시: history 라우터 비-admin 권한 확장(isInApproverChain 체인 속 사용자면 note 허용), approvals.js 이력 항목에 h.note 조건 렌더(pre-wrap + escapeHtml, 없으면 생략). (PROMPT APPROVAL-PREV-NOTE) | Claude Code |
 | 2026-06-10 | ORG-DISPLAY-1 — 소속 표기 org_id 조직명 기반 통일: orgLabelOf(u,orgMap) 헬퍼 신설(org_id 있으면 조직명, 없으면 dept fallback), 조직도 관리 목록·차트 방식 dept→헬퍼, 활성 계정 관리 표 dept→헬퍼, renderAdmOrg /organizations 병렬 fetch 추가. dept 원본 무변경. (PROMPT ORG-DISPLAY-1) | Claude Code |
 | 2026-06-10 | ORG-MAPPING-1 — 가입 승인 화면 조직 배정 드롭다운 신설: 승인 폼 dept 텍스트 input→readonly 참고 표시+hidden 보존, ap-org-{id} 조직 드롭다운 추가(부서명 일치 시 자동 선택), approveAccount() org_id 페이로드 전송, approve 라우터 org_id 추출·전달, PrismaUserRepository.approveSignup orgId 필드 추가. (PROMPT ORG-MAPPING-1) | Claude Code |
 | 2026-06-10 | ORGREPO-FIX — 조직 배정 저장 시 'orgRepo is not defined' ReferenceError 수정: PATCH /api/users/:id/org에서 orgRepo → organizationRepo (정의 이름 오타, index.js:2442). (PROMPT ORGREPO-FIX) | Claude Code |

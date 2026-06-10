@@ -70,10 +70,13 @@ async function renderPendingApprovals(pending, el) {
       ${renderGoalsSummary(goals, App.categories)}
       ${history.length ? `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
         <div style="font-size:12px;color:var(--muted);margin-bottom:6px">이전 승인 이력</div>
-        ${history.map(h=>`<div class="user-row" style="padding:6px 0">
-          <div class="avatar" style="width:26px;height:26px;font-size:10px;background:var(--green-bg);color:var(--green)">${h.approver_name.slice(0,2)}</div>
-          <div style="flex:1;font-size:12px">${h.approver_name} (${h.level}차) <span class="bd bd-approved">승인</span></div>
-          <div style="font-size:11px;color:var(--muted)">${h.created_at?.slice(0,10)||''}</div>
+        ${history.map(h=>`<div class="user-row" style="padding:6px 0;align-items:flex-start">
+          <div class="avatar" style="width:26px;height:26px;font-size:10px;background:var(--green-bg);color:var(--green);flex-shrink:0">${h.approver_name.slice(0,2)}</div>
+          <div style="flex:1;font-size:12px">
+            ${h.approver_name} (${h.level}차) <span class="bd bd-approved">승인</span>
+            ${h.note ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;white-space:pre-wrap">${escapeHtml(h.note)}</div>` : ''}
+          </div>
+          <div style="font-size:11px;color:var(--muted);flex-shrink:0">${h.created_at?.slice(0,10)||''}</div>
         </div>`).join('')}
       </div>` : ''}
       <div style="margin-top:12px">

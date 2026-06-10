@@ -873,7 +873,11 @@ app.get('/api/approvals/:evalId/history', auth, async (req, res) => {
   try {
     const rows = await approvalRepo.findByEvalIdOrdered(req.params.evalId);
     const isAdmin = ['master','admin'].includes(req.user.role);
-    if (!isAdmin) rows.forEach(r => { r.note = null; });
+    if (!isAdmin) {
+      const ev = await evalCycleRepo.findById(req.params.evalId);
+      const isApprover = ev && await userRepo.isInApproverChain(req.user.sub, ev.user_id);
+      if (!isApprover) rows.forEach(r => { r.note = null; });
+    }
     res.json(rows);
   } catch(err) { res.status(500).json({ error: err.message }); }
 });
