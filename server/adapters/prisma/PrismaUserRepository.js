@@ -1,6 +1,13 @@
 const UserRepository = require('../../repositories/UserRepository');
 const { _toStr } = require('./_helpers');
 
+// PG는 Int 필드에 문자열 거부 → 라우터에서 넘어오는 string/빈값을 안전하게 변환
+function toIntOrNull(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseInt(v, 10);
+  return isNaN(n) ? null : n;
+}
+
 /**
  * Prisma의 camelCase 응답을 기존 server/index.js와 호환되는 snake_case로 변환
  * 기존 코드는 user.manager_id, user.is_active 형태로 접근하므로
@@ -115,7 +122,7 @@ class PrismaUserRepository extends UserRepository {
   async updateOrgId(id, orgId) {
     await this.prisma.user.update({
       where: { id: Number(id) },
-      data: { orgId: orgId || null },
+      data: { orgId: toIntOrNull(orgId) },
     });
   }
 
@@ -145,7 +152,7 @@ class PrismaUserRepository extends UserRepository {
         role: role || 'user',
         dept: dept || '',
         title: title || '',
-        managerId: managerId || null,
+        managerId: toIntOrNull(managerId),
       },
     });
     return user.id;
@@ -156,14 +163,14 @@ class PrismaUserRepository extends UserRepository {
     if (role !== undefined) data.role = role;
     if (dept !== undefined) data.dept = dept;
     if (title !== undefined) data.title = title;
-    if (manager_id !== undefined) data.managerId = manager_id;
+    if (manager_id !== undefined) data.managerId = toIntOrNull(manager_id);
     if (is_active !== undefined) data.isActive = is_active;
     if (Object.keys(data).length === 0) return;
     await this.prisma.user.update({ where: { id: Number(id) }, data });
   }
 
   async approveSignup(id, { role, dept, title, managerId }) {
-    const data = { accountStatus: 'approved', isActive: 1, role: role || 'user', managerId: managerId || null };
+    const data = { accountStatus: 'approved', isActive: 1, role: role || 'user', managerId: toIntOrNull(managerId) };
     if (dept !== undefined) data.dept = dept;
     if (title !== undefined) data.title = title;
     await this.prisma.user.update({ where: { id: Number(id) }, data });
