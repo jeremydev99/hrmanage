@@ -195,6 +195,31 @@ curl -sf https://$DOMAIN/api/notice   # 앱 응답 = 착지 성공
 
 ---
 
+## 7B. 사이냅 운영서버 최초 배포 런북 ✅ (hrpms.synap.co.kr / NCloud)
+
+> 상세 절차는 별도 런북 문서 참조:  
+> **→ [`DEPLOY_RUNBOOK_PROD.md`](DEPLOY_RUNBOOK_PROD.md)**
+
+요약 단계:
+
+| # | 단계 | 방식 |
+|---|------|------|
+| 0 | 공인 IP(175.45.192.128) attach + ACG 인바운드(22/80/443) | 콘솔 수동 |
+| 1 | SSH 접속, Docker 설치 | SSH |
+| 2 | `git clone`, `.env` 작성 (DOMAIN/PG/JWT/ENC 시크릿) | SSH |
+| 3 | PG 기동 + `prisma db push` (seed 실행 **금지**) | SSH |
+| 4 | 설정 3종 import: `goal_categories` / `grade_policies`+criteria / `app_settings` (테스트서버 pg_dump → 운영 pg_restore) | SSH |
+| 5 | 관리자 2명 부트스트랩: `scripts/bootstrap-admin.js` (비번 인자) | SSH |
+| 6 | `bash deploy/infra-up.sh` (certbot staging→실발급, nginx HTTPS) | SSH |
+| 7 | `docker compose up -d app` + nginx proxy_pass 활성화 | SSH |
+| 8 | 검증: HTTPS / 로그인 / OKR 메뉴 / 감사로그 KST / 등급정책 자동펼침 | 브라우저+SSH |
+| 9 | cron 백업 등록 + 첫 평가 기간 생성·등급정책 바인딩 | SSH + 앱 UI |
+
+> **데이터 정책**: 설정 3종만 import. `eval_periods`·조직·계정·평가 데이터 전부 제외.  
+> **후속 필수**: 운영 첫 평가 기간 생성 + 등급 정책 바인딩 (미import로 인한 미바인딩 상태).
+
+---
+
 ## 8. 트러블슈팅 🚧
 
 | 증상 | 원인 | 조치 |
