@@ -353,11 +353,11 @@ app.get('/api/users/signup-requests', auth, adminOnly, async (req, res) => {
 
 // 가입 승인 (admin+)
 app.post('/api/users/:id/approve', auth, adminOnly, async (req, res) => {
-  const { role, dept, title, manager_id } = req.body;
+  const { role, dept, title, manager_id, org_id } = req.body;
   try {
     const user = await userRepo.findById(req.params.id);
     if (!user) return res.status(404).json({ error: '사용자 없음' });
-    await userRepo.approveSignup(req.params.id, { role, dept, title, managerId: manager_id });
+    await userRepo.approveSignup(req.params.id, { role, dept, title, managerId: manager_id, orgId: org_id });
     auditLog(req.user.sub, 'ACCOUNT_APPROVED', req.params.id, user.name, null, req.ip);
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: e.message }); }

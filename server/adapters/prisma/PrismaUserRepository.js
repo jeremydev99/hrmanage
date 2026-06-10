@@ -169,8 +169,8 @@ class PrismaUserRepository extends UserRepository {
     await this.prisma.user.update({ where: { id: Number(id) }, data });
   }
 
-  async approveSignup(id, { role, dept, title, managerId }) {
-    const data = { accountStatus: 'approved', isActive: 1, role: role || 'user', managerId: toIntOrNull(managerId) };
+  async approveSignup(id, { role, dept, title, managerId, orgId }) {
+    const data = { accountStatus: 'approved', isActive: 1, role: role || 'user', managerId: toIntOrNull(managerId), orgId: toIntOrNull(orgId) };
     if (dept !== undefined) data.dept = dept;
     if (title !== undefined) data.title = title;
     await this.prisma.user.update({ where: { id: Number(id) }, data });

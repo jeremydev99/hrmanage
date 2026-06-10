@@ -50,10 +50,12 @@ async function renderAdmAccounts() {
   if (!el) return;
   el.innerHTML = '<div class="spinner">로딩 중...</div>';
   try {
-    const [signupReqs, allUsers] = await Promise.all([
+    const [signupReqs, allUsers, orgs] = await Promise.all([
       API.get('/users/signup-requests'),
       API.get('/users'),
+      API.get('/organizations').catch(() => []),
     ]);
+    const orgList = Array.isArray(orgs) ? orgs : [];
     const reqs    = Array.isArray(signupReqs) ? signupReqs : [];
     const users   = Array.isArray(allUsers)   ? allUsers   : [];
     const pending  = reqs.filter(r => r.account_status === 'pending');
@@ -93,8 +95,16 @@ async function renderAdmAccounts() {
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;opacity:.5" id="ap-form-${u.id}">
                   <div style="flex:1;min-width:90px">
-                    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">부서</label>
-                    <input id="ap-dept-${u.id}" value="${u.dept||''}" style="height:32px;font-size:12px" disabled>
+                    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">가입 시 입력 부서</label>
+                    <div style="height:32px;font-size:12px;color:var(--muted);display:flex;align-items:center;padding:0 8px;background:var(--bg-secondary,#f5f5f5);border:1px solid var(--border);border-radius:6px">${escapeHtml(u.dept||'(미입력)')}</div>
+                    <input type="hidden" id="ap-dept-${u.id}" value="${u.dept||''}">
+                  </div>
+                  <div style="flex:1;min-width:130px">
+                    <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">조직 배정</label>
+                    <select id="ap-org-${u.id}" style="height:32px;font-size:12px;width:100%" disabled>
+                      <option value="">— 미배정 —</option>
+                      ${orgList.map(o => `<option value="${o.id}" ${o.name === u.dept ? 'selected' : ''}>${escapeHtml(o.name)}</option>`).join('')}
+                    </select>
                   </div>
                   <div style="flex:1;min-width:90px">
                     <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">직급</label>
@@ -186,7 +196,7 @@ async function renderAdmAccounts() {
 function enableApproveForm(uid) {
   const form = document.getElementById('ap-form-' + uid);
   if (form) form.style.opacity = '1';
-  ['ap-dept-','ap-grade-','ap-title-','ap-mgr-','ap-role-'].forEach(prefix => {
+  ['ap-org-','ap-grade-','ap-title-','ap-mgr-','ap-role-'].forEach(prefix => {
     const el = document.getElementById(prefix + uid);
     if (el) el.disabled = false;
   });
@@ -202,8 +212,9 @@ async function approveAccount(uid) {
   const title = document.getElementById('ap-title-'+uid)?.value || '';
   const mgr   = document.getElementById('ap-mgr-'+uid)?.value   || null;
   const role  = document.getElementById('ap-role-'+uid)?.value  || 'user';
+  const orgId = document.getElementById('ap-org-'+uid)?.value   || null;
   try {
-    await API.post('/users/'+uid+'/approve', { role, dept, grade, title, manager_id: mgr });
+    await API.post('/users/'+uid+'/approve', { role, dept, grade, title, manager_id: mgr, org_id: orgId || null });
     showAlert('계정이 승인되었습니다.', 'green');
     renderAdmAccounts();
   } catch(e) { showAlert(e.message, 'red'); }

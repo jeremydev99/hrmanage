@@ -714,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | ORG-MAPPING-1 — 가입 승인 화면 조직 배정 드롭다운 신설: 승인 폼 dept 텍스트 input→readonly 참고 표시+hidden 보존, ap-org-{id} 조직 드롭다운 추가(부서명 일치 시 자동 선택), approveAccount() org_id 페이로드 전송, approve 라우터 org_id 추출·전달, PrismaUserRepository.approveSignup orgId 필드 추가. (PROMPT ORG-MAPPING-1) | Claude Code |
 | 2026-06-10 | ORGREPO-FIX — 조직 배정 저장 시 'orgRepo is not defined' ReferenceError 수정: PATCH /api/users/:id/org에서 orgRepo → organizationRepo (정의 이름 오타, index.js:2442). (PROMPT ORGREPO-FIX) | Claude Code |
 | 2026-06-10 | PG-INT-CAST-FIX — PrismaUserRepository Int 필드 타입 캐스팅 버그픽스: toIntOrNull 헬퍼 추가(null/undefined/''/NaN→null, 문자열→parseInt), approveSignup·updatePartial·updateOrgId·createAdmin 4곳 적용. PG Int 엄격성 대응(SQLite는 통과했으나 PG 전환 후 드러남). (PROMPT PG-INT-CAST-FIX) | Claude Code |
 | 2026-06-10 | A1-DEMO-CLEANUP — 로그인 prefill(ceo@synapsoft.com/admin1234) 제거, seed-pg.js notice 데모 계정 목록 → 빈 공지, server/index.js SQLite notice 초기값 → 빈 공지 + 콘솔 배너 계정 노출 제거. 잔존 후보: 테스트 시드 USERS 배열(로컬 dev 전용, 운영 무관). (PROMPT A1-DEMO-CLEANUP) | Claude Code |
