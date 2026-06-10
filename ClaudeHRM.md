@@ -714,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | ORGREPO-FIX — 조직 배정 저장 시 'orgRepo is not defined' ReferenceError 수정: PATCH /api/users/:id/org에서 orgRepo → organizationRepo (정의 이름 오타, index.js:2442). (PROMPT ORGREPO-FIX) | Claude Code |
 | 2026-06-10 | PG-INT-CAST-FIX — PrismaUserRepository Int 필드 타입 캐스팅 버그픽스: toIntOrNull 헬퍼 추가(null/undefined/''/NaN→null, 문자열→parseInt), approveSignup·updatePartial·updateOrgId·createAdmin 4곳 적용. PG Int 엄격성 대응(SQLite는 통과했으나 PG 전환 후 드러남). (PROMPT PG-INT-CAST-FIX) | Claude Code |
 | 2026-06-10 | A1-DEMO-CLEANUP — 로그인 prefill(ceo@synapsoft.com/admin1234) 제거, seed-pg.js notice 데모 계정 목록 → 빈 공지, server/index.js SQLite notice 초기값 → 빈 공지 + 콘솔 배너 계정 노출 제거. 잔존 후보: 테스트 시드 USERS 배열(로컬 dev 전용, 운영 무관). (PROMPT A1-DEMO-CLEANUP) | Claude Code |
 | 2026-06-10 | INFRA-PROD-1 — 운영서버 배포 준비: A2 잔여 점검(변경 없음, nginx/conf.d/.gitignore 확인), bootstrap-admin.js(멱등, 2계정 env 주입), DEPLOY_RUNBOOK_PROD.md 신설(Step 0~19, pg_dump 설정3종·certbot staging→실발급·proxy_pass 활성화), DEPLOY_MANUAL §7B 링크 추가. (PROMPT INFRA-PROD-1) | Claude Code |

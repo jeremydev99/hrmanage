@@ -2439,7 +2439,7 @@ app.patch('/api/users/:id/org', auth, adminOnly, async (req, res) => {
     const { org_id } = req.body;
     await userRepo.updateOrgId(req.params.id, org_id || null);
     const target = await userRepo.findById(req.params.id);
-    const orgName = org_id ? (await orgRepo.findNameById(org_id)) : null;
+    const orgName = org_id ? (await organizationRepo.findNameById(org_id)) : null;
     auditLog(req.user.sub, 'USER_ORG_CHANGED', req.params.id, target?.name,
       `조직 변경: ${orgName||'미지정'}`, req.ip);
     res.json({ success: true });
