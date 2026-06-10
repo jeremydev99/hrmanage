@@ -3286,16 +3286,7 @@ function initDB() {
   try {
     const noticeExists = db.prepare("SELECT value FROM app_settings WHERE key='notice'").get();
     if (!noticeExists) {
-      const noticeContent = `테스트 계정 안내
-
-[마스터관리자] ceo@synapsoft.com / admin1234
-[인사팀장] hr1@synapsoft.com / admin1234
-[인사팀원] hr2@synapsoft.com / admin1234
-[개발팀장] dev1@synapsoft.com / user1234
-[시니어개발자] dev2@synapsoft.com / user1234
-[주니어개발자] dev3@synapsoft.com / user1234
-[영업팀장] sales1@synapsoft.com / user1234
-[영업사원] sales2@synapsoft.com / user1234`;
+      const noticeContent = '';
       db.prepare(
         "INSERT INTO app_settings(key, value, updated_by, updated_at) VALUES('notice', ?, 1, datetime('now'))"
       ).run(noticeContent);
@@ -3340,11 +3331,5 @@ app.listen(PORT, () => {
   console.log('║  ㈜사이냅소프트 인사평가 시스템               ║');
   console.log('║  로컬 테스트 서버 가동 완료                   ║');
   console.log(`║  브라우저 접속: http://localhost:${PORT}        ║`);
-  console.log('╠════════════════════════════════════════════╣');
-  console.log('║  [마스터관리자] ceo@synapsoft.com             ║');
-  console.log('║  [인사팀장]    hr1@synapsoft.com              ║');
-  console.log('║  [개발팀장]    dev1@synapsoft.com             ║');
-  console.log('║  [일반직원]    dev3@synapsoft.com             ║');
-  console.log('║  공통 비밀번호: admin1234 / user1234          ║');
   console.log('╚════════════════════════════════════════════╝\n');
 });

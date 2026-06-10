@@ -714,6 +714,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | A1-DEMO-CLEANUP — 로그인 prefill(ceo@synapsoft.com/admin1234) 제거, seed-pg.js notice 데모 계정 목록 → 빈 공지, server/index.js SQLite notice 초기값 → 빈 공지 + 콘솔 배너 계정 노출 제거. 잔존 후보: 테스트 시드 USERS 배열(로컬 dev 전용, 운영 무관). (PROMPT A1-DEMO-CLEANUP) | Claude Code |
 | 2026-06-10 | INFRA-PROD-1 — 운영서버 배포 준비: A2 잔여 점검(변경 없음, nginx/conf.d/.gitignore 확인), bootstrap-admin.js(멱등, 2계정 env 주입), DEPLOY_RUNBOOK_PROD.md 신설(Step 0~19, pg_dump 설정3종·certbot staging→실발급·proxy_pass 활성화), DEPLOY_MANUAL §7B 링크 추가. (PROMPT INFRA-PROD-1) | Claude Code |
 | 2026-06-10 | GRADE-AUTO-OPEN — 등급정책 탭 진입 시 활성 기간 바인딩 정책 자동 펼침: renderPolicyCard(p, autoOpen) 파라미터 추가, activeIds Set으로 is_active 기간 보유 정책 판정, 초기 display/아이콘(▼/▶) 조건 렌더. 서버·DB 무변경. (PROMPT GRADE-AUTO-OPEN) | Claude Code |
 | 2026-06-10 | TZ-FIX — 감사로그 UTC→KST 변환 버그 수정: created_at raw slice → fmtDT(utcStr, tz) 헬퍼 적용. renderAdmAudit에서 /settings/timezone 병렬 fetch 추가. 저장은 UTC 유지, 표시 레이어에서만 변환. (PROMPT TZ-FIX) | Claude Code |

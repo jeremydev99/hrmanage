@@ -158,7 +158,7 @@ async function seedAppSettings(policyId) {
     });
   }
   // 공지사항
-  const noticeContent = `[마스터관리자] ceo@synapsoft.com / admin1234\n[인사팀장] hr1@synapsoft.com / admin1234\n[개발팀장] dev1@synapsoft.com / user1234\n[일반직원] dev3@synapsoft.com / user1234`;
+  const noticeContent = '';
   await prisma.appSetting.upsert({
     where:  { key: 'notice' },
     update: {},

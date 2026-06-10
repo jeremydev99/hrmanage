@@ -17,11 +17,11 @@ Pages.login = function() {
         <div id="login-alert"></div>
         <div class="form-group" style="margin-bottom:12px">
           <label>이메일</label>
-          <input type="email" id="l-email" placeholder="이메일 입력" value="ceo@synapsoft.com">
+          <input type="email" id="l-email" placeholder="이메일 입력">
         </div>
         <div class="form-group" style="margin-bottom:16px">
           <label>비밀번호</label>
-          <input type="password" id="l-pw" placeholder="비밀번호 입력" value="admin1234"
+          <input type="password" id="l-pw" placeholder="비밀번호 입력"
             onkeydown="if(event.key==='Enter')doLogin()">
         </div>
         <button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="doLogin()">로그인</button>
