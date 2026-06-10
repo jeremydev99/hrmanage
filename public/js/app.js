@@ -105,7 +105,18 @@ const App = {
             <div id="dd-perf" class="nav-dd-menu">
               <div class="dd-item" onclick="closeNavDD();App.navigate('perfHome')">📊 성과관리 홈</div>
               <div class="dd-item" onclick="closeNavDD();App.navigate('myReportFeedback')">📋 보고·피드백</div>
+            </div>
+          </div>
+
+          <!-- OKR -->
+          <div class="nav-dropdown" style="position:relative">
+            <button class="nav-tab nav-dd-btn" onclick="toggleNavDD('dd-okr',event)"
+              style="display:flex;align-items:center;gap:4px">
+              OKR <span class="dd-arrow" style="font-size:10px;transition:transform .15s">▼</span>
+            </button>
+            <div id="dd-okr" class="nav-dd-menu">
               <div class="dd-item" onclick="closeNavDD();App.navigate('okrDashboard')">🎯 OKR 현황</div>
+              <div class="dd-item" onclick="closeNavDD();App.navigate('okrEval')">✏️ 내 OKR 작성·수정</div>
             </div>
           </div>
 
@@ -166,6 +177,7 @@ const App = {
       'finalEval':      Pages.finalEval,
       'admin':          Pages.admin,
       'okrDashboard':   Pages.okrDashboard,
+      'okrEval':        Pages.okrEval,
       'perfHome':       Pages.perfHome,
     };
     if (P[page]) P[page]();
@@ -202,7 +214,15 @@ function toggleMobileMenu() {
       items: [
         { label: '성과관리 홈', navigate: 'perfHome'     },
         { label: '보고·피드백', navigate: 'myReportFeedback' },
-        { label: '🎯 OKR 현황', navigate: 'okrDashboard' },
+      ]
+    },
+    {
+      label: 'OKR',
+      icon: '🎯',
+      navigate: 'okrDashboard',
+      items: [
+        { label: 'OKR 현황',        navigate: 'okrDashboard' },
+        { label: '내 OKR 작성·수정', navigate: 'okrEval'     },
       ]
     },
   ];

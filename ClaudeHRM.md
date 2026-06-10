@@ -706,6 +706,7 @@ docker compose --profile postgres up -d postgres
 
 | 날짜 | 작업 내용 | 작업자 |
 |------|-----------|--------|
+| 2026-06-10 | OKR-NAV — OKR top-level 메뉴 승격: 성과관리 드롭다운에서 '🎯 OKR 현황' 제거(성과관리=MBO 전용), 새 top-level 'OKR' 드롭다운 신설(OKR 현황·내 OKR 작성·수정), 모바일 nav에도 OKR 그룹 추가. 라우트 P map에 okrEval 등록. 전 역할 노출(권한 게이트 없음). (PROMPT OKR-NAV) | Claude Code |
 | 2026-06-10 | OKR-1 — OKR 현황 전사 공개 전환: GET /api/okr/all(auth만, 내용·진도율, 점수/등급 제외) 신규. PrismaAdminRepository.findAllOkrCyclesPublic(users JOIN okr_cycles, KR weight 제외). okrDashboard 전면 재작성: 선언문 배너(5원칙+말미), 전사 사용자별 카드(아바타·달성률), 사이클별 O/KR 진도율 % 진행바. 본인 OKR 작성 버튼 유지. (PROMPT OKR-1) | Claude Code |
 | 2026-06-09 | GRADE-DESC-LIST — 등급 정책 관리 목록 '등급 정의' 칸 내에 등급 정의(상단) + 상세 설명(고정높이60px+스크롤, o50 배경, "상세" 라벨) 분할 표시. 칸 추가/넓힘 없음, 상세 없는 등급 안전. (PROMPT GRADE-DESC-LIST) | Claude Code |
 | 2026-06-09 | GRADE-DESC Phase3 — 직원 최종평가 완료 화면에 등급 상세 설명 표시: GET /api/grade-policy/for-eval/:evalId 신규(auth, 본인 소유 확인), getPolicyForEvalCycle에 description·detailDesc 반환 추가, renderFinalSelf에서 matchCrit.detail_desc 있을 때 등급 상세 설명 블록 표시(o50 배경, pre-line). (PROMPT GRADE-DESC Phase3) | Claude Code |
